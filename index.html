@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CG Ranked — Live</title>
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
+  <style>
+    :root{--bg:#0b0e11;--card:#11151a;--muted:#7d8b99;--text:#e8eef5;--accent:#5dd9ff;--ok:#35c759;--warn:#f7b500}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b0e11,#0f141a 30%,#0b0e11);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    a{color:var(--accent);text-decoration:none}
+    header{position:sticky;top:0;backdrop-filter:saturate(1.2) blur(10px);background:rgba(15,20,26,.7);border-bottom:1px solid #1c2430;z-index:10}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .brand{font-weight:700;letter-spacing:.3px}
+    .tag{padding:3px 8px;border:1px solid #2a3442;border-radius:999px;color:var(--muted);font-size:12px}
+    .search{margin-left:auto;display:flex;gap:8px}
+    input,select,button{border-radius:10px;background:#0e1319;border:1px solid #2a3442;color:var(--text);padding:10px 12px}
+    input::placeholder{color:#667788}
+    button{cursor:pointer}
+    main{padding:24px 0}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media (min-width:980px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #1c2430;border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .card h2{margin:0 0 12px;font-size:18px}
+    .muted{color:var(--muted)}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:10px;border-bottom:1px solid #1c2430;text-align:left}
+    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid #2a3442;border-radius:999px;padding:4px 8px;font-size:12px}
+    .right{float:right}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .kbd{border:1px solid #2a3442;padding:2px 6px;border-radius:6px;background:#0b0f14}
+    .hidden{display:none}
+    .hero{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .hero h1{margin:8px 0 0}
+    .chip{font-size:12px;opacity:.8}
+    .badge{font-size:12px;border:1px solid #2a3442;border-radius:6px;padding:2px 6px}
+    .flex{display:flex;gap:10px;align-items:center}
+    .stack{display:flex;flex-direction:column;gap:8px}
+    .small{font-size:12px}
+    canvas{max-width:100%}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap row">
+      <div class="flex">
+        <div class="brand">CG Ranked</div>
+        <span class="tag">live</span>
+      </div>
+      <nav class="row" style="gap:10px">
+        <a href="#/leaderboard" class="badge">Leaderboard</a>
+        <a href="#/matches" class="badge">Matches</a>
+        <a href="#/about" class="badge">About</a>
+      </nav>
+      <div class="search">
+        <input id="searchSteam" class="mono" placeholder="SteamID64 ou vanity / URL Steam" />
+        <button id="goPlayer">Joueur</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="page-leaderboard" class="grid hidden">
+      <div class="card">
+        <h2>🏆 Leaderboard</h2>
+        <div class="small muted">Trié par RP puis Elo. Mise à jour en direct.</div>
+        <table class="table" id="tbl-leaderboard">
+          <thead>
+            <tr><th>#</th><th>Joueur</th><th>Rank</th><th>RP</th><th>Elo</th><th>GP</th><th>WR</th><th class="right">Dernière activité</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>🎮 Lobby</h2>
+        <div id="lobbyBox" class="stack small"></div>
+      </div>
+    </section>
+
+    <section id="page-matches" class="grid hidden">
+      <div class="card">
+        <h2>✨ Matches en direct</h2>
+        <div id="liveMatches" class="stack"></div>
+      </div>
+      <div class="card">
+        <h2>Historique récent</h2>
+        <div class="small muted">25 derniers</div>
+        <div id="recentMatches" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="page-player" class="stack hidden">
+      <div class="card hero">
+        <div>
+          <div class="chip muted">Profil joueur</div>
+          <h1 id="p-username">—</h1>
+          <div class="flex small">
+            <span>Steam: <span id="p-steam" class="mono"></span></span>
+            <a target="_blank" id="p-steamlink">Profil Steam ↗</a>
+          </div>
+        </div>
+        <div class="stack small">
+          <div>Rank: <b id="p-rank">—</b></div>
+          <div>RP: <b id="p-rp">—</b> &nbsp; Elo: <b id="p-elo">—</b></div>
+          <div>Dernière activité: <span id="p-last">—</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2 courbes>Elo/RP</h2>
+        <canvas id="eloChart" height="140"></canvas>
+      </div>
+      <div class="card">
+        <h2>Historique des matchs</h2>
+        <div id="p-matches" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="page-about" class="stack hidden">
+      <div class="card">
+        <h2>À propos</h2>
+        <p class="muted small">Ce site statique est livré via GitHub Pages et se connecte à une base Supabase (Postgres + Realtime) pour recevoir les mises à jour de matchs et de leaderboard en temps réel, à la manière de chess.com.</p>
+        <ul class="small">
+          <li>Hash routing (<span class="mono">#/player/&lt;steamId&gt;</span>) pour éviter les 404 sur GH Pages.</li>
+          <li>WebSockets Realtime activés pour <span class="mono">matches</span> et refresh périodique pour <span class="mono">players</span>.</li>
+          <li>Graph Elo/RP avec Chart.js.</li>
+        </ul>
+        <p class="small">Renseigne les variables Supabase dans le bloc <span class="mono">CONFIG</span> ci‑dessous, commit, et pousse sur la branche <i>gh-pages</i>.</p>
+        <div class="small">Raccourci : ouvrir un profil → tape le SteamID puis <span class="kbd">Entrée</span>.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script type="module">
+    // ───────────────────────── CONFIG ─────────────────────────
+    const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";   // ← à remplacer
+    const SUPABASE_ANON = "YOUR_PUBLIC_ANON_KEY";              // ← à remplacer
+
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    // ────────────── utils ──────────────
+    const qs = (sel, el=document) => el.querySelector(sel);
+    const ce = (tag, cls) => { const n = document.createElement(tag); if(cls) n.className = cls; return n; };
+    const fmtDate = t => new Date(t).toLocaleString();
+    const pct = (a,b) => b? Math.round((a/b)*100) : 0;
+
+    // ────────────── router ──────────────
+    const routes = {
+      '#/leaderboard': showLeaderboard,
+      '#/matches': showMatches,
+      '#/player': showPlayer,
+      '#/about': showAbout,
+      '': () => location.hash = '#/leaderboard'
+    };
+    function onHash(){
+      const hash = location.hash.split('/').slice(0,2).join('/');
+      Object.values(pages).forEach(el=>el.classList.add('hidden'));
+      (routes[hash]||routes[''])();
+    }
+
+    const pages = {
+      leaderboard: qs('#page-leaderboard'),
+      matches: qs('#page-matches'),
+      player: qs('#page-player'),
+      about: qs('#page-about')
+    };
+
+    // ────────────── Leaderboard ──────────────
+    async function showLeaderboard(){
+      pages.leaderboard.classList.remove('hidden');
+      const { data: players } = await sb
+        .from('players')
+        .select('steam_id,username,elo,rp,last_active_at,rank,games_played,wins')
+        .order('rp', { ascending:false })
+        .order('elo', { ascending:false })
+        .limit(200);
+      const tb = qs('#tbl-leaderboard tbody');
+      tb.innerHTML = '';
+      (players||[]).forEach((p,i)=>{
+        const tr = ce('tr');
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td><a href="#/player/${p.steam_id}">${escapeHtml(p.username||'player')}</a></td>
+          <td>${escapeHtml(p.rank||'-')}</td>
+          <td class="mono">${p.rp ?? '-'}</td>
+          <td class="mono">${p.elo ?? '-'}</td>
+          <td>${p.games_played ?? '-'}</td>
+          <td>${pct(p.wins||0,p.games_played||0)}%</td>
+          <td class="right small muted">${p.last_active_at? fmtDate(p.last_active_at): '—'}</td>`;
+        tb.appendChild(tr);
+      });
+      // lobby (optionnel) : si tu stockes un snapshot dans une table lobby_info (single row)
+      try{
+        const { data: lobby } = await sb.from('lobby_info').select('*').limit(1).maybeSingle();
+        const box = qs('#lobbyBox'); box.innerHTML='';
+        if(lobby){
+          const it = (k,v)=>{ const r = ce('div'); r.innerHTML = `<span class="muted">${k}:</span> <b>${escapeHtml(v??'-')}</b>`; return r;};
+          box.append(it('Code', lobby.code));
+          box.append(it('Players', `${lobby.players}/${lobby.max}`));
+          box.append(it('Updated', fmtDate(lobby.updated_at)));
+        } else { box.innerHTML = '<span class="muted">No data</span>'; }
+      }catch{}
+    }
+
+    // ────────────── Matches ──────────────
+    let liveChan;
+    async function showMatches(){
+      pages.matches.classList.remove('hidden');
+      const live = qs('#liveMatches'); live.innerHTML='';
+      const recent = qs('#recentMatches'); recent.innerHTML='';
+      const { data } = await sb.from('matches')
+        .select('played_at,map_id,p1_id,p2_id,winner_id,replay_url,duration_seconds')
+        .order('played_at',{ascending:false}).limit(25);
+      (data||[]).forEach(m=> recent.append(matchRow(m)));
+      if(!liveChan){
+        liveChan = sb.channel('matches-feed')
+          .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches'},payload=>{
+            live.prepend(matchRow(payload.new,true));
+          }).subscribe();
+      }
+    }
+
+    function matchRow(m, pulse=false){
+      const el = ce('div','card');
+      if(pulse) el.style.outline = '1px solid var(--accent)';
+      const when = fmtDate(m.played_at);
+      const win = m.winner_id ? ` — <b>Winner:</b> <span class="mono">${m.winner_id}</span>` : '';
+      el.innerHTML = `Map <b>${m.map_id}</b> • <span class="mono">${m.p1_id}</span> vs <span class="mono">${m.p2_id}</span>${win}
+        <span class="right small muted">${when}</span>
+        <div class="small">${m.replay_url?`<a target="_blank" href="${m.replay_url}">Replay</a>`:' '}</div>`;
+      return el;
+    }
+
+    // ────────────── Player ──────────────
+    let eloChart;
+    async function showPlayer(){
+      pages.player.classList.remove('hidden');
+      const steam = location.hash.split('/')[2] || '';
+      if(!steam){ location.hash = '#/leaderboard'; return; }
+      qs('#p-steam').textContent = steam; qs('#p-steamlink').href = `https://steamcommunity.com/profiles/${steam}`;
+
+      const { data: p } = await sb.from('players').select('*').eq('steam_id',steam).maybeSingle();
+      qs('#p-username').textContent = p?.username || '—';
+      qs('#p-rank').textContent = p?.rank || '—';
+      qs('#p-rp').textContent = p?.rp ?? '—';
+      qs('#p-elo').textContent = p?.elo ?? '—';
+      qs('#p-last').textContent = p?.last_active_at? fmtDate(p.last_active_at): '—';
+
+      // matches
+      const { data: hist } = await sb.from('matches')
+        .select('id,played_at,map_id,p1_id,p2_id,winner_id,replay_url')
+        .or(`p1_id.eq.${steam},p2_id.eq.${steam}`)
+        .order('played_at',{ascending:false}).limit(100);
+      const box = qs('#p-matches'); box.innerHTML='';
+      (hist||[]).forEach(m=>{
+        const meWin = m.winner_id===steam? '✅': (m.winner_id? '❌':'•');
+        const opp = m.p1_id===steam? m.p2_id : m.p1_id;
+        const row = ce('div','stack');
+        row.innerHTML = `${meWin} Map <b>${m.map_id}</b> vs <span class=mono>${opp}</span> · <span class=small muted>${fmtDate(m.played_at)}</span>
+          ${m.replay_url?`<div class=small><a target=_blank href="${m.replay_url}">Replay</a></div>`:''}`;
+        box.append(row);
+      });
+
+      // rating series
+      const { data: series } = await sb.from('ratings')
+        .select('at,elo_after,rp_after')
+        .eq('player_id',steam)
+        .order('at');
+      const labels = (series||[]).map(r=> new Date(r.at));
+      const eloData = (series||[]).map(r=> r.elo_after ?? null);
+      const rpData  = (series||[]).map(r=> r.rp_after ?? null);
+      const ctx = qs('#eloChart').getContext('2d');
+      if(eloChart) eloChart.destroy();
+      eloChart = new Chart(ctx,{
+        type:'line',
+        data:{ labels, datasets:[
+          { label:'Elo', data:eloData, tension:.2 },
+          { label:'RP',  data:rpData,  tension:.2 }
+        ]},
+        options:{ plugins:{ legend:{ labels:{ color:'#c9d4de' } } }, scales:{ x:{ ticks:{ color:'#8fa1b3' } }, y:{ ticks:{ color:'#8fa1b3' } } } }
+      });
+
+      // live subscribe on this player
+      sb.channel(`player-${steam}`)
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches',filter:`p1_id=eq.${steam}`},p=>{
+          qs('#p-matches').prepend(matchRow(p.new,true));
+        })
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches',filter:`p2_id=eq.${steam}`},p=>{
+          qs('#p-matches').prepend(matchRow(p.new,true));
+        })
+        .subscribe();
+    }
+
+    // ────────────── About ──────────────
+    function showAbout(){ pages.about.classList.remove('hidden'); }
+
+    // ────────────── search → player ──────────────
+    qs('#goPlayer').onclick = gotoPlayer;
+    qs('#searchSteam').addEventListener('keydown', e=>{ if(e.key==='Enter') gotoPlayer(); });
+    async function gotoPlayer(){
+      const raw = qs('#searchSteam').value.trim(); if(!raw) return;
+      const sid = await normalizeSteam(raw) || raw; // fallback
+      location.hash = `#/player/${sid}`;
+    }
+
+    // ────────────── Steam vanity/URL → steam64 (XML public) ──────────────
+    async function normalizeSteam(arg){
+      if(/^\d{17}$/.test(arg)) return arg;
+      try{
+        if(arg.startsWith('http')){
+          const u = new URL(arg);
+          const parts = u.pathname.split('/').filter(Boolean);
+          if(parts[0]==='profiles' && /^\d{17}$/.test(parts[1])) return parts[1];
+          if(parts[0]==='id' && parts[1]) return fetchSteamIdFromVanity(parts[1]);
+        }
+        if(!arg.includes(' ')) return fetchSteamIdFromVanity(arg);
+      }catch{}
+      return null;
+    }
+    async function fetchSteamIdFromVanity(alias){
+      try{
+        const r = await fetch(`https://steamcommunity.com/id/${alias}?xml=1`);
+        const xml = await r.text();
+        const m = xml.match(/<steamID64>\s*(\d{17})\s*<\/steamID64>/);
+        return m? m[1] : null;
+      }catch{return null}
+    }
+
+    function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+
+    // init
+    window.addEventListener('hashchange', onHash);
+    onHash();
+  </script>
+</body>
+</html>
