@@ -8,14 +8,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Same Supabase project as your site -->
   <script>
+    // Same Supabase project as your site
     window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
     window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
-
-    /* PayPal (one-time only) */
-    window.PAYPAL_CLIENT_ID   = "YOUR_PAYPAL_CLIENT_ID"; // set your LIVE client id
-    window.ONE_TIME_PRICE_EUR = "2.00";
   </script>
 </head>
 <body class="bg-slate-950 text-slate-100">
@@ -93,7 +89,6 @@
     }
 
     function getDiscordId(user){
-      // Try common places for provider user id
       const ids = user?.identities || [];
       const disc = ids.find(i => i?.provider === 'discord');
       const fromIdent = disc?.identity_data?.user_id || disc?.identity_data?.sub || disc?.identity_data?.id;
@@ -146,22 +141,33 @@
     document.addEventListener('DOMContentLoaded', loadProfile);
   </script>
 
-  <!-- PayPal (one-time) -->
+  <!-- PayPal (one-time) — loads Client ID from the new public Edge Function -->
   <script>
-    function ensurePayPal(params, cb){
-      if(!window.PAYPAL_CLIENT_ID){ 
+    async function getPayPalPublicConfig(){
+      const url = `${window.SUPA_URL}/functions/v1/paypal-public-config`;
+      const res = await fetch(url, { method:'GET' });
+      if(!res.ok) return null;
+      return await res.json();
+    }
+
+    function loadPayPalSdk({ clientId, currency, env }, onReady){
+      if(!clientId){ 
         const note = document.getElementById('one-note');
-        if(note) note.textContent = 'PayPal is not configured (missing PAYPAL_CLIENT_ID).';
-        return; 
+        if(note) note.textContent = 'PayPal is not configured (missing client id).';
+        return;
       }
+      const params = new URLSearchParams({
+        'client-id': clientId,
+        'currency': currency || 'EUR',
+        'intent': 'capture'
+      }).toString();
       const s = document.createElement('script');
-      s.src = 'https://www.paypal.com/sdk/js?' + new URLSearchParams(params).toString();
-      s.onload = cb;
+      s.src = `https://www.paypal.com/sdk/js?${params}`;
+      s.onload = onReady;
       document.head.appendChild(s);
     }
 
     async function callCapture(orderId){
-      // call your edge function `capture-paypal-order`
       const { data:{ session } } = await supa.auth.getSession();
       const res = await fetch(`${window.SUPA_URL}/functions/v1/capture-paypal-order`, {
         method: 'POST',
@@ -171,8 +177,8 @@
         },
         body: JSON.stringify({
           orderId,
-          expectedAmount: window.ONE_TIME_PRICE_EUR,
-          expectedCurrency: 'EUR'
+          expectedAmount: "2.00",
+          expectedCurrency: "EUR"
         })
       });
       const j = await res.json().catch(()=>({}));
@@ -189,15 +195,14 @@
         style: { label: 'pay' },
         createOrder: (data, actions) => actions.order.create({
           intent: 'CAPTURE',
-          purchase_units: [{ amount: { currency_code: 'EUR', value: window.ONE_TIME_PRICE_EUR || '2.00' } }]
+          purchase_units: [{ amount: { currency_code: 'EUR', value: "2.00" } }]
         }),
         onApprove: async (data, actions) => {
-          const order = await actions.order.capture(); // capture on client for instant UX
+          const order = await actions.order.capture(); // quick UX
           try{
             await callCapture(order.id);              // validate + set premium on server
             document.getElementById('prem-msg').textContent = '30-day pass activated. Enjoy!';
-            // refresh profile state
-            setTimeout(loadProfile, 800);
+            setTimeout(() => location.reload(), 800);
           }catch(e){
             document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
           }
@@ -205,12 +210,14 @@
       }).render('#paypal-onetime');
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      ensurePayPal({
-        'client-id': window.PAYPAL_CLIENT_ID,
-        'currency': 'EUR',
-        'intent': 'capture'
-      }, mountOneTime);
+    document.addEventListener('DOMContentLoaded', async () => {
+      const cfg = await getPayPalPublicConfig();
+      if(!cfg){ 
+        const note = document.getElementById('one-note');
+        if(note) note.textContent = 'Unable to fetch PayPal public config.';
+        return;
+      }
+      loadPayPalSdk(cfg, mountOneTime);
     });
   </script>
 </body>
