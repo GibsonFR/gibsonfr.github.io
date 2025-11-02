@@ -1,99 +1,55 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>html,body{height:100%}canvas{display:block}</style>
 </head>
 <body class="bg-slate-950 text-slate-100">
-<div class="max-w-6xl mx-auto p-4">
-  <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
+  <div class="max-w-6xl mx-auto p-4">
+    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
-  <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
+    <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
 
-  <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-lg font-semibold">Game Insights</h2>
-      <button id="analyzeBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50">
-        Re-analyze (worker)
-      </button>
-    </div>
-    <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
-    <div id="analysisResult" class="space-y-6 hidden">
-      <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="p-4 rounded bg-slate-900 border border-slate-800">
-          <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
-          <div id="p1q" class="text-2xl font-bold">—</div>
-          <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
-        </div>
-        <div class="p-4 rounded bg-slate-900 border border-slate-800">
-          <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
-          <div id="p2q" class="text-2xl font-bold">—</div>
-          <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
-        </div>
+    <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800 hidden">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Game Analysis</h2>
+        <button id="analyzeBtn"
+                class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50">
+          Analyze game
+        </button>
       </div>
-      <div>
-        <div class="text-slate-400 text-xs mb-2">Key events (chess-style)</div>
-        <div id="eventsList" class="text-sm space-y-1"></div>
+
+      <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
+
+      <div id="analysisResult" class="hidden space-y-6">
+        <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 rounded bg-slate-900 border border-slate-800">
+            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
+            <div id="p1q" class="text-2xl font-bold">—</div>
+            <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
+          </div>
+
+          <div class="p-4 rounded bg-slate-900 border border-slate-800">
+            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
+            <div id="p2q" class="text-2xl font-bold">—</div>
+            <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-slate-400 text-xs mb-2">Visuals</div>
+          <div id="gallery" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </div>
       </div>
     </div>
   </div>
-
-  <!-- 3D Replay -->
-  <div id="replayBlock" class="mt-6 p-4 rounded border border-slate-800">
-    <div class="mb-3 flex items-center justify-between">
-      <h2 class="text-lg font-semibold">3D Replay</h2>
-      <div class="flex items-center gap-2 text-sm">
-        <span id="replayStatus" class="opacity-70"></span>
-        <span class="mx-1 opacity-30">•</span>
-        <label class="opacity-70">Speed</label>
-        <select id="speedSel" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
-          <option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option>
-          <option value="2">2×</option>
-          <option value="4">4×</option>
-        </select>
-        <button id="followP1" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">Follow P1</button>
-        <button id="followP2" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">Follow P2</button>
-        <label class="ml-2 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer">
-          Load .rpl<input id="localRpl" type="file" accept=".rpl" class="hidden">
-        </label>
-      </div>
-    </div>
-
-    <div class="flex flex-col md:flex-row gap-4">
-      <div class="grow">
-        <div id="threeWrap" class="rounded border border-slate-800 overflow-hidden" style="aspect-ratio:16/9;"></div>
-        <div class="mt-3">
-          <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" class="w-full">
-          <div class="flex justify-between text-xs text-slate-400 mt-1">
-            <div>t=<span id="timeNow">0.00</span>s</div>
-            <div>Duration=<span id="timeMax">0.00</span>s</div>
-          </div>
-          <div class="mt-2 flex gap-2">
-            <button id="playBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Play</button>
-            <button id="pauseBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Pause</button>
-            <button id="centerBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Center</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="md:w-80">
-        <div class="text-slate-400 text-xs mb-2">Tag timeline</div>
-        <div id="tagTimeline" class="h-32 bg-slate-900 border border-slate-800 rounded relative overflow-hidden"></div>
-        <div class="mt-4 text-slate-400 text-xs mb-2">Events</div>
-        <div id="tagEvents" class="h-48 overflow-auto text-sm space-y-1"></div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
-/* === Supabase client === */
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
@@ -104,39 +60,42 @@ const matchIdValue = isNumericId ? Number(idParam) : idParam;
 
 const el = s => document.querySelector(s);
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const pct1 = (x)=> x==null ? '—' : (Math.round(x*1000)/10)+'%';
 
 async function fetchMatchById() {
   const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
   return data || null;
 }
+
 function card(label, value, suffix='') {
   return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
     <div class="text-slate-400">${label}</div>
     <div class="text-slate-100 font-semibold">${value}${suffix}</div>
   </div>`;
 }
+
 function renderPlayerCards(rootSel, s) {
   const root = el(rootSel);
+  const pct = (x)=> (x==null?'—':Math.round(x*1000)/10+'%');
   root.innerHTML = [
-    card("Possession", pct1(s.possession_share)),
-    card("Accuracy",  s.accuracy!=null ? pct1(s.accuracy) : '—', ""),
+    card("Possession", pct(s.possession_share)),
+    card("Accuracy",  s.accuracy!=null?Math.round(s.accuracy*1000)/10:'—', "%"),
     card("Avg dist (hider)", s.avg_distance_as_hider??'—', " m"),
     card("Avg dist (tagger)", s.avg_distance_as_tagger??'—', " m"),
-    card("Retag median", s.retag_median_seconds??'—', " s"),
+    card("Retag avg", s.retag_avg_seconds??'—', " s"),
     card("Avg speed", s.avg_speed_ms??'—', " m/s"),
   ].join("");
 }
+
 function renderMatch(m) {
-  const p1n = esc(m.p1_name||'P1'), p2n = esc(m.p2_name||'P2');
-  const p1 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${p1n}</a>`;
-  const p2 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${p2n}</a>`;
+  const p1 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||'P1')}</a>`;
+  const p2 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||'P2')}</a>`;
   const e1 = m.p1_elo_after ?? m.p1_elo_before ?? '-';
   const e2 = m.p2_elo_after ?? m.p2_elo_before ?? '-';
   const winner = m.winner === '1' ? p1 : (m.winner === '2' ? p2 : '—');
   const replayBtn = m.replay_url
     ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
     : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+
   el('#matchCard').innerHTML = `
     <div class="space-y-3">
       <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
@@ -144,18 +103,14 @@ function renderMatch(m) {
       <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
       <div class="pt-1">${replayBtn}</div>
     </div>`;
-  // follow labels = pseudos
-  el('#followP1').textContent = `Follow ${p1n}`;
-  el('#followP2').textContent = `Follow ${p2n}`;
 }
 
 function showNotFound() {
   el('#matchCard').innerHTML = '<div class="text-red-400">Match not found.</div>';
   el('#analysisBlock').classList.add('hidden');
-  el('#replayBlock').classList.add('hidden');
 }
 
-async function loadAnalysis(matchId, names) {
+async function loadAnalysis(matchId) {
   const { data } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
   if (!data) {
     el('#analysisStatus').textContent = 'No analysis yet.';
@@ -164,443 +119,66 @@ async function loadAnalysis(matchId, names) {
   }
   el('#analysisStatus').textContent = '';
   el('#analysisResult').classList.remove('hidden');
+
+  // Titres avec pseudos si dispo
   const s = data.summary || {};
-  const p1n = names?.p1 || s.p1_name || 'P1';
-  const p2n = names?.p2 || s.p2_name || 'P2';
-  el('#p1title').textContent = `${p1n} — Quality`;
-  el('#p2title').textContent = `${p2n} — Quality`;
+  el('#p1title').textContent = `${s.p1_name || 'P1'} — Quality`;
+  el('#p2title').textContent = `${s.p2_name || 'P2'} — Quality`;
+
   el('#analAt').textContent = new Date(data.analyzed_at).toLocaleString();
   el('#ver').textContent = data.version || '—';
   el('#p1q').textContent = data.p1_quality ?? '—';
   el('#p2q').textContent = data.p2_quality ?? '—';
   renderPlayerCards('#p1cards', data.p1_stats || {});
   renderPlayerCards('#p2cards', data.p2_stats || {});
+
+  const imgs = data.images || {};
+  const keys = Object.keys(imgs);
+  el('#gallery').innerHTML = keys.length
+    ? keys.map(k => `
+        <div class="rounded overflow-hidden border border-slate-800 bg-slate-900">
+          <div class="p-2 text-xs text-slate-300 border-b border-slate-800">${k}</div>
+          <img src="${imgs[k]}" alt="${k}" class="w-full block">
+        </div>`).join('')
+    : `<div class="text-sm text-slate-400">No images produced.</div>`;
 }
 
-function subscribeRealtime(matchId, names) {
+async function queueAnalysis(matchId, replayUrl) {
+  el('#analyzeBtn').disabled = true;
+  el('#analysisStatus').textContent = 'Queuing analysis…';
+  const { error } = await supa.from('analysis_requests').insert({
+    match_id: matchId,
+    replay_url: replayUrl || null,
+    requested_by: 'web'
+  });
+  if (error) {
+    el('#analysisStatus').textContent = `Error: ${error.message}`;
+    el('#analyzeBtn').disabled = false;
+    return;
+  }
+  el('#analysisStatus').textContent = 'Queued. Waiting for worker…';
+}
+
+function subscribeRealtime(matchId) {
   supa.channel('match_analyses_live')
     .on('postgres_changes', { event:'INSERT', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
-      () => loadAnalysis(matchId, names))
+      () => loadAnalysis(matchId))
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
-      () => loadAnalysis(matchId, names))
+      () => loadAnalysis(matchId))
     .subscribe();
 }
 
-/* ===== Helpers replayer ===== */
-function setStatus(txt){ el('#replayStatus').textContent = txt; console.log('[replay]', txt); }
-
-async function fetchArrayBufferStrict(url){
-  const res = await fetch(url, {cache:'no-store', mode:'cors', redirect:'follow'});
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return await res.arrayBuffer();
-}
-async function tryFetchAny(urls){
-  let lastErr=null;
-  for (const u of urls){
-    try{ const buf = await fetchArrayBufferStrict(u); return {buf, url:u}; }
-    catch(e){ lastErr = e; console.warn('fetch fail', u, e); }
-  }
-  throw lastErr || new Error('all candidates failed');
-}
-
-// Try to make a PUBLIC URL automatically if needed
-function buildReplayCandidates(m){
-  const out = [];
-  if (m.replay_url) {
-    out.push(m.replay_url);
-    if (m.replay_url.includes('/storage/v1/object/') && !m.replay_url.includes('/object/public/')){
-      out.push(m.replay_url.replace('/storage/v1/object/', '/storage/v1/object/public/'));
-    }
-  }
-  if (m.replay_path) {
-    if (/^https?:\/\//.test(m.replay_path)) out.push(m.replay_path);
-    else out.push(`${SUPA_URL}/storage/v1/object/public/${m.replay_path.replace(/^\/+/,'')}`);
-  }
-  // Fallback convention: replays/<matchId>.rpl (si tu as choisi ce nommage)
-  out.push(`${SUPA_URL}/storage/v1/object/public/replays/${m.id}.rpl`);
-  // Et dernier recours côté site (GH Pages /replays/{id}.rpl)
-  out.push(`replays/${m.id}.rpl`);
-  return Array.from(new Set(out));
-}
-
-function drawTagTimeline(container, duration, events, onJump){
-  container.innerHTML = ''; container.style.position='relative';
-  if (!duration || !events?.length) return;
-  events.forEach(ev=>{
-    const x = (ev.t/duration)*100;
-    const div = document.createElement('div');
-    div.className='absolute top-0 bottom-0';
-    div.style.left = `calc(${x}% - 1px)`; div.style.width='2px';
-    div.style.background = ev.player===1?'#60a5fa':'#f472b6';
-    div.title = `${ev.type.replace(/_/g,' ')} @ ${ev.t.toFixed(2)}s`;
-    div.style.cursor='pointer';
-    div.onclick = ()=> onJump(ev.t);
-    container.appendChild(div);
-  });
-}
-</script>
-
-<!-- Three.js replayer -->
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-
-const $ = (s)=>document.querySelector(s);
-const fmt2 = (x)=> (Math.round(x*100)/100).toFixed(2);
-
-function parseRPL(buf){
-  const dv = new DataView(buf);
-  let off=0;
-  const u8 = ()=>{const v=dv.getUint8(off); off+=1; return v;}
-  const i32=()=>{const v=dv.getInt32(off,true); off+=4; return v;}
-  const f32=()=>{const v=dv.getFloat32(off,true); off+=4; return v;}
-  const u64=()=>{
-    if (typeof dv.getBigUint64 === 'function'){
-      const v = dv.getBigUint64(off,true); off+=8; return v.toString();
-    } else {
-      const lo = dv.getUint32(off,true), hi = dv.getUint32(off+4,true); off+=8;
-      return (BigInt(hi) << 32n | BigInt(lo)).toString();
-    }
-  };
-  const readStr=()=>{
-    const n=dv.getUint16(off,true); off+=2;
-    if(!n) return '';
-    const bytes = new Uint8Array(buf, off, n); off+=n;
-    return new TextDecoder().decode(bytes);
-  };
-
-  // header
-  if (String.fromCharCode(dv.getUint8(0),dv.getUint8(1),dv.getUint8(2),dv.getUint8(3))!=='RPL1')
-    throw new Error('Invalid RPL signature');
-  off=4;
-  const ver = u8(); // 0x04
-  const map_id = i32();
-  const p1 = u64();
-  const p2 = u64();
-  const winner = u8();
-  const p1_name = readStr();
-  const p2_name = readStr();
-  const n1 = i32(), n2 = i32(), nt = i32(), nu = i32();
-
-  const p1_samples = new Array(n1);
-  const p2_samples = new Array(n2);
-  for (let i=0;i<n1;i++){ p1_samples[i]=[f32(),f32(),f32(),f32(),f32(),f32()]; }
-  for (let i=0;i<n2;i++){ p2_samples[i]=[f32(),f32(),f32(),f32(),f32(),f32()]; }
-
-  const tag_events = new Array(nt);
-  for (let i=0;i<nt;i++){ tag_events[i]=[f32(),u8()]; }
-
-  const use_item = new Array(nu);
-  for (let i=0;i<nu;i++){ use_item[i]=[f32(),u8()]; }
-
-  return { ver,map_id,p1,p2,winner,p1_name,p2_name,p1_samples,p2_samples,tag_events,use_item };
-}
-
-function compressOwnerEvents(evs){
-  if (!evs || !evs.length) return [];
-  const sorted = [...evs].sort((a,b)=>a[0]-b[0]);
-  const out=[sorted[0]];
-  for (let i=1;i<sorted.length;i++){
-    const [t,w]=sorted[i]; if (w!==out[out.length-1][1]) out.push([t,w]);
-  }
-  return out;
-}
-
-function interpAtTimes(samples, times){
-  if (!samples?.length) return times.map(()=>[0,0,0]);
-  const out=[]; let i=0;
-  for (const t of times){
-    while (i+1<samples.length && samples[i+1][0]<t) i++;
-    if (i+1>=samples.length){ const [,x,y,z]=samples[samples.length-1]; out.push([x,y,z]); }
-    else{
-      const [t0,x0,y0,z0]=samples[i], [t1,x1,y1,z1]=samples[i+1];
-      const u = t1===t0 ? 0 : Math.min(1, Math.max(0, (t-t0)/(t1-t0)));
-      out.push([x0+(x1-x0)*u, y0+(y1-y0)*u, z0+(z1-z0)*u]);
-    }
-  }
-  return out;
-}
-
-function makeClientInsights(times, owner, p1pos, p2pos){
-  const dist = times.map((_,i)=>{
-    const a=p1pos[i], b=p2pos[i];
-    const dx=a[0]-b[0], dy=a[1]-b[1], dz=a[2]-b[2];
-    return Math.sqrt(dx*dx+dy*dy+dz*dz);
-  });
-  const events=[]; let last=owner[0], dt=times[1]-times[0]||0.05;
-  for (let i=1;i<owner.length;i++){
-    if (owner[i]!==last){
-      const t = times[i], w = owner[i];
-      const start = Math.max(0, i - Math.round(1.5/dt));
-      const slice = dist.slice(start, i);
-      const avg = slice.reduce((a,b)=>a+b,0)/Math.max(1,slice.length);
-      const min = Math.min(...slice);
-      const note = `pre-tag avg=${fmt2(avg)}m, min=${fmt2(min)}m`;
-      if (avg>6){
-        events.push({t, type: (min<1.3?'BLUNDER_HIDER':'MISTAKE_HIDER'), player:(w===1?2:1), note});
-        events.push({t, type: (min<1.3?'GREAT_TAG':'GOOD_TAG'), player:w, note});
-      } else if (avg>4){
-        events.push({t, type: 'INACCURACY_HIDER', player:(w===1?2:1), note});
-        events.push({t, type: 'GOOD_TAG', player:w, note});
-      } else {
-        events.push({t, type: 'GOOD_TAG', player:w, note});
-      }
-      last=owner[i];
-    }
-  }
-  return { events, distance: dist };
-}
-
-function buildReplayer({match, names}){
-  const wrap = $('#threeWrap');
-  const scrub = $('#scrub'), timeNow = $('#timeNow'), timeMax = $('#timeMax');
-  const tagTimeline = $('#tagTimeline'), tagEvents = $('#tagEvents');
-
-  let duration=0, times=[], owner=[], p1pos=[], p2pos=[], insights=null;
-  let playing=false, speed=1, t=0, follow=0;
-
-  // Three.js
-  const renderer = new THREE.WebGLRenderer({antialias:true});
-  wrap.innerHTML=''; wrap.appendChild(renderer.domElement);
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b1220);
-  const camera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 1000);
-  camera.position.set(12,12,12);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 0.8);
-  const dir  = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(5,10,7);
-  scene.add(hemi, dir);
-
-  const grid = new THREE.GridHelper(100, 100, 0x29405a, 0x172334);
-  grid.position.y = -0.01;
-  scene.add(grid);
-
-  const p1 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 16), new THREE.MeshStandardMaterial({color:0x60a5fa}));
-  const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 16), new THREE.MeshStandardMaterial({color:0xf472b6}));
-  scene.add(p1,p2);
-
-  const trailGeom1 = new THREE.BufferGeometry();
-  const trailGeom2 = new THREE.BufferGeometry();
-  const trailMat1 = new THREE.LineBasicMaterial({transparent:true, opacity:0.8});
-  const trailMat2 = new THREE.LineBasicMaterial({transparent:true, opacity:0.8});
-  const trail1 = new THREE.Line(trailGeom1, trailMat1);
-  const trail2 = new THREE.Line(trailGeom2, trailMat2);
-  scene.add(trail1, trail2);
-
-  function resize(){
-    const w = wrap.clientWidth, h = wrap.clientHeight;
-    renderer.setSize(w,h,false);
-    camera.aspect = w/h; camera.updateProjectionMatrix();
-  }
-  window.addEventListener('resize', resize); resize();
-
-  function setTime(newT){
-    t = Math.max(0, Math.min(duration, newT));
-    if (!times.length){ timeNow.textContent='0.00'; return; }
-    const idx = Math.min(times.length-1, Math.round((t/times[times.length-1])*(times.length-1)));
-    const a = p1pos[idx], b = p2pos[idx];
-    p1.position.set(a[0], a[1], a[2]);
-    p2.position.set(b[0], b[1], b[2]);
-
-    const n = idx+1, step = Math.max(1, Math.floor(n/2000));
-    const v1 = new Float32Array(Math.ceil(n/step)*3);
-    const v2 = new Float32Array(Math.ceil(n/step)*3);
-    let k=0, j=0;
-    for (let i=0;i<n;i+=step){ const A=p1pos[i]; v1[k++]=A[0]; v1[k++]=A[1]; v1[k++]=A[2]; const B=p2pos[i]; v2[j++]=B[0]; v2[j++]=B[1]; v2[j++]=B[2]; }
-    trailGeom1.setAttribute('position', new THREE.BufferAttribute(v1,3));
-    trailGeom2.setAttribute('position', new THREE.BufferAttribute(v2,3));
-
-    timeNow.textContent = fmt2(t);
-    $('#scrub').value = duration ? (t/duration).toFixed(3) : '0';
-  }
-
-  function animate(ts){
-    if (playing){
-      const dt = (window.__lastTs? (ts-window.__lastTs): 16.6)/1000;
-      setTime(t + dt*speed);
-      if (t>=duration){ playing=false; }
-    }
-    if (follow===1){ controls.target.lerp(p1.position, 0.15); }
-    if (follow===2){ controls.target.lerp(p2.position, 0.15); }
-    controls.update();
-    renderer.render(scene, camera);
-    window.__lastTs = ts;
-    requestAnimationFrame(animate);
-  }
-  requestAnimationFrame(animate);
-
-  $('#playBtn').onclick = ()=> (playing=true);
-  $('#pauseBtn').onclick = ()=> (playing=false);
-  $('#centerBtn').onclick = ()=> { controls.target.set(0,0,0); camera.position.set(12,12,12); };
-  $('#speedSel').onchange = ()=> speed = parseFloat($('#speedSel').value||'1');
-  $('#followP1').onclick = ()=> follow=1;
-  $('#followP2').onclick = ()=> follow=2;
-  $('#scrub').addEventListener('input', ()=> setTime(parseFloat($('#scrub').value||'0')*duration));
-  window.__replaySeek = (jump)=>{ playing=false; setTime(jump); };
-
-  function renderTagList(events, names){
-    const root = $('#tagEvents');
-    const p1n = names?.p1 || 'P1', p2n = names?.p2 || 'P2';
-    root.innerHTML = (events||[]).map(e=>{
-      const who = e.player===1? p1n : p2n;
-      const lab = e.type.replace(/_/g,' ');
-      return `<div class="flex items-center gap-2">
-        <span class="px-1.5 py-0.5 text-[11px] rounded bg-slate-800 border border-slate-700">${lab}</span>
-        <button data-jump="${e.t}" class="jump underline text-indigo-400 hover:text-indigo-300">${fmt2(e.t)}s</button>
-        <span class="opacity-70">(${who})</span>
-      </div>`;
-    }).join('');
-    root.querySelectorAll('.jump').forEach(b=> b.onclick = ()=> window.__replaySeek(parseFloat(b.dataset.jump)||0));
-  }
-
-  function applyTimeline(tl, names){
-    times = tl.times; p1pos = tl.p1_pos; p2pos = tl.p2_pos; owner = tl.owner;
-    duration = times?.length ? (times[times.length-1] || 0) : 0;
-    $('#timeMax').textContent = fmt2(duration);
-    setTime(0);
-    const insights = makeClientInsights(times, owner, p1pos, p2pos);
-    renderTagList(insights.events, names);
-    // vertical marks
-    const cont = $('#tagTimeline'); cont.innerHTML=''; cont.style.position='relative';
-    for (const e of insights.events){
-      const x = (e.t/duration)*100;
-      const d = document.createElement('div');
-      d.className='absolute top-0 bottom-0'; d.style.left=`calc(${x}% - 1px)`; d.style.width='2px';
-      d.style.background = e.player===1?'#60a5fa':'#f472b6';
-      d.title = `${e.type.replace(/_/g,' ')} @ ${fmt2(e.t)}s`;
-      d.style.cursor='pointer'; d.onclick = ()=> window.__replaySeek(e.t);
-      cont.appendChild(d);
-    }
-  }
-
-  return {
-    async loadFromUrlCandidates(candidates, names){
-      setStatus('Loading replay…');
-      try{
-        const {buf, url} = await window.tryFetchAny(candidates);
-        const rpl = parseRPL(buf);
-        // build 20Hz timeline
-        const maxT = Math.max(
-          rpl.p1_samples.length? rpl.p1_samples[rpl.p1_samples.length-1][0] : 0,
-          rpl.p2_samples.length? rpl.p2_samples[rpl.p2_samples.length-1][0] : 0,
-          rpl.tag_events.length? rpl.tag_events[rpl.tag_events.length-1][0] : 0
-        );
-        const dt = 0.05;
-        const tt = Array.from({length: Math.floor(maxT/dt)+1}, (_,i)=> i*dt);
-        const ev = (function compressOwnerEvents(evs){
-          if (!evs || !evs.length) return [];
-          const sorted = [...evs].sort((a,b)=>a[0]-b[0]);
-          const out=[sorted[0]];
-          for (let i=1;i<sorted.length;i++){
-            const [t,w]=sorted[i]; if (w!==out[out.length-1][1]) out.push([t,w]);
-          }
-          return out;
-        })(rpl.tag_events||[]);
-        const owner = [];
-        let cur=0, k=0;
-        for (const t of tt){
-          while (k<ev.length && ev[k][0] <= t){ cur = ev[k][1]; k++; }
-          owner.push(cur);
-        }
-        const p1 = (function interp(samples,times){
-          if (!samples?.length) return times.map(()=>[0,0,0]);
-          const out=[]; let i=0;
-          for (const t of times){
-            while (i+1<samples.length && samples[i+1][0]<t) i++;
-            if (i+1>=samples.length){ const [,x,y,z]=samples[samples.length-1]; out.push([x,y,z]); }
-            else{
-              const [t0,x0,y0,z0]=samples[i], [t1,x1,y1,z1]=samples[i+1];
-              const u = t1===t0 ? 0 : Math.min(1, Math.max(0, (t-t0)/(t1-t0)));
-              out.push([x0+(x1-x0)*u, y0+(y1-y0)*u, z0+(z1-z0)*u]);
-            }
-          }
-          return out;
-        })(rpl.p1_samples, tt);
-        const p2 = (function interp(samples,times){
-          if (!samples?.length) return times.map(()=>[0,0,0]);
-          const out=[]; let i=0;
-          for (const t of times){
-            while (i+1<samples.length && samples[i+1][0]<t) i++;
-            if (i+1>=samples.length){ const [,x,y,z]=samples[samples.length-1]; out.push([x,y,z]); }
-            else{
-              const [t0,x0,y0,z0]=samples[i], [t1,x1,y1,z1]=samples[i+1];
-              const u = t1===t0 ? 0 : Math.min(1, Math.max(0, (t-t0)/(t1-t0)));
-              out.push([x0+(x1-x0)*u, y0+(y1-y0)*u, z0+(z1-z0)*u]);
-            }
-          }
-          return out;
-        })(rpl.p2_samples, tt);
-
-        applyTimeline({times:tt, p1_pos:p1, p2_pos:p2, owner}, names);
-        setStatus(`Source: ${url}`);
-      }catch(e){
-        setStatus(`Replay load failed: ${e.message}`);
-      }
-    },
-    loadFromLocalFile(file, names){
-      const fr = new FileReader();
-      fr.onload = ()=> {
-        try{
-          const rpl = parseRPL(fr.result);
-          const maxT = Math.max(
-            rpl.p1_samples.length? rpl.p1_samples[rpl.p1_samples.length-1][0] : 0,
-            rpl.p2_samples.length? rpl.p2_samples[rpl.p2_samples.length-1][0] : 0,
-            rpl.tag_events.length? rpl.tag_events[rpl.tag_events.length-1][0] : 0
-          );
-          const dt = 0.05;
-          const times = Array.from({length: Math.floor(maxT/dt)+1}, (_,i)=> i*dt);
-          const ev = compressOwnerEvents(rpl.tag_events||[]);
-          const owner = []; let cur=0, k=0;
-          for (const t of times){ while (k<ev.length && ev[k][0] <= t){ cur = ev[k][1]; k++; } owner.push(cur); }
-          const p1 = window.interpAtTimes(rpl.p1_samples, times);
-          const p2 = window.interpAtTimes(rpl.p2_samples, times);
-          applyTimeline({times, p1_pos:p1, p2_pos:p2, owner}, names);
-          setStatus(`Source: local file (${file.name})`);
-        }catch(err){ setStatus(`Local parse failed: ${err.message}`); }
-      };
-      fr.onerror = ()=> setStatus('Local file read error');
-      fr.readAsArrayBuffer(file);
-    },
-    controls: { setTime, get playing(){return playing;}, set playing(v){playing=v;}, set speed(v){speed=v;}, set follow(v){follow=v;} }
-  };
-}
-
-window.tryFetchAny = window.tryFetchAny || (async (urls)=>{ throw new Error('patch failed'); });
-window.interpAtTimes = window.interpAtTimes || ((a,b)=>b.map(()=>[0,0,0]));
-
 (async function init(){
-  if (!idParam) { document.querySelector('#matchCard').innerHTML='<div class="text-red-400">Missing id.</div>'; return; }
+  if (!idParam) { showNotFound(); return; }
   const m = await fetchMatchById();
-  if (!m) { document.querySelector('#matchCard').innerHTML='<div class="text-red-400">Match not found.</div>'; return; }
-  const names = { p1: m.p1_name || 'P1', p2: m.p2_name || 'P2' };
+  if (!m) { showNotFound(); return; }
   renderMatch(m);
-  await loadAnalysis(matchIdValue, names);
-  subscribeRealtime(matchIdValue, names);
 
-  const rep = buildReplayer({match:m, names});
-  // Collect candidates and try
-  const candidates = buildReplayCandidates(m);
-  window.tryFetchAny = async (urls)=>{ // bind helper defined above (in non-module script)
-    let last=null; for (const u of urls){ try{ const res = await fetch(u, {cache:'no-store', mode:'cors', redirect:'follow'}); if(!res.ok) throw new Error(`${res.status}`); return {buf:await res.arrayBuffer(), url:u}; }catch(e){ last=e; } } throw last||new Error('no url'); };
-  };
-  await rep.loadFromUrlCandidates(candidates, names);
+  el('#analysisBlock').classList.remove('hidden');
+  el('#analyzeBtn').onclick = () => queueAnalysis(matchIdValue, m.replay_url);
 
-  // Local file loader (debug / offline)
-  $('#localRpl').addEventListener('change', (e)=>{
-    const f = e.target.files?.[0]; if (f) rep.loadFromLocalFile(f, names);
-  });
-
-  // Wire basic controls
-  $('#playBtn').onclick = ()=> rep.controls.playing = true;
-  $('#pauseBtn').onclick = ()=> rep.controls.playing = false;
-  $('#centerBtn').onclick = ()=> {};
-  $('#speedSel').onchange = ()=> rep.controls.speed = parseFloat($('#speedSel').value||'1');
-  $('#followP1').onclick = ()=> rep.controls.follow = 1;
-  $('#followP2').onclick = ()=> rep.controls.follow = 2;
-  $('#scrub').addEventListener('input', ()=> rep.controls.setTime(parseFloat($('#scrub').value||'0')*parseFloat($('#timeMax').textContent||'0')));
+  await loadAnalysis(matchIdValue);
+  subscribeRealtime(matchIdValue);
 })();
 </script>
 </body>
