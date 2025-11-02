@@ -9,20 +9,34 @@
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-6xl mx-auto p-4">
-    <header class="flex items-center justify-between mb-6">
+    <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
       <h1 class="text-2xl font-bold">🏆 Ranked Tag — Live Leaderboard</h1>
-      <div>
+      <div class="flex items-center gap-2">
         <input id="search" class="px-3 py-2 rounded bg-slate-800 border border-slate-700" placeholder="Search username or SteamID">
-        <button id="go" class="ml-2 px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Search</button>
+        <button id="go" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Search</button>
       </div>
     </header>
 
+    <section class="mb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-slate-400">Page size</label>
+        <select id="pageSize" class="bg-slate-900 border border-slate-800 rounded px-2 py-1">
+          <option>100</option>
+          <option>250</option>
+          <option>500</option>
+          <option selected>1000</option>
+        </select>
+        <button id="loadAll" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm">Load all (10k) for global sort</button>
+        <span id="status" class="text-sm text-slate-400"></span>
+      </div>
+      <div id="pager" class="flex items-center gap-2 text-sm"></div>
+    </section>
+
     <section>
-      <h2 class="text-xl font-semibold mb-2">Leaderboard</h2>
       <div id="board" class="overflow-x-auto border border-slate-800 rounded"></div>
     </section>
 
-    <section class="mt-8">
+    <section class="mt-10">
       <h2 class="text-xl font-semibold mb-2">Recent Matches</h2>
       <div id="recent" class="grid md:grid-cols-2 gap-3"></div>
     </section>
@@ -33,9 +47,17 @@ const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
-let cache = [];
-let currentSort = { key: 'rank', dir: 'desc' }; // default: Rank (tiers ↓, div I→IV)
+// ---------- state ----------
+let serverPage = 1;
+let pageSize = 1000;
+let total = 0;
 
+let currentSort = { key: 'rank', dir: 'desc' }; // default
+let pageCache = [];   // rows for current server page
+let allCache = null;  // when “Load all” pressed: every row (10k+)
+let useGlobal = false;
+
+// ---------- utils ----------
 function fmtTime(iso){ try{return new Date(iso).toLocaleString();}catch{return iso||'';} }
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
@@ -50,26 +72,23 @@ function tierOrder(rank){
   if(r.startsWith('silver')) return 3;
   if(r.startsWith('bronze')) return 2;
   if(r.startsWith('clown')) return 1;
-  return 0; // unranked/unknown
+  return 0;
 }
 function divFromRank(rank){
   const last = (rank||'').trim().split(/\s+/).pop().toUpperCase();
   const map = {I:1, II:2, III:3, IV:4};
-  return map[last] || 4; // default IV
+  return map[last] || 4;
 }
-
 function header(label, key){
   const arrow = currentSort.key===key ? (currentSort.dir==='asc'?' ▲':' ▼') : '';
   return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;
 }
-
 function applySort(rows){
   const dir = currentSort.dir;
   const k = currentSort.key;
   const cmp = (a,b)=>{
     const s = (v)=> (v===null||v===undefined)? -Infinity : v;
     if(k==='rank'){
-      // tiers DESC, division ASC, puis RP DESC, Elo DESC
       const t1=tierOrder(a.rank), t2=tierOrder(b.rank);
       if(t1!==t2) return t2-t1;
       const d1=divFromRank(a.rank), d2=divFromRank(b.rank);
@@ -77,27 +96,22 @@ function applySort(rows){
       if((a.rp??0)!==(b.rp??0)) return (b.rp??0)-(a.rp??0);
       return (b.elo??0)-(a.elo??0);
     }
-    if(k==='player'){
-      return (a.username||'').localeCompare(b.username||'', undefined, {sensitivity:'base'});
-    }
-    if(k==='rp')   return s(b.rp)    - s(a.rp);
-    if(k==='elo')  return s(b.elo)   - s(a.elo);
-    if(k==='games')return s(b.games) - s(a.games);
-    if(k==='wr')   return s(b.win_rate) - s(a.win_rate);
-    if(k==='last') return new Date(b.last_active_at||0) - new Date(a.last_active_at||0);
-    if(k==='pos')  return s(a.pos) - s(b.pos);
+    if(k==='player') return (a.username||'').localeCompare(b.username||'', undefined, {sensitivity:'base'});
+    if(k==='rp')     return s(b.rp)    - s(a.rp);
+    if(k==='elo')    return s(b.elo)   - s(a.elo);
+    if(k==='games')  return s(b.games) - s(a.games);
+    if(k==='wr')     return s(b.win_rate) - s(a.win_rate);
+    if(k==='last')   return new Date(b.last_active_at||0) - new Date(a.last_active_at||0);
+    if(k==='pos')    return s(a.pos) - s(b.pos);
     return 0;
   };
   rows.sort(cmp);
-  if(dir==='asc'){
-    rows.reverse();
-  }
+  if(dir==='asc') rows.reverse();
   return rows;
 }
 
-function render(){
-  const rows = applySort([...cache]);
-
+// ---------- render ----------
+function renderTable(rows){
   const thead = `<thead class="bg-slate-900">
     <tr>
       ${header('#','pos')}
@@ -113,7 +127,7 @@ function render(){
 
   const body = rows.map(r=>`
     <tr class="border-t border-slate-800 hover:bg-slate-900">
-      <td class="p-2">${r.pos}</td>
+      <td class="p-2">${r.pos ?? ''}</td>
       <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
       <td class="p-2 text-center">${esc(r.rank||'')}</td>
       <td class="p-2 text-center">${r.rp??''}</td>
@@ -127,7 +141,6 @@ function render(){
   document.getElementById('board').innerHTML =
     `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
 
-  // bind header clicks
   document.querySelectorAll('[data-sort]').forEach(th=>{
     th.addEventListener('click', ()=>{
       const key = th.getAttribute('data-sort');
@@ -137,16 +150,87 @@ function render(){
         currentSort.key = key;
         currentSort.dir = (key==='player' || key==='pos') ? 'asc' : 'desc';
       }
-      render();
+      render(); // re-render with new sort
     });
   });
 }
 
-async function loadBoard(){
-  const { data, error } = await supa.from('view_leaderboard').select('*').order('pos',{ascending:true});
+function renderPager(){
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const el = document.getElementById('pager');
+  el.innerHTML = `
+    <button id="first" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage<=1?'opacity-50':''}">« First</button>
+    <button id="prev"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage<=1?'opacity-50':''}">‹ Prev</button>
+    <span class="text-slate-300">Page <b>${serverPage}</b> / ${pages} · Total <b>${total}</b></span>
+    <button id="next"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage>=pages?'opacity-50':''}">Next ›</button>
+    <button id="last"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage>=pages?'opacity-50':''}">Last »</button>
+  `;
+  document.getElementById('first').onclick = ()=>{ serverPage=1; loadServerPage(); };
+  document.getElementById('prev').onclick  = ()=>{ if(serverPage>1){ serverPage--; loadServerPage(); } };
+  document.getElementById('next').onclick  = ()=>{ if(serverPage<pages){ serverPage++; loadServerPage(); } };
+  document.getElementById('last').onclick  = ()=>{ serverPage=pages; loadServerPage(); };
+}
+
+function render(){
+  let rows;
+  if(useGlobal && allCache){
+    // tri global sur toutes les lignes, mais on affiche paginé côté client
+    const sorted = applySort([...allCache]);
+    const start = (serverPage-1)*pageSize;
+    rows = sorted.slice(start, start + pageSize);
+  }else{
+    rows = applySort([...pageCache]); // tri local à la page
+  }
+  renderTable(rows);
+  renderPager();
+}
+
+// ---------- data ----------
+async function loadServerPage(){
+  useGlobal = !!allCache; // si on a déjà tout chargé, on reste en mode global
+  const start = (serverPage-1) * pageSize;
+  const end   = start + pageSize - 1;
+  // côté serveur: pos déjà ordonné (classement)
+  const { data, error, count } = await supa
+    .from('view_leaderboard')
+    .select('*', { count: 'exact' })
+    .order('pos', { ascending: true })
+    .range(start, end);
   if(error){ console.error(error); return; }
-  cache = data||[];
+  total = count ?? total;
+  pageCache = data||[];
+  if(!useGlobal) render(); // si pas en mode global, on affiche
+  document.getElementById('status').textContent = '';
+}
+
+async function loadAll(){
+  document.getElementById('status').textContent = 'Loading all pages…';
+  // d’abord, récupère le total via une première requête légère
+  const { count, error } = await supa
+    .from('view_leaderboard')
+    .select('steam_id', { count: 'exact', head: false })
+    .range(0,0);
+  if(error){ console.error(error); document.getElementById('status').textContent=''; return; }
+  total = count||0;
+  const step = 1000; // limite PostgREST
+  const pages = Math.ceil(total / step);
+  const all = [];
+  for(let i=0;i<pages;i++){
+    const start = i*step, end = start+step-1;
+    const { data, error: e2 } = await supa
+      .from('view_leaderboard')
+      .select('*')
+      .order('pos', { ascending: true })
+      .range(start, end);
+    if(e2){ console.error(e2); continue; }
+    all.push(...(data||[]));
+    document.getElementById('status').textContent = `Loading… ${Math.min(end+1,total)}/${total}`;
+  }
+  allCache = all;
+  useGlobal = true;
+  serverPage = 1; // repart sur la première page en affichage client
   render();
+  document.getElementById('status').textContent = `Loaded ${allCache.length} / ${total}`;
 }
 
 async function loadRecent(){
@@ -165,18 +249,26 @@ async function loadRecent(){
   }
 }
 
+// ---------- bindings ----------
 document.getElementById('go').addEventListener('click',()=>{
   const q=document.getElementById('search').value.trim();
   if(!q) return; window.location.href=`player.html?q=${encodeURIComponent(q)}`;
 });
+document.getElementById('pageSize').addEventListener('change', (e)=>{
+  pageSize = parseInt(e.target.value, 10) || 1000;
+  serverPage = 1;
+  render(); // si global déjà chargé
+  loadServerPage(); // et on met à jour la page serveur si besoin
+});
+document.getElementById('loadAll').addEventListener('click', loadAll);
 
-// Realtime: on garde le tri courant
+// Realtime (rafraîchit la page actuelle)
 supa.channel('realtime:players')
-  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, loadBoard).subscribe();
-supa.channel('realtime:matches')
-  .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches'}, loadRecent).subscribe();
+  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, ()=>loadServerPage())
+  .subscribe();
 
-loadBoard(); loadRecent();
+loadServerPage();
+loadRecent();
 </script>
 </body>
 </html>
