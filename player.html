@@ -12,10 +12,14 @@
   <div class="max-w-5xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
     <header id="header" class="mt-2 mb-6"></header>
+
     <section class="mb-8">
       <h2 class="text-xl font-semibold mb-2">Elo Timeline</h2>
-      <canvas id="eloChart" height="120"></canvas>
+      <div class="rounded border border-slate-800 p-3">
+        <canvas id="eloChart" height="140"></canvas>
+      </div>
     </section>
+
     <section>
       <h2 class="text-xl font-semibold mb-2">Recent matches</h2>
       <div id="matches" class="space-y-2"></div>
@@ -26,10 +30,19 @@
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+
 const url = new URL(location.href);
 let steamId = url.searchParams.get('steam_id');
 const q = url.searchParams.get('q');
+
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = iso => {
+  try {
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return iso || ''; }
+};
 
 async function resolveQuery(){
   if(steamId) return steamId;
@@ -38,7 +51,8 @@ async function resolveQuery(){
   if(data && data.length) return data[0].steam_id;
   return null;
 }
-function header(p){
+
+function renderHeader(p){
   return `<div class="p-4 rounded border border-slate-800">
     <div class="text-2xl font-bold">${esc(p.username||p.steam_id)}</div>
     <div class="text-slate-300">
@@ -46,7 +60,27 @@ function header(p){
       Elo: <span class="text-slate-100">${p.elo??'-'}</span> ·
       RP: <span class="text-slate-100">${p.rp??'-'}</span> ·
       Games: ${p.games??0} · Win%: ${p.win_rate??0}
-    </div></div>`;
+    </div>
+  </div>`;
+}
+
+function drawElo(labels, values){
+  const ctx = document.getElementById('eloChart').getContext('2d');
+  new Chart(ctx,{
+    type:'line',
+    data:{ labels, datasets:[{ label:'Elo', data: values, tension:0.25, pointRadius:0, borderWidth:2, fill:false }]},
+    options:{
+      plugins:{ legend:{ labels:{ color:'#cbd5e1' } }, tooltip:{ callbacks:{
+        // Pas de timestamp dans le label : on ne montre que Elo
+        title: () => '',
+        label: (ctx)=> ` Elo: ${ctx.parsed.y}`
+      }}},
+      scales:{
+        x:{ display:false, grid:{ display:false } },   // <-- aucune étiquette/timestamp
+        y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' } }
+      }
+    }
+  });
 }
 
 async function load(){
@@ -55,7 +89,7 @@ async function load(){
 
   const { data: player } = await supa.from('players').select('*').eq('steam_id',steamId).single();
   if(!player){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
-  document.getElementById('header').innerHTML = header(player);
+  document.getElementById('header').innerHTML = renderHeader(player);
 
   // Timeline depuis ratings (fallback matches si vide)
   let { data: rt } = await supa.from('ratings')
@@ -64,7 +98,6 @@ async function load(){
     .order('at', { ascending: true });
 
   if(!rt || rt.length < 2){
-    // fallback: reconstruire à partir des matches
     const { data: mm } = await supa.from('matches')
       .select('played_at,p1_id,p2_id,p1_elo_before,p1_elo_after,p2_elo_before,p2_elo_after')
       .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
@@ -72,25 +105,19 @@ async function load(){
       .limit(2000);
     rt = (mm||[]).map(m=>{
       const meIsP1 = m.p1_id===steamId;
-      return {
-        at: m.played_at,
-        elo_before: meIsP1 ? m.p1_elo_before : m.p2_elo_before,
-        elo_after:  meIsP1 ? m.p1_elo_after  : m.p2_elo_after
-      };
+      return { at: m.played_at,
+               elo_before: meIsP1 ? m.p1_elo_before : m.p2_elo_before,
+               elo_after:  meIsP1 ? m.p1_elo_after  : m.p2_elo_after };
     });
   }
-  const labels = rt.map(x=> new Date(x.at));
-  const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
-  const ctx = document.getElementById('eloChart').getContext('2d');
-  new Chart(ctx,{ type:'line',
-    data:{ labels, datasets:[{ label:'Elo', data: values, tension:0.25 }] },
-    options:{ plugins:{legend:{labels:{color:'#cbd5e1'}}},
-      scales:{ x:{ ticks:{ color:'#94a3b8' } }, y:{ ticks:{ color:'#94a3b8' } } } }
-  });
 
-  // Historique des matchs
+  const labels = rt.map((_,i)=> i+1); // index uniquement, pas de dates
+  const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
+  drawElo(labels, values);
+
+  // Historique des matchs (liste claire, UNE seule zone cliquable par match)
   const { data: matches } = await supa.from('matches')
-    .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after')
+    .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after,p1_elo_before,p2_elo_before')
     .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
     .order('played_at',{ascending:false})
     .limit(50);
@@ -98,17 +125,16 @@ async function load(){
   const cont = document.getElementById('matches'); cont.innerHTML='';
   for(const m of (matches||[])){
     const meIsP1 = m.p1_id===steamId;
-    const oppId  = meIsP1 ? m.p2_id : m.p1_id;
     const oppNm  = meIsP1 ? (m.p2_name||'Opponent') : (m.p1_name||'Opponent');
-    cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
-      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="font-semibold">
-        <span class="text-slate-100">${esc(player.username||player.steam_id)}</span>
-        vs
-        <a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(oppId)}">${esc(oppNm)}</a>
-      </div>
-      <div class="text-slate-400 text-sm">Map ${m.map_id ?? '-'}</div>
-    </a>`;
+    const res    = m.winner==='1' ? (meIsP1 ? 'W' : 'L') : (m.winner==='2' ? (meIsP1 ? 'L' : 'W') : '—');
+    const meElo  = meIsP1 ? (m.p1_elo_after ?? m.p1_elo_before ?? '-') : (m.p2_elo_after ?? m.p2_elo_before ?? '-');
+
+    cont.innerHTML += `
+      <a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
+        <div class="text-slate-300 text-sm">${fmt(m.played_at)}</div>
+        <div class="font-semibold">vs ${esc(oppNm)}</div>
+        <div class="text-slate-400 text-sm">Result: <span class="text-slate-100">${res}</span> · Map ${m.map_id ?? '-' } · Elo ${meElo}</div>
+      </a>`;
   }
 }
 load();
