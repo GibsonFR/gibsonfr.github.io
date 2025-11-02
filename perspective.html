@@ -41,16 +41,22 @@
     <div id="gateBanner" class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 hidden"></div>
 
     <!-- Actions -->
-    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-3">
       <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
         <div class="flex flex-wrap items-center gap-3">
+          <button id="queueBtn"
+                  class="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/30 disabled:opacity-50">
+            Queue Perspective compute
+          </button>
           <button id="refreshBtn"
                   class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30 disabled:opacity-50">
             Recompute metrics
           </button>
           <span id="status" class="text-sm text-slate-400"></span>
         </div>
+        <div id="jobInfo" class="mt-2 text-xs text-slate-400"></div>
       </div>
+
       <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
         <form id="cmpForm" class="flex flex-wrap items-center gap-2" onsubmit="return false;">
           <label class="text-slate-300">Compare vs</label>
@@ -177,6 +183,7 @@ async function isPremium(user){
 async function updateGateUI(){
   const gate = document.getElementById('gateBanner');
   const refreshBtn = document.getElementById('refreshBtn');
+  const queueBtn   = document.getElementById('queueBtn');
   const cmpBtn     = document.getElementById('cmpBtn');
   const user = await getUser();
   if (!user) {
@@ -189,7 +196,7 @@ async function updateGateUI(){
         <div class="mt-2"><button id="signinBtn" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Sign in with Discord</button></div>
       </div>
     </div>`;
-    refreshBtn.disabled = true; cmpBtn.disabled = true;
+    refreshBtn.disabled = true; queueBtn.disabled = true; cmpBtn.disabled = true;
     document.getElementById('signinBtn').onclick = ()=> supa.auth.signInWithOAuth({ provider:'discord', options:{ redirectTo: location.href }});
     return { user:null, premium:false };
   }
@@ -207,12 +214,15 @@ async function updateGateUI(){
         </div>
       </div>
     </div>`;
-    refreshBtn.disabled = true; cmpBtn.disabled = true;
+    refreshBtn.disabled = true; queueBtn.disabled = true; cmpBtn.disabled = true;
     const quick = document.getElementById('quickCheckout');
     if (quick) quick.onclick = (e)=>{ e.preventDefault(); if (window.startCheckout) window.startCheckout(); else location.href='account.html'; };
     return { user, premium:false };
   }
-  gate.classList.add('hidden'); refreshBtn.disabled = false; cmpBtn.disabled = false;
+  gate.classList.add('hidden');
+  document.getElementById('refreshBtn').disabled = false;
+  document.getElementById('queueBtn').disabled   = false;
+  document.getElementById('cmpBtn').disabled     = false;
   return { user, premium:true };
 }
 
@@ -404,7 +414,7 @@ function overviewChips(m){
   ].join('');
 }
 
-/* Sections */
+/* Sections (same as avant) */
 function sectionForm(m){
   const dots = m.form.map(w => `<span class="w-3 h-3 rounded-full ${w?'bg-emerald-400':'bg-rose-400'} inline-block"></span>`).join('<span class="w-1 inline-block"></span>');
   return section('Form & rating',
@@ -414,7 +424,6 @@ function sectionForm(m){
       <div class="ml-auto" title="Rating trend over time.">${spark(m.eloSeries)}</div>
     </div>`);
 }
-
 function sectionTagging(m){
   return section('Tagging profile',
     `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -432,7 +441,6 @@ function sectionTagging(m){
       </div>
     </div>`);
 }
-
 function sectionSpeedDistance(m){
   return section('Speed & distance',
     `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -450,7 +458,6 @@ function sectionSpeedDistance(m){
       </div>
     </div>`);
 }
-
 function sectionRetagAccuracy(m){
   return section('Retagging & accuracy',
     `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -468,7 +475,6 @@ function sectionRetagAccuracy(m){
       </div>
     </div>`);
 }
-
 function sectionQuality(m){
   return section('Quality & consistency',
     `<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -502,17 +508,15 @@ function sectionQuality(m){
       </div>
     </div>`);
 }
-
-/* Per-map: show only on “All”; render as cards (airy) */
+/* Per-map as cards only on All */
 function sectionMaps(maps, filter){
-  if (filter != null) return ''; // hidden when a specific map is selected
+  if (filter != null) return '';
   if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
-  const top = maps.slice(0, 12); // avoid huge grids
+  const top = maps.slice(0, 12);
   const cards = top.map(mp=>`
     <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
       <div class="flex items-center justify-between">
         <div class="font-semibold">${prettyMap(mp.map_id)}</div>
-        <a class="text-xs text-indigo-400 hover:underline" href="?steam_id=${encodeURIComponent(steamId)}">${/* same page – filter handled via pills */''}</a>
       </div>
       <div class="mt-2 text-slate-400 text-sm">${mp.matches} matches</div>
       <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -522,12 +526,9 @@ function sectionMaps(maps, filter){
         <div><div class="text-slate-400">Avg speed</div><div class="font-semibold">${num(mp.average_speed_mps,2)} m/s</div></div>
         <div class="col-span-2"><div class="text-slate-400">Retag median</div><div class="font-semibold">${fmtS(mp.retag_median_seconds)}</div></div>
       </div>
-    </div>
-  `).join('');
-  return section('Per-map breakdown',
-    `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`);
+    </div>`).join('');
+  return section('Per-map breakdown', `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`);
 }
-
 function sectionOpponents(opps){
   if(!opps?.length) return section('Most faced opponents','<div class="text-slate-400 text-sm">No data.</div>');
   const rows = opps.slice(0,20).map(o=>{
@@ -546,15 +547,7 @@ function sectionOpponents(opps){
     </div>`);
 }
 
-/* Compare (mirror) */
-function mirrorHeader(leftHtml, rightHtml){
-  return `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-right reveal">${leftHtml}</div>
-    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">${rightHtml}</div>
-  </div>`;
-}
-
-/* -------------------- Render pipeline -------------------- */
+/* Mirror compare kept (unchanged) */
 function renderAll(contentEl, metrics){
   contentEl.innerHTML = `
     <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -571,12 +564,64 @@ function renderAll(contentEl, metrics){
   mountReveal(contentEl);
 }
 
+/* -------------------- JOB QUEUE -------------------- */
+const JOB_TABLES = ['analysis_requests','perspective_requests','perspective_jobs'];
+let jobChannel = null;
+
+function pickCols(obj, allowed){
+  const out = {}; for (const k of allowed) if (obj[k] !== undefined) out[k] = obj[k]; return out;
+}
+
+async function tryInsert(table, rowShapes){
+  for (const shape of rowShapes){
+    try{
+      const { data, error } = await supa.from(table).insert(shape).select().single();
+      if (!error && data) return { table, row: data };
+    }catch(e){}
+  }
+  return null;
+}
+
+async function queuePerspective(steamId, mapId, user){
+  const requested_by = user?.id || null;
+  const requested_by_name = user?.user_metadata?.name || user?.email || user?.id || 'unknown';
+  const common = { steam_id: steamId, map_id: mapId ?? null, requested_by, requested_by_name, type:'perspective', requested_at: new Date().toISOString(), status:'queued' };
+
+  // Try each table with multiple shapes (broad → minimal) to fit your schema
+  const attempts = [];
+  for (const tbl of JOB_TABLES){
+    attempts.push({ tbl, shapes: [
+      common,
+      pickCols(common, ['steam_id','map_id','requested_by','requested_by_name','type','requested_at']),
+      pickCols(common, ['steam_id','map_id','requested_by','requested_by_name']),
+      pickCols(common, ['steam_id','requested_by'])
+    ]});
+  }
+
+  for (const t of attempts){
+    const res = await tryInsert(t.tbl, t.shapes);
+    if (res) return res; // {table, row}
+  }
+  throw new Error('Could not enqueue perspective job (no compatible table).');
+}
+
+function listenJob(table, id, onUpdate){
+  if (jobChannel) { try{ supa.removeChannel(jobChannel); }catch{} jobChannel=null; }
+  jobChannel = supa
+    .channel('perspective-jobs-'+id)
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table, filter: `id=eq.${id}` },
+        payload => { onUpdate(payload.new || payload.old || {}); })
+    .subscribe();
+}
+
 /* -------------------- INIT -------------------- */
 let matchesCache=[], analysesCache=new Map(), currentFilter=null; // null = All
 
 async function init(){
   const head = document.getElementById('head');
   const status = document.getElementById('status');
+  const jobInfo = document.getElementById('jobInfo');
   const scopeBar = document.getElementById('scopeBar');
   const content = document.getElementById('content');
 
@@ -632,13 +677,13 @@ async function init(){
         currentFilter = v==='' ? null : v;
         const m = await build(currentFilter);
         renderAll(content, m);
-        // re-render scope bar to update the active styling (fix for “All stays highlighted”)
+        // re-render to update active style (fix: All stayed highlighted)
         renderScopeBar();
       };
     });
   }
 
-  // Initial render (premium only)
+  // Initial premium render
   if (gate.premium){
     matchesCache = await fetchMatchesForPlayer(steamId, 800);
     analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
@@ -649,6 +694,7 @@ async function init(){
     content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
 
+  // Buttons
   document.getElementById('refreshBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
     matchesCache = await fetchMatchesForPlayer(steamId, 800);
@@ -658,9 +704,31 @@ async function init(){
     renderAll(content, m);
   };
 
+  document.getElementById('queueBtn').onclick = async ()=>{
+    if (!gate.user || !gate.premium) return;
+    try{
+      jobInfo.textContent = 'Queuing…';
+      const res = await queuePerspective(steamId, currentFilter, gate.user);
+      const jobTable = res.table, jobId = res.row.id;
+      jobInfo.textContent = `Queued (table: ${jobTable}, id: ${jobId}). Waiting for worker…`;
+
+      listenJob(jobTable, jobId, (row)=>{
+        const st = row.status || row.state || row.result || 'updated';
+        jobInfo.textContent = `Job ${jobId}: ${st}`;
+        if (String(st).toLowerCase().includes('done') || String(st).toLowerCase().includes('completed') || String(st).toLowerCase().includes('success')){
+          document.getElementById('refreshBtn').click();
+        }
+      });
+    }catch(e){
+      console.error(e);
+      jobInfo.textContent = 'Failed to queue: ' + (e.message||e);
+    }
+  };
+
+  // Compare (unchanged from last version)
   async function resolvePlayerSmart(text){
     if(!text) return null;
-    if(/^\d{5,}$/.test(text)) return text; // SteamID64
+    if(/^\d{5,}$/.test(text)) return text;
     try{
       const rp = await supa.rpc('search_players',{ q:text, p_limit:1 });
       if (!rp.error && rp.data && rp.data.length) return rp.data[0].steam_id;
@@ -675,7 +743,6 @@ async function init(){
     }catch{}
     return null;
   }
-
   document.getElementById('cmpBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
     const cmpStatus = document.getElementById('cmpStatus');
@@ -686,7 +753,6 @@ async function init(){
     if(!other){ cmpStatus.textContent='Player not found.'; return; }
 
     const A = aggregateMetrics(steamId, matchesCache, analysesCache, applyFilter? currentFilter : null);
-
     const mB = await fetchMatchesForPlayer(other, 800);
     const aB = await fetchAnalysesForMatchIds(mB.map(m=>m.id));
     const B = aggregateMetrics(other, mB, aB, applyFilter? currentFilter : null);
@@ -700,23 +766,20 @@ async function init(){
     const wrap = document.createElement('div'); wrap.className = 'grid grid-cols-1 gap-4';
     const mirrorBox = document.createElement('div'); wrap.appendChild(mirrorBox);
     mirrorBox.innerHTML = `
-      ${ (function(){
-          const left = `
-            <div class="text-lg font-semibold">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
-            <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b></div>
-            <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b></div>
-            <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b></div>`;
-          const right = `
-            <div class="text-lg font-semibold">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
-            <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b></div>
-            <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b></div>
-            <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b></div>`;
-          return `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-right reveal">${left}</div>
-                    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">${right}</div>
-                  </div>`;
-        })()
-      }`;
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-right reveal">
+          <div class="text-lg font-semibold">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
+          <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b></div>
+          <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b></div>
+          <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b></div>
+        </div>
+        <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">
+          <div class="text-lg font-semibold">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
+          <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b></div>
+          <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b></div>
+          <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b></div>
+        </div>
+      </div>`;
     mountReveal(mirrorBox);
 
     const cols = document.createElement('div'); cols.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
