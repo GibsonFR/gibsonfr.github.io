@@ -9,11 +9,14 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
-<div class=\"max-w-6xl mx-auto p-4\"><div id=\"authbar\" class=\"mb-3\"></div></div>
+  <div class="max-w-6xl mx-auto p-4">
+    <div id="authbar" class="mb-3"></div>
+  </div>
+
   <div class="max-w-6xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
-    <!-- HEADER REWORK -->
+    <!-- HEADER -->
     <header id="header" class="mt-3"></header>
 
     <section class="mt-8 mb-8">
@@ -43,6 +46,14 @@ const fmtDate = iso => { try{const d=new Date(iso),p=n=>String(n).padStart(2,'0'
 const fmtDur  = s => { if(s==null||isNaN(s)) return '—'; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}:${String(sec).padStart(2,'0')}`; };
 const fmtQ    = x => (x==null||isNaN(x)?'—':(Math.round(x*10)/10));
 
+// Crown icon + helper
+const crownSVG = `<span title="Premium member" aria-label="Premium member">
+  <svg class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
+  </svg>
+</span>`;
+
+// Resolve steamId if only ?q= is provided
 async function resolveQuery(){
   if(steamId) return steamId;
   if(!q) return null;
@@ -50,6 +61,7 @@ async function resolveQuery(){
   return (data && data.length) ? data[0].steam_id : null;
 }
 
+// Chips UI
 function chip(label, val){
   return `<div class="px-2 py-1 rounded-xl bg-slate-800/70 border border-slate-700 text-sm">
     <span class="text-slate-400">${label}</span>
@@ -57,9 +69,46 @@ function chip(label, val){
   </div>`;
 }
 
-function renderHeaderCard(p){
-  const name = esc(p.username||p.steam_id);
-  const avatarLetter = name.trim().charAt(0).toUpperCase() || '?';
+// Check premium by steam_id
+async function isPremiumSteam(steamId){
+  try{
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supa
+      .from('profiles')
+      .select('steam_id')
+      .eq('steam_id', steamId)
+      .gt('premium_until', nowIso)
+      .maybeSingle();
+    if(error) { console.warn('[premium header] select error', error); return false; }
+    return !!data;
+  }catch(e){ console.warn('[premium header] failed', e); return false; }
+}
+
+// Batch: get premium set for a list of steamIds (used for matches names)
+async function fetchPremiumSet(steamIds){
+  const set = new Set();
+  if(!steamIds || !steamIds.length) return set;
+  try{
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supa
+      .from('profiles')
+      .select('steam_id')
+      .in('steam_id', steamIds)
+      .gt('premium_until', nowIso);
+    if(error){ console.warn('[premium list] select error', error); return set; }
+    (data||[]).forEach(r=> r.steam_id && set.add(String(r.steam_id)));
+    return set;
+  }catch(e){ console.warn('[premium list] failed', e); return set; }
+}
+
+// Header card with premium styling
+function renderHeaderCard(p, premium){
+  const baseName = esc(p.username||p.steam_id);
+  const nameHtml = premium
+    ? `<span class="text-amber-300" title="Premium member">${baseName}</span>${crownSVG}`
+    : baseName;
+
+  const avatarLetter = (baseName.trim().charAt(0).toUpperCase() || '?');
   const perspectiveHref = `perspective.html?steam_id=${encodeURIComponent(p.steam_id)}`;
 
   return `
@@ -68,7 +117,7 @@ function renderHeaderCard(p){
       <div class="flex items-center gap-4">
         <div class="w-14 h-14 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-xl font-bold text-indigo-300">${avatarLetter}</div>
         <div>
-          <div class="text-2xl font-extrabold leading-tight">${name}</div>
+          <div class="text-2xl font-extrabold leading-tight">${nameHtml}</div>
           <div class="mt-2 flex flex-wrap gap-2">
             ${chip('Rank', esc(p.rank||'—'))}
             ${chip('Elo', p.elo ?? '—')}
@@ -113,11 +162,13 @@ async function load(){
 
   const { data: player } = await supa.from('players').select('*').eq('steam_id',steamId).single();
   if(!player){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
-  document.getElementById('header').innerHTML = renderHeaderCard(player);
 
+  // premium for header
+  const selfPremium = await isPremiumSteam(steamId);
+  document.getElementById('header').innerHTML = renderHeaderCard(player, selfPremium);
   document.getElementById('copyBtn').onclick = async()=>{ await navigator.clipboard.writeText(steamId); };
 
-  // Timeline
+  // Timeline (ratings or fallback from matches)
   let { data: rt } = await supa.from('ratings').select('at, elo_before, elo_after').eq('player_id', steamId).order('at', { ascending: true });
   if(!rt || rt.length < 2){
     const { data: mm } = await supa.from('matches')
@@ -132,13 +183,18 @@ async function load(){
   const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
   drawElo(labels, values);
 
-  // Matches + Quality
+  // Recent matches + qualities
   const { data: matches } = await supa.from('matches')
     .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after,p1_elo_before,p2_elo_before')
     .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`).order('played_at',{ascending:false}).limit(50);
 
   const cont = document.getElementById('matches'); cont.innerHTML='';
   if(!matches || !matches.length) return;
+
+  // Batch premium resolution for all names shown
+  const idsSet = new Set([steamId]);
+  matches.forEach(m=>{ idsSet.add(m.p1_id); idsSet.add(m.p2_id); });
+  const premiumSet = await fetchPremiumSet(Array.from(idsSet));
 
   const ids = matches.map(m=>m.id);
   let aById = {};
@@ -147,11 +203,18 @@ async function load(){
     if(analyses){ for(const a of analyses) aById[a.match_id] = a; }
   }
 
+  const youBadge = `<span class="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 align-middle">you</span>`;
+
+  function nameWithPremium(sid, display){
+    const premium = premiumSet.has(String(sid));
+    const base = esc(display);
+    const inner = premium ? `<span class="text-amber-300" title="Premium member">${base}</span>${crownSVG}` : base;
+    return inner + (String(sid)===String(steamId) ? youBadge : '');
+  }
+
   for(const m of matches){
     const a = aById[m.id] || {};
     const dur = a.summary?.duration_s;
-    const meIsP1 = (m.p1_id === steamId);
-    const winnerSide = (m.winner === 1 || m.winner === '1') ? 'p1' : (m.winner === 2 || m.winner === '2') ? 'p2' : null;
 
     const p1Elo = (m.p1_elo_after ?? m.p1_elo_before ?? '-');
     const p2Elo = (m.p2_elo_after ?? m.p2_elo_before ?? '-');
@@ -159,12 +222,12 @@ async function load(){
     const q1 = fmtQ(a.p1_quality);
     const q2 = fmtQ(a.p2_quality);
 
-    const youBadge = `<span class="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 align-middle">you</span>`;
-    const p1Name = esc(m.p1_name || m.p1_id || 'P1') + (meIsP1 ? youBadge : '');
-    const p2Name = esc(m.p2_name || m.p2_id || 'P2') + (!meIsP1 ? youBadge : '');
-
+    const winnerSide = (m.winner === 1 || m.winner === '1') ? 'p1' : (m.winner === 2 || m.winner === '2') ? 'p2' : null;
     const winP1 = winnerSide==='p1' ? `<span class="ml-2 text-emerald-400 text-xs">Win</span>` : ``;
     const winP2 = winnerSide==='p2' ? `<span class="ml-2 text-emerald-400 text-xs">Win</span>` : ``;
+
+    const p1Name = nameWithPremium(m.p1_id, m.p1_name || m.p1_id || 'P1');
+    const p2Name = nameWithPremium(m.p2_id, m.p2_name || m.p2_id || 'P2');
 
     cont.innerHTML += `
       <a href="match.html?id=${m.id}" class="block rounded border border-slate-800 hover:border-indigo-500 bg-slate-900/40">
