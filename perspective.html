@@ -22,12 +22,11 @@
       opacity:0;transition:opacity .15s ease,transform .15s ease;z-index:20
     }
     .tip:hover:after{opacity:1;transform:translateX(-50%) translateY(6px)}
-    /* Mirror compare rows: force each row to align left vs right */
+    /* Compare rows align heights */
     .mirror-row{display:grid;grid-template-columns:1fr;gap:1rem}
     @media (min-width: 768px){.mirror-row{grid-template-columns:1fr 1fr}}
-    /* Equalize card heights per row (prevents misalignment in compare) */
     .mirror-row > div { display:flex; }
-    .mirror-row > div > .card { flex: 1 1 auto; display:flex; flex-direction:column; }
+    .mirror-row > div > .card { flex:1 1 auto; display:flex; flex-direction:column; }
     .card{border:1px solid rgb(30 41 59);background:rgba(15,23,42,.4);border-radius:1rem;padding:1rem}
     .pill{border-radius:9999px;border:1px solid rgb(51 65 85);background:rgba(30,41,59,.6);color:#e5e7eb}
     .pill-active{background:rgba(245,158,11,.2);color:#fbbf24;border-color:rgba(245,158,11,.3)}
@@ -263,7 +262,6 @@ function groupSessions(sortedMatches, gapMs=5*60*1000){
   return sessions;
 }
 function hourlyBuckets(matches, sid){
-  // Local timezone (browser) buckets 0..23
   const buckets = Array.from({length:24}, ()=>({matches:0,wins:0}));
   for (const m of matches){
     const side = String(m.p1_id)===String(sid)?'p1':'p2';
@@ -273,12 +271,30 @@ function hourlyBuckets(matches, sid){
   }
   return buckets.map((b,i)=>({hour:i, matches:b.matches, winrate: b.matches? b.wins/b.matches : null}));
 }
+/* NEW: dayparts (local timezone) */
+function daypartsBuckets(matches, sid){
+  const parts = [
+    { key:'Night',   range:'0–5',   hours:[0,1,2,3,4,5],    matches:0, wins:0 },
+    { key:'Morning', range:'6–11',  hours:[6,7,8,9,10,11],  matches:0, wins:0 },
+    { key:'Afternoon', range:'12–17', hours:[12,13,14,15,16,17], matches:0, wins:0 },
+    { key:'Evening', range:'18–23', hours:[18,19,20,21,22,23], matches:0, wins:0 },
+  ];
+  const idxByHour = new Map();
+  parts.forEach((p,i)=> p.hours.forEach(h=>idxByHour.set(h,i)));
+  for (const m of matches){
+    const side = String(m.p1_id)===String(sid)?'p1':'p2';
+    const win  = (m.winner===1||m.winner==='1') ? (side==='p1') : (m.winner===2||m.winner==='2') ? (side==='p2') : null;
+    const h = new Date(m.played_at).getHours();
+    const i = idxByHour.get(h);
+    if (i==null) continue;
+    parts[i].matches++; if (win) parts[i].wins++;
+  }
+  return parts.map(p=>({ key:p.key, range:p.range, matches:p.matches, winrate:p.matches? p.wins/p.matches : null }));
+}
 
 function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
-  // Filter by map
   let scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
 
-  // Elo-band filter (bands are ints like 1000, 1100… representing [band .. band+99])
   if (eloBandSet && eloBandSet.size){
     scope = scope.filter(m=>{
       const side = (String(m.p1_id)===String(sid)) ? 'p1' : 'p2';
@@ -373,7 +389,6 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
     lower_quartile: quantile(qual,.25), upper_quartile: quantile(qual,.75),
     best_match: qual.length? Math.max(...qual):null, worst_match: qual.length? Math.min(...qual):null,
     spread_std: std(qual),
-    // simpler description: "middle 50% spread"
     spread_iqr: (quantile(qual,.75)!=null && quantile(qual,.25)!=null) ? (quantile(qual,.75)-quantile(qual,.25)) : null
   };
 
@@ -411,7 +426,6 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
     winrate:o.matches? o.wins/o.matches:null, average_quality: avg(o.q)
   })).sort((a,b)=> (b.matches - a.matches));
 
-  // Sessions & time-of-day
   const sessions = groupSessions(scope);
   const sessionStats = {
     sessions: sessions.length,
@@ -434,11 +448,12 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
     }).filter(x=>x!=null)) : null
   };
   const hourly = hourlyBuckets(scope, sid);
+  const dayparts = daypartsBuckets(scope, sid);
 
   return {
     scopeCount: count, wins, winrate, quality, tagging, speed, distance, retag, accuracy,
     eloSeries: eloSeriesAll, form, bestStreak, maps: mapsArr, opponents: oppArr,
-    sessionStats, hourly
+    sessionStats, hourly, dayparts
   };
 }
 
@@ -551,24 +566,50 @@ function sectionQuality(m){
     </div>`);
 }
 
-/* >>> Responsive, no-overflow version <<< */
-function sectionSessionsAndTime(m){
-  // Adaptive sizes based on viewport width
-  const BAR_MAX = window.innerWidth < 640 ? 40 : 64; // max bar height in px
+/* ===== Dayparts/Hourly — responsive, toggleable ===== */
+let currentTimeView = 'dayparts'; // default
+
+function daypartsCards(dp){
+  return `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    ${dp.map(p=>`
+      <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 ${p.matches? '' : 'opacity-60'}">
+        <div class="flex items-center justify-between gap-2">
+          <div class="font-medium">${p.key}</div>
+          <div class="text-[11px] text-slate-400">${p.matches||0} matches</div>
+        </div>
+        <div class="text-slate-400 text-xs">${p.range}</div>
+        <div class="mt-2 text-slate-100 font-semibold">${p.winrate==null?'—':Math.round(p.winrate*1000)/10+'%'}</div>
+        <div class="mt-1">${bar(p.winrate||0,'Win rate')}</div>
+      </div>`).join('')}
+  </div>`;
+}
+function hourlyBars(hourly){
+  const BAR_MAX = window.innerWidth < 640 ? 40 : 64;
   const BAR_W_CLASS = window.innerWidth < 640 ? 'w-2' : 'w-4';
-  const LABELS_H = 24; // two tiny lines below bars
+  const LABELS_H = 24;
   const CHART_H = BAR_MAX + LABELS_H;
 
-  const hourBars = m.hourly.map(h=>{
+  const bars = hourly.map(h=>{
     const v = h.winrate==null ? 0 : h.winrate;
     const height = Math.round(clamp01(v)*BAR_MAX);
-    const labelWR = h.winrate==null ? '—' : `${Math.round(v*100)}%`;
-    return `<div class="flex flex-col items-center gap-1">
+    const tip = h.winrate==null ? '—' : `${Math.round(v*100)}%`;
+    return `<div class="flex flex-col items-center gap-1" title="${h.hour}:00 • ${h.matches} matches • ${tip}">
       <div class="${BAR_W_CLASS} bg-amber-400/80 rounded shrink-0" style="height:${height}px"></div>
       <div class="text-[10px] leading-none text-slate-400">${h.hour}</div>
-      <div class="text-[10px] leading-none text-slate-500" title="${labelWR}">${h.matches||0}</div>
+      <div class="text-[10px] leading-none text-slate-500">${h.matches||0}</div>
     </div>`;
   }).join('');
+
+  return `<div class="flex items-end gap-1" style="height:${CHART_H}px">${bars}</div>`;
+}
+function sectionSessionsAndTime(m){
+  const toggle = `
+    <div class="flex items-center gap-2">
+      <button data-timeview="dayparts" class="px-2 py-1 text-xs pill ${currentTimeView==='dayparts'?'pill-active':''}">Dayparts</button>
+      <button data-timeview="hourly"   class="px-2 py-1 text-xs pill ${currentTimeView==='hourly'?'pill-active':''}">Hourly</button>
+    </div>`;
+
+  const chart = currentTimeView==='dayparts' ? daypartsCards(m.dayparts) : hourlyBars(m.hourly);
 
   return section('Playtime & sessions',
     `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -585,8 +626,11 @@ function sectionSessionsAndTime(m){
         <div class="font-semibold">${m.sessionStats.worst_wr!=null? Math.round(m.sessionStats.worst_wr*100):'—'}%</div>
       </div>
       <div class="md:col-span-1">
-        <div class="text-slate-400 mb-1">Win rate by hour (your timezone)</div>
-        <div class="flex items-end gap-1" style="height:${CHART_H}px">${hourBars}</div>
+        <div class="flex items-center justify-between mb-1">
+          <div class="text-slate-400">${currentTimeView==='dayparts'?'Win rate by daypart (local)':'Win rate by hour (local)'}</div>
+          ${toggle}
+        </div>
+        ${chart}
       </div>
     </div>`);
 }
@@ -643,6 +687,15 @@ function renderAll(contentEl, metrics){
     ${sectionOpponents(metrics.opponents)}
   `;
   mountReveal(contentEl);
+  bindTimeViewToggles(contentEl);
+}
+function bindTimeViewToggles(root){
+  root.querySelectorAll('[data-timeview]').forEach(b=>{
+    b.onclick = ()=>{
+      const v = b.getAttribute('data-timeview');
+      if (v && v!==currentTimeView){ currentTimeView=v; recomputeAndRender(); }
+    };
+  });
 }
 
 /* -------------------- Legacy worker summary -------------------- */
@@ -718,7 +771,7 @@ function renderScopeBar(){
       const v = b.getAttribute('data-map');
       currentMapFilter = v===''? null : v;
       await recomputeAndRender();
-      renderScopeBar(); // refresh active
+      renderScopeBar();
     };
   });
 }
@@ -815,7 +868,6 @@ async function init(){
     renderFilterBar();
     await recomputeAndRender();
 
-    // If worker row already exists, show summary
     const legacyRow = await loadPerspectiveRow(steamId);
     const legacyBox = document.createElement('div');
     content.prepend(legacyBox);
@@ -824,7 +876,6 @@ async function init(){
     content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
 
-  // Buttons
   document.getElementById('refreshBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
     matchesCache = await fetchMatchesForPlayer(steamId, 1200);
@@ -888,7 +939,6 @@ async function init(){
     const other = await resolvePlayerSmart(query);
     if(!other){ cmpStatus.textContent='Player not found.'; return; }
 
-    // Build both sides with identical filters to keep symmetry
     const A = aggregateMetrics(steamId, matchesCache, analysesCache, applyFilter? currentMapFilter : null, applyFilter? currentEloBands : new Set());
     const mB = await fetchMatchesForPlayer(other, 1200);
     const aB = await fetchAnalysesForMatchIds(mB.map(m=>m.id));
@@ -900,7 +950,6 @@ async function init(){
     const nameB = (pb?.username || other);
     const nameA = (player.username || steamId);
 
-    // Mirror summary header
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="mirror-row">
@@ -919,15 +968,12 @@ async function init(){
       </div>`;
     const rows = document.createElement('div');
 
-    // Build sections row-by-row for alignment
     function rowPair(leftHTML, rightHTML){
       const row = document.createElement('div'); row.className='mirror-row';
       row.innerHTML = `<div>${leftHTML}</div><div>${rightHTML}</div>`;
       rows.appendChild(row);
     }
-    // Chips
     rowPair(`<div class="card">${overviewChips(A)}</div>`, `<div class="card">${overviewChips(B)}</div>`);
-    // Rest
     rowPair(sectionForm(A), sectionForm(B));
     rowPair(sectionTagging(A), sectionTagging(B));
     rowPair(sectionSpeedDistance(A), sectionSpeedDistance(B));
@@ -938,9 +984,10 @@ async function init(){
     const content = document.getElementById('content');
     content.innerHTML = ''; content.appendChild(wrap); content.appendChild(rows);
     mountReveal(content);
+    bindTimeViewToggles(content);
   };
 
-  // Re-render on resize (throttled) so the hourly chart and compare heights stay tidy
+  // Tidy on resize
   let _rszTimer=null;
   window.addEventListener('resize', ()=>{
     clearTimeout(_rszTimer);
