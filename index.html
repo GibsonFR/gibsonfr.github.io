@@ -9,7 +9,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100">
 
-  <!-- Auth bar (added) -->
+  <!-- Auth bar -->
   <div class="max-w-6xl mx-auto p-4">
     <div id="authbar" class="mb-3"></div>
   </div>
@@ -52,6 +52,71 @@
     const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
     const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
     const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+
+    // ---------- PREMIUM MARKING ----------
+    // Set des steam_id premium (renseigné au moins pour l'utilisateur connecté si Premium).
+    const premiumSteam = new Set();
+
+    // Petit SVG couronne (style chess.com)
+    const crownSVG = `<svg aria-hidden="true" class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
+    </svg>`;
+
+    function premiumNameHtml(row) {
+      const baseName = esc(row.username || row.steam_id);
+      const premium = premiumSteam.has(row.steam_id);
+      const title = premium ? ' title="Premium member"' : '';
+      // Couleur légère ambrée + icône si premium, sinon style original indigo
+      if (premium) {
+        return `<a${title} class="text-amber-300 hover:text-amber-200" href="player.html?steam_id=${encodeURIComponent(row.steam_id)}">${baseName}</a>${crownSVG}`;
+      }
+      return `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(row.steam_id)}"${title}>${baseName}</a>`;
+    }
+
+    // Essaie de récupérer la liste globale via une edge function optionnelle (retour attendu: { steam_ids: string[] })
+    async function tryFetchPremiumList() {
+      try {
+        const { data:{ session } } = await supa.auth.getSession();
+        const res = await fetch(`${SUPA_URL}/functions/v1/premium-list`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+        });
+        if (!res.ok) return;
+        const j = await res.json().catch(()=>null);
+        if (j && Array.isArray(j.steam_ids)) j.steam_ids.forEach(id => premiumSteam.add(String(id)));
+      } catch {}
+    }
+
+    // Renseigne au moins le steam_id de l'utilisateur s'il est Premium
+    function getDiscordId(user){
+      const ids = user?.identities || [];
+      const disc = ids.find(i => i?.provider === 'discord');
+      const fromIdent = disc?.identity_data?.user_id || disc?.identity_data?.sub || disc?.identity_data?.id;
+      const fromMeta  = user?.user_metadata?.provider_id || user?.user_metadata?.sub || null;
+      return String(fromIdent || fromMeta || '').trim() || null;
+    }
+    async function markSelfIfPremium() {
+      const { data:{ user } } = await supa.auth.getUser();
+      if (!user) return;
+      // Profil (premium_until)
+      const { data: prof } = await supa.from('profiles')
+        .select('premium_until')
+        .eq('id', user.id).maybeSingle();
+      const active = !!(prof?.premium_until && new Date(prof.premium_until) > new Date());
+      if (!active) return;
+      // Lien Discord -> SteamID (links_state.json)
+      try {
+        const res = await fetch('links_state.json', { cache:'no-store' });
+        if (!res.ok) return;
+        const map = await res.json();
+        const did = getDiscordId(user);
+        const sid = did ? map[did] : null;
+        if (sid) premiumSteam.add(String(sid));
+      } catch {}
+    }
+
+    async function initPremium() {
+      await Promise.all([ markSelfIfPremium(), tryFetchPremiumList() ]);
+    }
 
     // ---------- state ----------
     let pageSize = 1000, pageIndex = 0;
@@ -123,7 +188,7 @@
       const body = slice.map(r=>`
         <tr class="border-t border-slate-800 hover:bg-slate-900">
           <td class="p-2">${r.__pos}</td>
-          <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
+          <td class="p-2">${premiumNameHtml(r)}</td>
           <td class="p-2 text-center">${esc(r.rank||'')}</td>
           <td class="p-2 text-center">${r.rp??''}</td>
           <td class="p-2 text-center">${r.elo??''}</td>
@@ -224,11 +289,13 @@
         btn.classList.remove('hidden'); btn.textContent='Refresh data';
       }).subscribe();
 
+    // Charge les données et les statuts premium (re-render quand la liste premium arrive)
     loadAll();
     loadRecent();
+    initPremium().then(()=> render());
   </script>
 
-  <!-- Minimal Discord sign-in (only addition; non-destructive) -->
+  <!-- Auth bar (Discord) -->
   <script>
     (async () => {
       try {
