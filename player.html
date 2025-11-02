@@ -114,7 +114,7 @@ async function load(){
   const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
   drawElo(labels, values);
 
-  // Historique des matchs
+  // Historique des matchs + Quality (si analysés)
   const { data: matches } = await supa.from('matches')
     .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after,p1_elo_before,p2_elo_before')
     .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
@@ -122,17 +122,40 @@ async function load(){
     .limit(50);
 
   const cont = document.getElementById('matches'); cont.innerHTML='';
-  for(const m of (matches||[])){
+  if(!matches || !matches.length) return;
+
+  // Récup analyses pour ces matches
+  const ids = matches.map(m=>m.id);
+  let aById = {};
+  if(ids.length){
+    const { data: analyses } = await supa.from('match_analyses')
+      .select('match_id,p1_quality,p2_quality')
+      .in('match_id', ids);
+    if(analyses){
+      for(const a of analyses) aById[a.match_id] = a;
+    }
+  }
+
+  for(const m of matches){
     const meIsP1 = m.p1_id===steamId;
     const oppNm  = meIsP1 ? (m.p2_name||'Opponent') : (m.p1_name||'Opponent');
     const res    = m.winner==='1' ? (meIsP1 ? 'W' : 'L') : (m.winner==='2' ? (meIsP1 ? 'L' : 'W') : '—');
     const meElo  = meIsP1 ? (m.p1_elo_after ?? m.p1_elo_before ?? '-') : (m.p2_elo_after ?? m.p2_elo_before ?? '-');
 
+    // Quality du joueur pour ce match (si analyse dispo)
+    const a = aById[m.id];
+    const myQ = a ? (meIsP1 ? a.p1_quality : a.p2_quality) : null;
+    const qPart = (myQ==null ? '' : ` · Quality ${myQ}`);
+
     cont.innerHTML += `
       <a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
         <div class="text-slate-300 text-sm">${fmt(m.played_at)}</div>
         <div class="font-semibold">vs ${esc(oppNm)}</div>
-        <div class="text-slate-400 text-sm">Result: <span class="text-slate-100">${res}</span> · Map ${m.map_id ?? '-' } · Elo ${meElo}</div>
+        <div class="text-slate-400 text-sm">
+          Result: <span class="text-slate-100">${res}</span> ·
+          Map ${m.map_id ?? '-' } ·
+          Elo ${meElo}${qPart}
+        </div>
       </a>`;
   }
 }
