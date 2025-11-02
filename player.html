@@ -37,26 +37,21 @@ const q = url.searchParams.get('q');
 
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate = iso => {
-  try {
-    const d = new Date(iso);
-    const pad = n => String(n).padStart(2,'0');
+  try { const d = new Date(iso), pad=n=>String(n).padStart(2,'0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch { return iso || ''; }
+  } catch { return iso||''; }
 };
 const fmtDur = s => {
   if (s==null || isNaN(s)) return '—';
-  const mm = Math.floor(s/60);
-  const ss = Math.floor(s%60);
+  const mm = Math.floor(s/60), ss = Math.floor(s%60);
   return `${mm}:${String(ss).padStart(2,'0')}`;
 };
-const pct = x => (x==null||isNaN(x) ? '—' : `${Math.round(x*1000)/10}%`);
 
 async function resolveQuery(){
   if(steamId) return steamId;
   if(!q) return null;
   const { data } = await supa.rpc('search_players',{ q, p_limit:1 });
-  if(data && data.length) return data[0].steam_id;
-  return null;
+  return (data && data.length) ? data[0].steam_id : null;
 }
 
 function renderHeader(p){
@@ -78,13 +73,9 @@ function drawElo(labels, values){
     data:{ labels, datasets:[{ label:'Elo', data: values, tension:0.25, pointRadius:0, borderWidth:2, fill:false }]},
     options:{
       plugins:{ legend:{ labels:{ color:'#cbd5e1' } }, tooltip:{ callbacks:{
-        title: () => '',
-        label: (ctx)=> ` Elo: ${ctx.parsed.y}`
-      }}},
-      scales:{
-        x:{ display:false, grid:{ display:false } },
-        y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' } }
-      }
+        title: () => '', label: (ctx)=> ` Elo: ${ctx.parsed.y}` }}},
+      scales:{ x:{ display:false, grid:{ display:false } },
+               y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' } } }
     }
   });
 }
@@ -136,25 +127,29 @@ async function load(){
   let aById = {};
   if(ids.length){
     const { data: analyses } = await supa.from('match_analyses')
-      .select('match_id,p1_quality,p2_quality,p1_stats,p2_stats,summary')
+      .select('match_id,p1_quality,p2_quality,summary')
       .in('match_id', ids);
-    if(analyses){
-      for(const a of analyses) aById[a.match_id] = a;
-    }
+    if(analyses){ for(const a of analyses) aById[a.match_id] = a; }
   }
 
   for(const m of matches){
-    const a = aById[m.id];
-    const dur = a?.summary?.duration_s;
+    const a = aById[m.id] || {};
+    const dur = a.summary?.duration_s;
 
-    const p1E = (m.p1_elo_after ?? m.p1_elo_before ?? '-');
-    const p2E = (m.p2_elo_after ?? m.p2_elo_before ?? '-');
+    const meIsP1 = (m.p1_id === steamId);
+    const winnerSide = (m.winner === 1 || m.winner === '1') ? 'p1'
+                      : (m.winner === 2 || m.winner === '2') ? 'p2' : null;
 
-    const acc1 = a?.p1_stats?.accuracy ?? null;
-    const acc2 = a?.p2_stats?.accuracy ?? null;
+    const p1Elo = (m.p1_elo_after ?? m.p1_elo_before ?? '-');
+    const p2Elo = (m.p2_elo_after ?? m.p2_elo_before ?? '-');
 
-    const q1 = a?.p1_quality ?? null;
-    const q2 = a?.p2_quality ?? null;
+    // Quality correctement mappée P1 ↔ p1_quality, P2 ↔ p2_quality
+    const q1 = (a.p1_quality != null) ? a.p1_quality : '—';
+    const q2 = (a.p2_quality != null) ? a.p2_quality : '—';
+
+    const youBadge = `<span class="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 align-middle">you</span>`;
+    const p1Name = esc(m.p1_name || m.p1_id || 'P1') + (meIsP1 ? youBadge : '');
+    const p2Name = esc(m.p2_name || m.p2_id || 'P2') + (!meIsP1 ? youBadge : '');
 
     cont.innerHTML += `
       <a href="match.html?id=${m.id}" class="block rounded border border-slate-800 hover:border-indigo-500 bg-slate-900/40">
@@ -164,24 +159,23 @@ async function load(){
         </div>
 
         <div class="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <!-- Row style like chess.com: name (elo) ........ Acc / Quality -->
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
-              <div class="font-semibold truncate">${esc(m.p1_name||m.p1_id||'P1')} <span class="text-slate-400">(${p1E})</span></div>
+              <div class="font-semibold truncate">${p1Name} <span class="text-slate-400">(${p1Elo})</span></div>
+              ${winnerSide==='p1' ? `<div class="text-emerald-400 text-xs mt-0.5">Win</div>` : ``}
             </div>
             <div class="text-right text-sm">
-              <div>Accuracy <span class="text-slate-100">${pct(acc1)}</span></div>
-              ${q1!=null ? `<div class="text-slate-400">Quality <span class="text-slate-100">${q1}</span></div>` : ``}
+              <div class="text-slate-400">Quality <span class="text-slate-100">${q1}</span></div>
             </div>
           </div>
 
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
-              <div class="font-semibold truncate">${esc(m.p2_name||m.p2_id||'P2')} <span class="text-slate-400">(${p2E})</span></div>
+              <div class="font-semibold truncate">${p2Name} <span class="text-slate-400">(${p2Elo})</span></div>
+              ${winnerSide==='p2' ? `<div class="text-emerald-400 text-xs mt-0.5">Win</div>` : ``}
             </div>
             <div class="text-right text-sm">
-              <div>Accuracy <span class="text-slate-100">${pct(acc2)}</span></div>
-              ${q2!=null ? `<div class="text-slate-400">Quality <span class="text-slate-100">${q2}</span></div>` : ``}
+              <div class="text-slate-400">Quality <span class="text-slate-100">${q2}</span></div>
             </div>
           </div>
         </div>
