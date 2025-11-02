@@ -22,12 +22,8 @@
         <span id="status" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm">Loading…</span>
         <label class="text-sm text-slate-400">Page size</label>
         <select id="pageSize" class="bg-slate-900 border border-slate-800 rounded px-2 py-1">
-          <option>100</option>
-          <option>250</option>
-          <option>500</option>
-          <option selected>1000</option>
+          <option>100</option><option>250</option><option>500</option><option selected>1000</option>
         </select>
-        <button id="refresh" class="hidden px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm">Refresh data</button>
       </div>
       <div id="pager" class="flex items-center gap-2 text-sm"></div>
     </section>
@@ -47,75 +43,39 @@ const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
-// ---------- state ----------
-let pageSize = 1000, pageIndex = 0;
-let total = 0;
-let allRows = [];      // toutes les lignes
-let sortedRows = [];   // triées selon currentSort
-let currentSort = { key: 'rank', dir: 'desc' }; // défaut: Rank
+let pageSize = 1000, pageIndex = 0, total = 0, allRows = [], sortedRows = [];
+let currentSort = { key:'rank', dir:'desc' };
 
-// ---------- utils ----------
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function tierOrder(rank){
-  const r=(rank||'').toLowerCase();
-  if(r.startsWith('chall')) return 9;
-  if(r.startsWith('gm')||r.startsWith('grand')) return 8;
-  if(r.startsWith('master')) return 7;
-  if(r.startsWith('diamond')) return 6;
-  if(r.startsWith('platinum')) return 5;
-  if(r.startsWith('gold')) return 4;
-  if(r.startsWith('silver')) return 3;
-  if(r.startsWith('bronze')) return 2;
-  if(r.startsWith('clown')) return 1;
-  return 0;
-}
-function divFromRank(rank){
-  const last=(rank||'').trim().split(/\s+/).pop().toUpperCase();
-  const map={I:1,II:2,III:3,IV:4}; return map[last]||4;
-}
-function header(label,key){
-  const arrow = currentSort.key===key ? (currentSort.dir==='asc'?' ▲':' ▼') : '';
-  return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;
-}
+function tierOrder(rank){const r=(rank||'').toLowerCase();
+  if(r.startsWith('chall'))return 9;if(r.startsWith('gm')||r.startsWith('grand'))return 8;if(r.startsWith('master'))return 7;
+  if(r.startsWith('diamond'))return 6;if(r.startsWith('platinum'))return 5;if(r.startsWith('gold'))return 4;
+  if(r.startsWith('silver'))return 3;if(r.startsWith('bronze'))return 2;if(r.startsWith('clown'))return 1;return 0;}
+function divFromRank(rank){const last=(rank||'').trim().split(/\s+/).pop().toUpperCase();const map={I:1,II:2,III:3,IV:4};return map[last]||4;}
+function header(label,key){const arrow=currentSort.key===key?(currentSort.dir==='asc'?' ▲':' ▼'):'';return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;}
 function applySort(rows){
-  const dir = currentSort.dir, k=currentSort.key;
-  const cmp=(a,b)=>{
-    const s=v=> (v==null? -Infinity : v);
-    if(k==='rank'){
-      const t=tierOrder(b.rank)-tierOrder(a.rank); if(t) return t;
-      const d=divFromRank(a.rank)-divFromRank(b.rank); if(d) return d;
-      const r=(b.rp??0)-(a.rp??0); if(r) return r;
-      return (b.elo??0)-(a.elo??0);
-    }
-    if(k==='player') return (a.username||'').localeCompare(b.username||'',undefined,{sensitivity:'base'});
-    if(k==='rp')     return s(b.rp)-s(a.rp);
-    if(k==='elo')    return s(b.elo)-s(a.elo);
-    if(k==='games')  return s(b.games)-s(a.games);
-    if(k==='wr')     return s(b.win_rate)-s(a.win_rate);
+  const dir=currentSort.dir, k=currentSort.key;
+  const s=v=> (v==null? -Infinity : v);
+  rows.sort((a,b)=>{
+    if(k==='rank'){const t=tierOrder(b.rank)-tierOrder(a.rank);if(t) return t;const d=divFromRank(a.rank)-divFromRank(b.rank);if(d)return d;
+      const r=(b.rp??0)-(a.rp??0);if(r)return r;return (b.elo??0)-(a.elo??0);}
+    if(k==='player')return (a.username||'').localeCompare(b.username||'',undefined,{sensitivity:'base'});
+    if(k==='rp')return s(b.rp)-s(a.rp);
+    if(k==='elo')return s(b.elo)-s(a.elo);
+    if(k==='games')return s(b.games)-s(a.games);
+    if(k==='wr')return s(b.win_rate)-s(a.win_rate);
     return 0;
-  };
-  rows.sort(cmp);
+  });
   if(dir==='asc') rows.reverse();
-  // re-numérote la position après tri
-  rows.forEach((r,i)=> r.__pos = i+1);
+  rows.forEach((r,i)=> r.__pos=i+1);
   return rows;
 }
-
-// ---------- render ----------
 function renderTable(slice){
-  const thead = `<thead class="bg-slate-900">
-    <tr>
-      ${header('#','rank')}  <!-- on garde # mais le tri réel suit 'rank' -->
-      ${header('Player','player')}
-      ${header('Rank','rank')}
-      ${header('RP','rp')}
-      ${header('Elo','elo')}
-      ${header('Games','games')}
-      ${header('Win%','wr')}
-    </tr>
-  </thead>`;
-
-  const body = slice.map(r=>`
+  const thead=`<thead class="bg-slate-900"><tr>
+    ${header('#','rank')}${header('Player','player')}${header('Rank','rank')}
+    ${header('RP','rp')}${header('Elo','elo')}${header('Games','games')}${header('Win%','wr')}
+  </tr></thead>`;
+  const body=slice.map(r=>`
     <tr class="border-t border-slate-800 hover:bg-slate-900">
       <td class="p-2">${r.__pos}</td>
       <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
@@ -125,105 +85,73 @@ function renderTable(slice){
       <td class="p-2 text-center">${r.games??0}</td>
       <td class="p-2 text-center">${r.win_rate??0}</td>
     </tr>`).join('');
-
-  document.getElementById('board').innerHTML =
-    `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
-
-  // tri par clic
-  document.querySelectorAll('[data-sort]').forEach(th=>{
-    th.onclick = ()=>{
-      const key=th.getAttribute('data-sort');
-      if(currentSort.key===key) currentSort.dir = currentSort.dir==='asc'?'desc':'asc';
-      else { currentSort.key=key; currentSort.dir=(key==='player'?'asc':'desc'); }
-      sortedRows = applySort([...allRows]);
-      pageIndex = 0; render();
-    };
+  document.getElementById('board').innerHTML = `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
+  document.querySelectorAll('[data-sort]').forEach(th=> th.onclick=()=>{
+    const key=th.getAttribute('data-sort');
+    if(currentSort.key===key) currentSort.dir = currentSort.dir==='asc'?'desc':'asc';
+    else { currentSort.key=key; currentSort.dir=(key==='player'?'asc':'desc'); }
+    sortedRows = applySort([...allRows]); pageIndex=0; render();
   });
 }
 function renderPager(){
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const el = document.getElementById('pager');
-  el.innerHTML = `
+  const pages=Math.max(1,Math.ceil(total/pageSize));
+  const el=document.getElementById('pager');
+  el.innerHTML=`
     <button id="first" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">« First</button>
     <button id="prev"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">‹ Prev</button>
-    <span class="text-slate-300">Page <b>${pageIndex+1}</b> / ${pages} · Total <b>${total}</b></span>
+    <span class="text-slate-300">Page <b>${pageIndex+1}</b> / ${Math.max(1,Math.ceil(total/pageSize))} · Total <b>${total}</b></span>
     <button id="next"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Next ›</button>
     <button id="last"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Last »</button>`;
-  document.getElementById('first').onclick=()=>{pageIndex=0; render();};
-  document.getElementById('prev').onclick =()=>{if(pageIndex>0){pageIndex--; render();}};
-  document.getElementById('next').onclick =()=>{const p=Math.ceil(total/pageSize); if(pageIndex<p-1){pageIndex++; render();}};
-  document.getElementById('last').onclick =()=>{pageIndex=Math.ceil(total/pageSize)-1; render();};
+  document.getElementById('first').onclick=()=>{pageIndex=0;render();};
+  document.getElementById('prev').onclick =()=>{if(pageIndex>0){pageIndex--;render();}};
+  document.getElementById('next').onclick =()=>{const p=Math.ceil(total/pageSize);if(pageIndex<p-1){pageIndex++;render();}};
+  document.getElementById('last').onclick =()=>{pageIndex=Math.ceil(total/pageSize)-1;render();};
 }
-function render(){
-  const start = pageIndex*pageSize, end=start+pageSize;
-  renderTable(sortedRows.slice(start,end));
-  renderPager();
-}
+function render(){const start=pageIndex*pageSize,end=start+pageSize;renderTable(sortedRows.slice(start,end));renderPager();}
 
-// ---------- data ----------
-async function loadAll(reload=false){
-  document.getElementById('status').textContent = reload ? 'Refreshing…' : 'Loading…';
-  // total
-  const { count, error } = await supa.from('view_leaderboard')
-    .select('steam_id', { count: 'exact', head: false })
-    .range(0,0);
-  if(error){ console.error(error); document.getElementById('status').textContent='Error'; return; }
-  total = count||0;
-
-  const step=1000, pages=Math.ceil(total/step);
-  const rows=[];
-  for(let i=0;i<pages;i++){
-    const a=i*step, b=a+step-1;
-    const { data, error:e2 } = await supa.from('view_leaderboard')
-      .select('steam_id,username,rank,elo,rp,games,wins,win_rate')
-      .range(a,b);
-    if(e2){ console.error(e2); continue; }
-    rows.push(...(data||[]));
-    document.getElementById('status').textContent = `Loaded ${Math.min(b+1,total)}/${total}`;
+async function loadAll(){
+  document.getElementById('status').textContent='Loading…';
+  // récupère tout (pagination côté client, pas de limite 1000)
+  const page=1000; let from=0; let batch=[], rows=[];
+  while(true){
+    const { data, error, count } = await supa.from('players')
+      .select('*',{ count:'exact' })
+      .order('rp',{ascending:false}).order('elo',{ascending:false})
+      .range(from, from+page-1);
+    if(error){ console.error(error); break; }
+    rows = rows.concat(data||[]);
+    total = count||rows.length;
+    if(!data || data.length<page) break;
+    from += page;
   }
-  allRows = rows;
-  sortedRows = applySort([...allRows]);
-  pageIndex = 0;
-  document.getElementById('status').textContent = `Ready · ${total} players`;
+  allRows = rows; sortedRows = applySort([...allRows]); document.getElementById('status').textContent='Live';
   render();
-}
 
-// ---------- recent matches ----------
-async function loadRecent(){
-  const { data, error } = await supa.from('matches')
-    .select('id, played_at, p1_name, p2_name, winner, map_id, replay_url')
-    .order('played_at',{ascending:false}).limit(20);
-  if(error){ console.error(error); return; }
-  const cont=document.getElementById('recent'); cont.innerHTML='';
-  for(const m of (data||[])){
-    const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
-    cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
-      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="font-semibold">${esc(m.p1_name||'P1')} vs ${esc(m.p2_name||'P2')}</div>
-      <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${esc(w)}</span> · Map ${m.map_id??'-'}</div>
-    </a>`;
+  // recent matches
+  const { data: rec } = await supa.from('matches')
+    .select('id,played_at,p1_name,p2_name,p1_elo_after,p2_elo_after,winner,map_id')
+    .order('played_at',{ascending:false}).limit(10);
+  const $r = document.getElementById('recent'); $r.innerHTML='';
+  for(const m of (rec||[])){
+    const p1 = esc(m.p1_name||'P1'), p2 = esc(m.p2_name||'P2');
+    const winName = m.winner===1?p1: m.winner===2?p2:'Unknown';
+    $r.innerHTML += `
+      <a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:bg-slate-900">
+        <div class="font-semibold">${p1} (${m.p1_elo_after??''}) <span class="text-slate-400">VS</span> ${p2} (${m.p2_elo_after??''})</div>
+        <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${winName}</span> · Map ${m.map_id} · ${new Date(m.played_at).toLocaleString()}</div>
+      </a>`;
   }
+
+  // realtime (update players)
+  supa.channel('realtime:players').on('postgres_changes',{event:'*',schema:'public',table:'players'},()=>loadAll()).subscribe();
 }
-
-// ---------- bindings ----------
-document.getElementById('go').onclick = ()=>{
+document.getElementById('pageSize').onchange=e=>{pageSize=parseInt(e.target.value,10);pageIndex=0;render();};
+document.getElementById('go').onclick=()=>{
   const q=document.getElementById('search').value.trim();
-  if(!q) return; window.location.href=`player.html?q=${encodeURIComponent(q)}`;
+  if(!q) return;
+  location.href='player.html?q='+encodeURIComponent(q);
 };
-document.getElementById('pageSize').onchange = (e)=>{
-  pageSize = parseInt(e.target.value,10)||1000; pageIndex=0; render();
-};
-document.getElementById('refresh').onclick = ()=> loadAll(true);
-
-// Realtime → propose un refresh (évite de recharger 10k en boucle)
-supa.channel('realtime:players')
-  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, ()=>{
-    const btn=document.getElementById('refresh');
-    btn.classList.remove('hidden'); btn.textContent='Refresh data';
-  }).subscribe();
-
 loadAll();
-loadRecent();
 </script>
 </body>
 </html>

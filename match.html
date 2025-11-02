@@ -8,40 +8,110 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
-  <div class="max-w-3xl mx-auto p-4">
+  <div class="max-w-4xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
-    <div id="card" class="mt-4 p-4 rounded border border-slate-800"></div>
+
+    <header id="meta" class="mt-3 mb-6"></header>
+
+    <section class="mb-8">
+      <div class="flex items-center gap-3">
+        <button id="analyzeBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Analyze game</button>
+        <span id="analyzeStatus" class="text-sm text-slate-400"></span>
+      </div>
+      <div id="analysis" class="mt-4 hidden">
+        <h2 class="text-xl font-semibold mb-2">Analysis report</h2>
+        <div id="analysisBody" class="grid sm:grid-cols-2 gap-3 text-sm"></div>
+      </div>
+    </section>
   </div>
 
 <script>
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
-const id = new URL(location.href).searchParams.get('id');
+
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const url = new URL(location.href);
+const matchId = parseInt(url.searchParams.get('id')||'0',10);
 
-async function load(){
-  const { data: m, error } = await supa.from('matches').select('*').eq('id', id).single();
-  if(error || !m){ document.getElementById('card').innerHTML='<div class="text-red-400">Match not found.</div>'; return; }
+const $meta = document.getElementById('meta');
+const $btn  = document.getElementById('analyzeBtn');
+const $st   = document.getElementById('analyzeStatus');
+const $wrap = document.getElementById('analysis');
+const $body = document.getElementById('analysisBody');
 
-  const p1link = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||'P1')}</a>`;
-  const p2link = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||'P2')}</a>`;
-  const e1 = m.p1_elo_after ?? m.p1_elo_before ?? '-';
-  const e2 = m.p2_elo_after ?? m.p2_elo_before ?? '-';
-  const winner = m.winner==='1' ? p1link : (m.winner==='2' ? p2link : '—');
-  const replayBtn = m.replay_url
-      ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
-      : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+function row(k,v){ return `<div class="p-3 rounded border border-slate-800"><div class="text-slate-400">${k}</div><div class="text-slate-100 font-semibold">${v}</div></div>` }
 
-  document.getElementById('card').innerHTML = `
-    <div class="space-y-3">
-      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="text-xl font-bold">${p1link} <span class="text-slate-400">(${e1})</span> vs ${p2link} <span class="text-slate-400">(${e2})</span></div>
-      <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
-      <div class="pt-1">${replayBtn}</div>
+async function loadMeta(){
+  const { data: m } = await supa.from('matches')
+    .select('id,played_at,map_id,winner,replay_url,p1_id,p2_id,p1_name,p2_name,p1_elo_after,p2_elo_after')
+    .eq('id', matchId).single();
+
+  if(!m){ $meta.innerHTML = `<div class="text-red-400">Match not found.</div>`; $btn.disabled = true; return; }
+
+  const p1 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||m.p1_id)} (${m.p1_elo_after??''})</a>`;
+  const p2 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||m.p2_id)} (${m.p2_elo_after??''})</a>`;
+  const vs = `<div class="text-2xl font-bold">${p1} <span class="text-slate-400">VS</span> ${p2}</div>`;
+
+  const winName = m.winner===1 ? esc(m.p1_name||'P1') : m.winner===2 ? esc(m.p2_name||'P2') : 'Unknown';
+  const meta = `
+    ${vs}
+    <div class="text-slate-300 mt-1">
+      Winner: <span class="text-slate-100">${winName}</span> ·
+      Map: <span class="text-slate-100">${m.map_id??''}</span> ·
+      When: <span class="text-slate-100">${new Date(m.played_at).toLocaleString()}</span>
+      ${m.replay_url ? `· <a class="text-emerald-400 hover:underline" target="_blank" href="${esc(m.replay_url)}">Download replay</a>` : `· <span class="text-slate-500">Replay not uploaded</span>`}
     </div>`;
+  $meta.innerHTML = `<div class="p-4 rounded border border-slate-800">${meta}</div>`;
 }
-load();
+
+async function renderAnalysisIfAny(){
+  const { data } = await supa.from('analysis_results').select('*').eq('match_id', matchId).maybeSingle();
+  if(!data){ $wrap.classList.add('hidden'); return false; }
+  const x = data.metrics || {};
+  $wrap.classList.remove('hidden');
+  $body.innerHTML = [
+    row('Quality score', (x.quality_score??'-')),
+    row('Duration (s)', (x.duration_sec?.toFixed?.(2) ?? x.duration_sec ?? '-')),
+    row('Tag switches', (x.switches??'-')),
+    row('Avg retag latency (s)', (x.avg_retag_latency?.toFixed?.(2) ?? x.avg_retag_latency ?? '-')),
+    row('Time tagged P1 (s)', (x.time_tag_p1?.toFixed?.(2) ?? x.time_tag_p1 ?? '-')),
+    row('Time tagged P2 (s)', (x.time_tag_p2?.toFixed?.(2) ?? x.time_tag_p2 ?? '-')),
+    row('Avg dist when tagged', (x.avg_dist_tag?.toFixed?.(2) ?? x.avg_dist_tag ?? '-')),
+    row('Avg dist when untagged', (x.avg_dist_untag?.toFixed?.(2) ?? x.avg_dist_untag ?? '-')),
+  ].join('');
+  return true;
+}
+
+async function requestAnalysis(){
+  $btn.disabled = true; $st.textContent = 'Submitting analysis request…';
+  try{
+    const { error } = await supa.rpc('request_match_analysis', { p_match_id: matchId });
+    if(error){ $st.textContent = 'Request failed.'; $btn.disabled = false; return; }
+    $st.textContent = 'Queued. Computing…';
+    // poll jusqu’à dispo
+    const t0 = Date.now();
+    const poll = async ()=>{
+      const ok = await renderAnalysisIfAny();
+      if(ok){ $st.textContent = 'Done.'; return; }
+      if(Date.now()-t0 > 180000){ $st.textContent = 'Timeout (no worker?).'; $btn.disabled=false; return; }
+      setTimeout(poll, 2000);
+    };
+    poll();
+  }catch(e){
+    console.error(e);
+    $st.textContent = 'Error.';
+    $btn.disabled = false;
+  }
+}
+
+document.getElementById('analyzeBtn').onclick = requestAnalysis;
+
+(async ()=>{
+  await loadMeta();
+  const has = await renderAnalysisIfAny();
+  if(has){ $btn.classList.add('hidden'); }
+})();
 </script>
 </body>
 </html>
