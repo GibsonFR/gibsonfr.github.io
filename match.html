@@ -88,6 +88,48 @@ function fnum(x, digits=3){
   return Math.round(x*m)/m;
 }
 
+/* ---------- PREMIUM DECORATION ---------- */
+const crownSVG = `<span title="Premium member" aria-label="Premium member">
+  <svg class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
+  </svg>
+</span>`;
+
+function nameLinkWithPremium(steamId, display, premiumSet){
+  const isP = premiumSet?.has(String(steamId));
+  const base = esc(display || steamId || 'Player');
+  const cls = isP ? 'text-amber-300 hover:text-amber-200' : 'text-indigo-400 hover:underline';
+  const link = `<a class="${cls}" href="player.html?steam_id=${encodeURIComponent(steamId)}">${base}</a>`;
+  return isP ? `${link}${crownSVG}` : link;
+}
+
+function nameLabelWithPremium(steamId, display, premiumSet){
+  const isP = premiumSet?.has(String(steamId));
+  const base = esc(display || steamId || 'Player');
+  return isP ? `<span class="text-amber-300" title="Premium member">${base}</span>${crownSVG}`
+             : base;
+}
+
+async function fetchPremiumSet(steamIds){
+  const set = new Set();
+  if(!steamIds || !steamIds.length) return set;
+  try{
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supa
+      .from('profiles')
+      .select('steam_id')
+      .in('steam_id', steamIds)
+      .gt('premium_until', nowIso);
+    if(error){ console.warn('[premium list] select error', error); return set; }
+    (data||[]).forEach(r=> r.steam_id && set.add(String(r.steam_id)));
+    return set;
+  }catch(e){ console.warn('[premium list] failed', e); return set; }
+}
+
+/* ---------- MATCH LOAD / RENDER ---------- */
+let currentMatch = null;
+let currentPremiumSet = new Set();
+
 async function fetchMatchById() {
   const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
   return data || null;
@@ -100,32 +142,31 @@ function renderPlayerCards(rootSel, s, sampleSel){
   el(sampleSel).textContent = [lowTag, lowHid].filter(Boolean).join(' ');
 
   root.innerHTML = [
-    // Qualities per role
     card("Quality (tagger)", s.quality_tagger ?? '—'),
     card("Quality (hider)",  s.quality_hider  ?? '—'),
-    // Time per role
     card("Time as tagger", pct(s.time_as_tagger_share)),
     card("Seconds — tagger", s.seconds_as_tagger ?? '—', " s"),
     card("Seconds — hider",  s.seconds_as_hider  ?? '—', " s"),
-    // Distances / speed
     card("Avg dist (hider)", s.avg_distance_as_hider ?? '—', " m"),
     card("Avg dist (tagger)", s.avg_distance_as_tagger ?? '—', " m"),
     card("Avg speed", s.avg_speed_ms ?? '—', " m/s"),
-    // Retag
     card("Retag median", s.retag_median_seconds ?? '—', " s"),
     card("Retag initial", s.retag_initial_seconds ?? '—', " s"),
     card("Retag avg", s.retag_avg_seconds ?? '—', " s"),
-    // Items
     card("Accuracy", (s.accuracy!=null? Math.round(s.accuracy*1000)/10 : '—'), (s.accuracy!=null? '%':'')),
   ].join("");
 }
 
-function renderMatch(m) {
-  const p1 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||'P1')}</a>`;
-  const p2 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||'P2')}</a>`;
+function renderMatch(m, premiumSet) {
+  const p1Name = nameLinkWithPremium(m.p1_id, m.p1_name||'P1', premiumSet);
+  const p2Name = nameLinkWithPremium(m.p2_id, m.p2_name||'P2', premiumSet);
   const e1 = m.p1_elo_after ?? m.p1_elo_before ?? '-';
   const e2 = m.p2_elo_after ?? m.p2_elo_before ?? '-';
-  const winner = (m.winner === '1' || m.winner === 1) ? p1 : ((m.winner === '2' || m.winner === 2) ? p2 : '—');
+
+  let winnerHtml = '—';
+  if (m.winner === '1' || m.winner === 1) winnerHtml = p1Name;
+  else if (m.winner === '2' || m.winner === 2) winnerHtml = p2Name;
+
   const replayBtn = m.replay_url
     ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
     : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
@@ -133,8 +174,12 @@ function renderMatch(m) {
   el('#matchCard').innerHTML = `
     <div class="space-y-3">
       <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="text-xl font-bold">${p1} <span class="text-slate-400">(${e1})</span> vs ${p2} <span class="text-slate-400">(${e2})</span></div>
-      <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
+      <div class="text-xl font-bold">
+        ${p1Name} <span class="text-slate-400">(${e1})</span>
+        <span class="text-slate-500">vs</span>
+        ${p2Name} <span class="text-slate-400">(${e2})</span>
+      </div>
+      <div class="text-slate-300">Winner: <span class="text-slate-100">${winnerHtml}</span> · Map ${m.map_id ?? '-'}</div>
       <div class="pt-1">${replayBtn}</div>
     </div>`;
 }
@@ -174,11 +219,10 @@ async function countAnalysesToday(user){
       .from('analysis_requests')
       .select('id', { count: 'exact', head: true })
       .eq('requested_by', user.id)
-      .gte('created_at', startIso); // assumes created_at exists
+      .gte('created_at', startIso);
     if (!error && typeof count === 'number') return count;
   } catch {}
 
-  // fallback column name
   try {
     const { count, error } = await supa
       .from('analysis_requests')
@@ -188,7 +232,6 @@ async function countAnalysesToday(user){
     if (!error && typeof count === 'number') return count;
   } catch {}
 
-  // Final fallback: localStorage
   const key = `analysis_used_${user.id}_${startIso.slice(0,10)}`;
   const v = Number(localStorage.getItem(key)||'0');
   return isNaN(v) ? 0 : v;
@@ -207,7 +250,6 @@ async function updateGateUI(){
   const gate = el('#gateBanner');
   const btn  = el('#analyzeBtn');
 
-  // Auth state
   const user = await getUser();
   if (!user) {
     gate.classList.remove('hidden');
@@ -233,10 +275,7 @@ async function updateGateUI(){
     return { user:null, premium:false, used:0 };
   }
 
-  // Premium?
   const premium = await isPremium(user);
-
-  // Usage today
   const used = await countAnalysesToday(user);
 
   if (premium) {
@@ -291,8 +330,10 @@ async function loadAnalysis(matchId) {
   el('#analysisResult').classList.remove('hidden');
 
   const s = data.summary || {};
-  el('#p1title').textContent = `${s.p1_name || 'P1'} — Quality`;
-  el('#p2title').textContent = `${s.p2_name || 'P2'} — Quality`;
+  const p1Label = nameLabelWithPremium(currentMatch?.p1_id, s.p1_name || 'P1', currentPremiumSet);
+  const p2Label = nameLabelWithPremium(currentMatch?.p2_id, s.p2_name || 'P2', currentPremiumSet);
+  el('#p1title').innerHTML = `${p1Label} — Quality`;
+  el('#p2title').innerHTML = `${p2Label} — Quality`;
 
   el('#analAt').textContent = new Date(data.analyzed_at).toLocaleString();
   el('#ver').textContent = data.version || '—';
@@ -303,32 +344,42 @@ async function loadAnalysis(matchId) {
   renderPlayerCards('#p2cards', data.p2_stats || {}, '#p2sample');
 }
 
-// Insert request after passing the gate
+// Insert request after passing the gate (safe against missing columns)
 async function queueAnalysis(matchId, replayUrl, state){
   const btn = el('#analyzeBtn');
   const status = el('#analysisStatus');
   if(btn) btn.disabled = true;
   status.textContent = 'Queuing analysis…';
 
-  // server insert with user id (so counting works)
-  const row = {
+  // Try with requested_by (best for counting)
+  let row = {
     match_id: matchId,
     replay_url: replayUrl || null,
-    requested_by: state.user.id,               // <— identify requester
-    requested_by_name: state.user.user_metadata?.name || null,
-    created_at: new Date().toISOString()       // if column exists, fine; else ignored
+    requested_by: state.user.id
   };
-  const { error } = await supa.from('analysis_requests').insert(row);
+  let { error } = await supa.from('analysis_requests').insert(row);
 
   if (error) {
-    status.textContent = `Error: ${error.message}`;
-    if(btn) btn.disabled = false;
-    return;
+    // If the table doesn't have requested_by (or schema mismatch), retry minimal insert
+    const msg = String(error.message||'').toLowerCase();
+    if (msg.includes('requested_by') || msg.includes('column')) {
+      const { error: e2 } = await supa.from('analysis_requests').insert({
+        match_id: matchId,
+        replay_url: replayUrl || null
+      });
+      if (e2) {
+        status.textContent = `Error: ${e2.message}`;
+        if(btn) btn.disabled = false;
+        return;
+      }
+    } else {
+      status.textContent = `Error: ${error.message}`;
+      if(btn) btn.disabled = false;
+      return;
+    }
   }
 
-  // local fallback counter in case RLS prevents server count
   if (!state.premium) bumpLocalAnalysisCounter(state.user);
-
   status.textContent = 'Queued. Waiting for worker…';
 }
 
@@ -349,24 +400,24 @@ function subscribeRealtime(matchId) {
   if (!idParam) { showNotFound(); return; }
   const m = await fetchMatchById();
   if (!m) { showNotFound(); return; }
-  renderMatch(m);
+  currentMatch = m;
+
+  currentPremiumSet = await fetchPremiumSet([m.p1_id, m.p2_id]);
+  renderMatch(m, currentPremiumSet);
 
   el('#analysisBlock').classList.remove('hidden');
 
-  // Gate UI + click handler
   let gateState = await updateGateUI();
   el('#analyzeBtn').onclick = async () => {
-    // re-check gate on click (fresh state)
     gateState = await updateGateUI();
-    if (!gateState.user) return;                            // not signed in
-    if (!gateState.premium && gateState.used >= FREE_DAILY_LIMIT) return; // limit hit
+    if (!gateState.user) return;
+    if (!gateState.premium && gateState.used >= FREE_DAILY_LIMIT) return;
     await queueAnalysis(matchIdValue, m.replay_url, gateState);
   };
 
   await loadAnalysis(matchIdValue);
   subscribeRealtime(matchIdValue);
 
-  // Also listen to auth changes to refresh gate instantly
   supa.auth.onAuthStateChange(async () => {
     await updateGateUI();
   });
