@@ -26,12 +26,10 @@
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
-
-function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-
-const url = new URL(window.location.href);
+const url = new URL(location.href);
 let steamId = url.searchParams.get('steam_id');
 const q = url.searchParams.get('q');
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function resolveQuery(){
   if(steamId) return steamId;
@@ -40,48 +38,79 @@ async function resolveQuery(){
   if(data && data.length) return data[0].steam_id;
   return null;
 }
-
-function hdr(p){
+function header(p){
   return `<div class="p-4 rounded border border-slate-800">
-    <div class="text-2xl font-bold">${escapeHtml(p.username||p.steam_id)}</div>
+    <div class="text-2xl font-bold">${esc(p.username||p.steam_id)}</div>
     <div class="text-slate-300">
-      Rank: <span class="text-slate-100">${escapeHtml(p.rank||'')}</span> ·
+      Rank: <span class="text-slate-100">${esc(p.rank||'')}</span> ·
       Elo: <span class="text-slate-100">${p.elo??'-'}</span> ·
       RP: <span class="text-slate-100">${p.rp??'-'}</span> ·
       Games: ${p.games??0} · Win%: ${p.win_rate??0}
-    </div>
-  </div>`;
+    </div></div>`;
 }
 
 async function load(){
   steamId = await resolveQuery();
   if(!steamId){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
+
   const { data: player } = await supa.from('players').select('*').eq('steam_id',steamId).single();
   if(!player){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
-  document.getElementById('header').innerHTML = hdr(player);
+  document.getElementById('header').innerHTML = header(player);
 
-  const { data: tl } = await supa.rpc('get_player_timeline',{ steam_id: steamId });
-  const labels = (tl||[]).map(x=>new Date(x.at));
-  const values = (tl||[]).map(x=>x.elo_after ?? x.elo_before ?? null);
+  // Timeline depuis ratings (fallback matches si vide)
+  let { data: rt } = await supa.from('ratings')
+    .select('at, elo_before, elo_after')
+    .eq('player_id', steamId)
+    .order('at', { ascending: true });
+
+  if(!rt || rt.length < 2){
+    // fallback: reconstruire à partir des matches
+    const { data: mm } = await supa.from('matches')
+      .select('played_at,p1_id,p2_id,p1_elo_before,p1_elo_after,p2_elo_before,p2_elo_after')
+      .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
+      .order('played_at',{ascending:true})
+      .limit(2000);
+    rt = (mm||[]).map(m=>{
+      const meIsP1 = m.p1_id===steamId;
+      return {
+        at: m.played_at,
+        elo_before: meIsP1 ? m.p1_elo_before : m.p2_elo_before,
+        elo_after:  meIsP1 ? m.p1_elo_after  : m.p2_elo_after
+      };
+    });
+  }
+  const labels = rt.map(x=> new Date(x.at));
+  const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
   const ctx = document.getElementById('eloChart').getContext('2d');
-  new Chart(ctx,{
-    type:'line',
-    data:{ labels, datasets:[{ label:'Elo', data: values, tension:0.2 }] },
-    options:{ scales:{ x:{ ticks:{ color:'#94a3b8' } }, y:{ ticks:{ color:'#94a3b8' } } } }
+  new Chart(ctx,{ type:'line',
+    data:{ labels, datasets:[{ label:'Elo', data: values, tension:0.25 }] },
+    options:{ plugins:{legend:{labels:{color:'#cbd5e1'}}},
+      scales:{ x:{ ticks:{ color:'#94a3b8' } }, y:{ ticks:{ color:'#94a3b8' } } } }
   });
 
-  const { data: matches } = await supa.rpc('get_player_matches',{ steam_id: steamId, limit:50, offset:0 });
-  const cont=document.getElementById('matches'); cont.innerHTML='';
+  // Historique des matchs
+  const { data: matches } = await supa.from('matches')
+    .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after')
+    .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
+    .order('played_at',{ascending:false})
+    .limit(50);
+
+  const cont = document.getElementById('matches'); cont.innerHTML='';
   for(const m of (matches||[])){
-    const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
+    const meIsP1 = m.p1_id===steamId;
+    const oppId  = meIsP1 ? m.p2_id : m.p1_id;
+    const oppNm  = meIsP1 ? (m.p2_name||'Opponent') : (m.p1_name||'Opponent');
     cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
       <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="font-semibold">${escapeHtml(m.p1_name||'P1')} vs ${escapeHtml(m.p2_name||'P2')}</div>
-      <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${escapeHtml(w)}</span> · Map ${m.map_id??'-'}</div>
+      <div class="font-semibold">
+        <span class="text-slate-100">${esc(player.username||player.steam_id)}</span>
+        vs
+        <a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(oppId)}">${esc(oppNm)}</a>
+      </div>
+      <div class="text-slate-400 text-sm">Map ${m.map_id ?? '-'}</div>
     </a>`;
   }
 }
-
 load();
 </script>
 </body>

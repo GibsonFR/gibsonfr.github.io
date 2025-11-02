@@ -19,6 +19,7 @@
 
     <section class="mb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
       <div class="flex items-center gap-3">
+        <span id="status" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm">Loading…</span>
         <label class="text-sm text-slate-400">Page size</label>
         <select id="pageSize" class="bg-slate-900 border border-slate-800 rounded px-2 py-1">
           <option>100</option>
@@ -26,8 +27,7 @@
           <option>500</option>
           <option selected>1000</option>
         </select>
-        <button id="loadAll" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm">Load all (10k) for global sort</button>
-        <span id="status" class="text-sm text-slate-400"></span>
+        <button id="refresh" class="hidden px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm">Refresh data</button>
       </div>
       <div id="pager" class="flex items-center gap-2 text-sm"></div>
     </section>
@@ -48,23 +48,18 @@ const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
 // ---------- state ----------
-let serverPage = 1;
-let pageSize = 1000;
+let pageSize = 1000, pageIndex = 0;
 let total = 0;
-
-let currentSort = { key: 'rank', dir: 'desc' }; // default
-let pageCache = [];   // rows for current server page
-let allCache = null;  // when “Load all” pressed: every row (10k+)
-let useGlobal = false;
+let allRows = [];      // toutes les lignes
+let sortedRows = [];   // triées selon currentSort
+let currentSort = { key: 'rank', dir: 'desc' }; // défaut: Rank
 
 // ---------- utils ----------
-function fmtTime(iso){ try{return new Date(iso).toLocaleString();}catch{return iso||'';} }
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-
 function tierOrder(rank){
   const r=(rank||'').toLowerCase();
   if(r.startsWith('chall')) return 9;
-  if(r.startsWith('gm') || r.startsWith('grand')) return 8;
+  if(r.startsWith('gm')||r.startsWith('grand')) return 8;
   if(r.startsWith('master')) return 7;
   if(r.startsWith('diamond')) return 6;
   if(r.startsWith('platinum')) return 5;
@@ -75,164 +70,125 @@ function tierOrder(rank){
   return 0;
 }
 function divFromRank(rank){
-  const last = (rank||'').trim().split(/\s+/).pop().toUpperCase();
-  const map = {I:1, II:2, III:3, IV:4};
-  return map[last] || 4;
+  const last=(rank||'').trim().split(/\s+/).pop().toUpperCase();
+  const map={I:1,II:2,III:3,IV:4}; return map[last]||4;
 }
-function header(label, key){
+function header(label,key){
   const arrow = currentSort.key===key ? (currentSort.dir==='asc'?' ▲':' ▼') : '';
   return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;
 }
 function applySort(rows){
-  const dir = currentSort.dir;
-  const k = currentSort.key;
-  const cmp = (a,b)=>{
-    const s = (v)=> (v===null||v===undefined)? -Infinity : v;
+  const dir = currentSort.dir, k=currentSort.key;
+  const cmp=(a,b)=>{
+    const s=v=> (v==null? -Infinity : v);
     if(k==='rank'){
-      const t1=tierOrder(a.rank), t2=tierOrder(b.rank);
-      if(t1!==t2) return t2-t1;
-      const d1=divFromRank(a.rank), d2=divFromRank(b.rank);
-      if(d1!==d2) return d1-d2;
-      if((a.rp??0)!==(b.rp??0)) return (b.rp??0)-(a.rp??0);
+      const t=tierOrder(b.rank)-tierOrder(a.rank); if(t) return t;
+      const d=divFromRank(a.rank)-divFromRank(b.rank); if(d) return d;
+      const r=(b.rp??0)-(a.rp??0); if(r) return r;
       return (b.elo??0)-(a.elo??0);
     }
-    if(k==='player') return (a.username||'').localeCompare(b.username||'', undefined, {sensitivity:'base'});
-    if(k==='rp')     return s(b.rp)    - s(a.rp);
-    if(k==='elo')    return s(b.elo)   - s(a.elo);
-    if(k==='games')  return s(b.games) - s(a.games);
-    if(k==='wr')     return s(b.win_rate) - s(a.win_rate);
-    if(k==='last')   return new Date(b.last_active_at||0) - new Date(a.last_active_at||0);
-    if(k==='pos')    return s(a.pos) - s(b.pos);
+    if(k==='player') return (a.username||'').localeCompare(b.username||'',undefined,{sensitivity:'base'});
+    if(k==='rp')     return s(b.rp)-s(a.rp);
+    if(k==='elo')    return s(b.elo)-s(a.elo);
+    if(k==='games')  return s(b.games)-s(a.games);
+    if(k==='wr')     return s(b.win_rate)-s(a.win_rate);
     return 0;
   };
   rows.sort(cmp);
   if(dir==='asc') rows.reverse();
+  // re-numérote la position après tri
+  rows.forEach((r,i)=> r.__pos = i+1);
   return rows;
 }
 
 // ---------- render ----------
-function renderTable(rows){
+function renderTable(slice){
   const thead = `<thead class="bg-slate-900">
     <tr>
-      ${header('#','pos')}
+      ${header('#','rank')}  <!-- on garde # mais le tri réel suit 'rank' -->
       ${header('Player','player')}
       ${header('Rank','rank')}
       ${header('RP','rp')}
       ${header('Elo','elo')}
       ${header('Games','games')}
       ${header('Win%','wr')}
-      ${header('Last active','last')}
     </tr>
   </thead>`;
 
-  const body = rows.map(r=>`
+  const body = slice.map(r=>`
     <tr class="border-t border-slate-800 hover:bg-slate-900">
-      <td class="p-2">${r.pos ?? ''}</td>
+      <td class="p-2">${r.__pos}</td>
       <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
       <td class="p-2 text-center">${esc(r.rank||'')}</td>
       <td class="p-2 text-center">${r.rp??''}</td>
       <td class="p-2 text-center">${r.elo??''}</td>
       <td class="p-2 text-center">${r.games??0}</td>
       <td class="p-2 text-center">${r.win_rate??0}</td>
-      <td class="p-2">${fmtTime(r.last_active_at)}</td>
-    </tr>
-  `).join('');
+    </tr>`).join('');
 
   document.getElementById('board').innerHTML =
     `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
 
+  // tri par clic
   document.querySelectorAll('[data-sort]').forEach(th=>{
-    th.addEventListener('click', ()=>{
-      const key = th.getAttribute('data-sort');
-      if(currentSort.key===key){
-        currentSort.dir = currentSort.dir==='asc'?'desc':'asc';
-      }else{
-        currentSort.key = key;
-        currentSort.dir = (key==='player' || key==='pos') ? 'asc' : 'desc';
-      }
-      render(); // re-render with new sort
-    });
+    th.onclick = ()=>{
+      const key=th.getAttribute('data-sort');
+      if(currentSort.key===key) currentSort.dir = currentSort.dir==='asc'?'desc':'asc';
+      else { currentSort.key=key; currentSort.dir=(key==='player'?'asc':'desc'); }
+      sortedRows = applySort([...allRows]);
+      pageIndex = 0; render();
+    };
   });
 }
-
 function renderPager(){
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const el = document.getElementById('pager');
   el.innerHTML = `
-    <button id="first" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage<=1?'opacity-50':''}">« First</button>
-    <button id="prev"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage<=1?'opacity-50':''}">‹ Prev</button>
-    <span class="text-slate-300">Page <b>${serverPage}</b> / ${pages} · Total <b>${total}</b></span>
-    <button id="next"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage>=pages?'opacity-50':''}">Next ›</button>
-    <button id="last"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${serverPage>=pages?'opacity-50':''}">Last »</button>
-  `;
-  document.getElementById('first').onclick = ()=>{ serverPage=1; loadServerPage(); };
-  document.getElementById('prev').onclick  = ()=>{ if(serverPage>1){ serverPage--; loadServerPage(); } };
-  document.getElementById('next').onclick  = ()=>{ if(serverPage<pages){ serverPage++; loadServerPage(); } };
-  document.getElementById('last').onclick  = ()=>{ serverPage=pages; loadServerPage(); };
+    <button id="first" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">« First</button>
+    <button id="prev"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">‹ Prev</button>
+    <span class="text-slate-300">Page <b>${pageIndex+1}</b> / ${pages} · Total <b>${total}</b></span>
+    <button id="next"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Next ›</button>
+    <button id="last"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Last »</button>`;
+  document.getElementById('first').onclick=()=>{pageIndex=0; render();};
+  document.getElementById('prev').onclick =()=>{if(pageIndex>0){pageIndex--; render();}};
+  document.getElementById('next').onclick =()=>{const p=Math.ceil(total/pageSize); if(pageIndex<p-1){pageIndex++; render();}};
+  document.getElementById('last').onclick =()=>{pageIndex=Math.ceil(total/pageSize)-1; render();};
 }
-
 function render(){
-  let rows;
-  if(useGlobal && allCache){
-    // tri global sur toutes les lignes, mais on affiche paginé côté client
-    const sorted = applySort([...allCache]);
-    const start = (serverPage-1)*pageSize;
-    rows = sorted.slice(start, start + pageSize);
-  }else{
-    rows = applySort([...pageCache]); // tri local à la page
-  }
-  renderTable(rows);
+  const start = pageIndex*pageSize, end=start+pageSize;
+  renderTable(sortedRows.slice(start,end));
   renderPager();
 }
 
 // ---------- data ----------
-async function loadServerPage(){
-  useGlobal = !!allCache; // si on a déjà tout chargé, on reste en mode global
-  const start = (serverPage-1) * pageSize;
-  const end   = start + pageSize - 1;
-  // côté serveur: pos déjà ordonné (classement)
-  const { data, error, count } = await supa
-    .from('view_leaderboard')
-    .select('*', { count: 'exact' })
-    .order('pos', { ascending: true })
-    .range(start, end);
-  if(error){ console.error(error); return; }
-  total = count ?? total;
-  pageCache = data||[];
-  if(!useGlobal) render(); // si pas en mode global, on affiche
-  document.getElementById('status').textContent = '';
-}
-
-async function loadAll(){
-  document.getElementById('status').textContent = 'Loading all pages…';
-  // d’abord, récupère le total via une première requête légère
-  const { count, error } = await supa
-    .from('view_leaderboard')
+async function loadAll(reload=false){
+  document.getElementById('status').textContent = reload ? 'Refreshing…' : 'Loading…';
+  // total
+  const { count, error } = await supa.from('view_leaderboard')
     .select('steam_id', { count: 'exact', head: false })
     .range(0,0);
-  if(error){ console.error(error); document.getElementById('status').textContent=''; return; }
+  if(error){ console.error(error); document.getElementById('status').textContent='Error'; return; }
   total = count||0;
-  const step = 1000; // limite PostgREST
-  const pages = Math.ceil(total / step);
-  const all = [];
+
+  const step=1000, pages=Math.ceil(total/step);
+  const rows=[];
   for(let i=0;i<pages;i++){
-    const start = i*step, end = start+step-1;
-    const { data, error: e2 } = await supa
-      .from('view_leaderboard')
-      .select('*')
-      .order('pos', { ascending: true })
-      .range(start, end);
+    const a=i*step, b=a+step-1;
+    const { data, error:e2 } = await supa.from('view_leaderboard')
+      .select('steam_id,username,rank,elo,rp,games,wins,win_rate')
+      .range(a,b);
     if(e2){ console.error(e2); continue; }
-    all.push(...(data||[]));
-    document.getElementById('status').textContent = `Loading… ${Math.min(end+1,total)}/${total}`;
+    rows.push(...(data||[]));
+    document.getElementById('status').textContent = `Loaded ${Math.min(b+1,total)}/${total}`;
   }
-  allCache = all;
-  useGlobal = true;
-  serverPage = 1; // repart sur la première page en affichage client
+  allRows = rows;
+  sortedRows = applySort([...allRows]);
+  pageIndex = 0;
+  document.getElementById('status').textContent = `Ready · ${total} players`;
   render();
-  document.getElementById('status').textContent = `Loaded ${allCache.length} / ${total}`;
 }
 
+// ---------- recent matches ----------
 async function loadRecent(){
   const { data, error } = await supa.from('matches')
     .select('id, played_at, p1_name, p2_name, winner, map_id, replay_url')
@@ -242,7 +198,7 @@ async function loadRecent(){
   for(const m of (data||[])){
     const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
     cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
-      <div class="text-slate-300 text-sm">${fmtTime(m.played_at)}</div>
+      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
       <div class="font-semibold">${esc(m.p1_name||'P1')} vs ${esc(m.p2_name||'P2')}</div>
       <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${esc(w)}</span> · Map ${m.map_id??'-'}</div>
     </a>`;
@@ -250,24 +206,23 @@ async function loadRecent(){
 }
 
 // ---------- bindings ----------
-document.getElementById('go').addEventListener('click',()=>{
+document.getElementById('go').onclick = ()=>{
   const q=document.getElementById('search').value.trim();
   if(!q) return; window.location.href=`player.html?q=${encodeURIComponent(q)}`;
-});
-document.getElementById('pageSize').addEventListener('change', (e)=>{
-  pageSize = parseInt(e.target.value, 10) || 1000;
-  serverPage = 1;
-  render(); // si global déjà chargé
-  loadServerPage(); // et on met à jour la page serveur si besoin
-});
-document.getElementById('loadAll').addEventListener('click', loadAll);
+};
+document.getElementById('pageSize').onchange = (e)=>{
+  pageSize = parseInt(e.target.value,10)||1000; pageIndex=0; render();
+};
+document.getElementById('refresh').onclick = ()=> loadAll(true);
 
-// Realtime (rafraîchit la page actuelle)
+// Realtime → propose un refresh (évite de recharger 10k en boucle)
 supa.channel('realtime:players')
-  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, ()=>loadServerPage())
-  .subscribe();
+  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, ()=>{
+    const btn=document.getElementById('refresh');
+    btn.classList.remove('hidden'); btn.textContent='Refresh data';
+  }).subscribe();
 
-loadServerPage();
+loadAll();
 loadRecent();
 </script>
 </body>

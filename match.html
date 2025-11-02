@@ -17,30 +17,30 @@
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
-
-function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-
-const url = new URL(window.location.href);
-const id = url.searchParams.get('id');
+const id = new URL(location.href).searchParams.get('id');
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function load(){
-  const { data, error } = await supa.from('matches').select('*').eq('id', id).single();
-  if(error || !data){ document.getElementById('card').innerHTML='<div class="text-red-400">Match not found.</div>'; return; }
-  const m=data;
-  const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
-  const replayBtn = m.replay_url ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>` : '';
-  const html = `<div class="space-y-2">
-    <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-    <div class="text-xl font-bold">${escapeHtml(m.p1_name||'P1')} vs ${escapeHtml(m.p2_name||'P2')}</div>
-    <div class="text-slate-400">Winner: <span class="text-slate-100">${escapeHtml(w)}</span> · Map ${m.map_id??'-'}</div>
-    <div class="text-slate-400">Scores: ${m.p1_score??'-'} — ${m.p2_score??'-'}</div>
-    <div class="text-slate-400">P1 Elo: ${m.p1_elo_before??'-'} → ${m.p1_elo_after??'-'}</div>
-    <div class="text-slate-400">P2 Elo: ${m.p2_elo_before??'-'} → ${m.p2_elo_after??'-'}</div>
-    <div class="pt-2">${replayBtn}</div>
-  </div>`;
-  document.getElementById('card').innerHTML = html;
-}
+  const { data: m, error } = await supa.from('matches').select('*').eq('id', id).single();
+  if(error || !m){ document.getElementById('card').innerHTML='<div class="text-red-400">Match not found.</div>'; return; }
 
+  const p1link = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||'P1')}</a>`;
+  const p2link = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||'P2')}</a>`;
+  const e1 = m.p1_elo_after ?? m.p1_elo_before ?? '-';
+  const e2 = m.p2_elo_after ?? m.p2_elo_before ?? '-';
+  const winner = m.winner==='1' ? p1link : (m.winner==='2' ? p2link : '—');
+  const replayBtn = m.replay_url
+      ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
+      : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+
+  document.getElementById('card').innerHTML = `
+    <div class="space-y-3">
+      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
+      <div class="text-xl font-bold">${p1link} <span class="text-slate-400">(${e1})</span> vs ${p2link} <span class="text-slate-400">(${e2})</span></div>
+      <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
+      <div class="pt-1">${replayBtn}</div>
+    </div>`;
+}
 load();
 </script>
 </body>
