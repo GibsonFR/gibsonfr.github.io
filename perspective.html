@@ -7,102 +7,81 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* Old look vibes + tidy alignment */
-    .pill{padding:.35rem .75rem;border:1px solid #334155;background:#0b1220;border-radius:999px;color:#cbd5e1}
-    .pill.active{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35);color:#fbbf24}
-    .card{background:#0b1220;border:1px solid #334155;border-radius:1rem}
-    .chip{background:#0b1220;border:1px solid #334155;border-radius:.8rem;padding:.6rem .75rem}
-    .grid-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem}
-    .kpi .label{font-size:.75rem;color:#94a3b8}
-    .kpi .value{font-weight:800;font-size:1.25rem}
-    .fade{opacity:0;transform:translateY(6px);transition:opacity .35s ease,transform .35s ease}
-    .fade.show{opacity:1;transform:translateY(0)}
-    .tip{position:relative;cursor:help}
-    .tip:after{
-      content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%) translateY(8px);
-      background:#0f172a;color:#e2e8f0;border:1px solid #334155;padding:.45rem .6rem;border-radius:.5rem;
-      font-size:.75rem;line-height:1rem;white-space:pre-wrap;width:280px;max-width:80vw;pointer-events:none;
-      opacity:0;transition:opacity .15s ease,transform .15s ease;z-index:30
+    .reveal{opacity:0;transform:translateY(8px);transition:opacity .5s ease,transform .5s ease}
+    .reveal.show{opacity:1;transform:translateY(0)}
+    .pulse-once{animation:pulseOnce .6s ease-out 1}
+    @keyframes pulseOnce{0%{transform:scale(1)}40%{transform:scale(1.03)}100%{transform:scale(1)}}
+    .bar { transition: width .6s ease }
+    .tip { position:relative; cursor:help }
+    .tip:after {
+      content: attr(data-tip);
+      position:absolute; left:50%; transform:translateX(-50%) translateY(8px);
+      background:#0f172a; color:#e2e8f0; border:1px solid #334155;
+      padding:.45rem .6rem; border-radius:.5rem; font-size:.75rem; line-height:1rem;
+      white-space:pre-wrap; width:280px; max-width:80vw; pointer-events:none;
+      opacity:0; transition:opacity .15s ease, transform .15s ease; z-index:20
     }
-    .tip:hover:after{opacity:1;transform:translateX(-50%) translateY(6px)}
-    /* Comparison table with clean alignment */
-    .cmp{display:grid;grid-template-columns:minmax(180px,1fr) 120px 120px 120px;gap:.5rem}
-    .cmp .head{color:#94a3b8;font-size:.8rem;white-space:nowrap}
-    .cell{padding:.5rem .6rem;border-radius:.5rem;border:1px solid #334155;background:#0b1220;text-align:center;white-space:nowrap}
-    .rowlabel{display:flex;align-items:center;gap:.4rem;padding-left:.25rem}
-    .delta-up{color:#34d399}.delta-down{color:#fb7185}
-    .crown svg{height:16px;width:16px;display:inline-block;vertical-align:-2px;color:#fcd34d}
-    .bar {height:8px;border-radius:999px;background:linear-gradient(90deg,#fbbf24,#fde68a)}
-    .bar-wrap{height:8px;border-radius:999px;background:#0b1220;border:1px solid #334155;overflow:hidden}
+    .tip:hover:after { opacity:1; transform:translateX(-50%) translateY(6px) }
+    .kpi {display:flex;align-items:center;gap:.5rem}
+    .kpi small{color:#9ca3af}
+    .delta{font-size:.75rem;margin-left:.35rem}
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-6xl mx-auto p-4">
-    <a class="text-indigo-400 hover:underline" href="index.html">&larr; Back</a>
+    <div id="authbar" class="mb-3"></div>
   </div>
 
-  <main class="max-w-6xl mx-auto p-4">
-    <!-- header -->
-    <header id="head" class="fade"></header>
+  <div class="max-w-6xl mx-auto p-4">
+    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
-    <!-- top controls, styled like the older page -->
-    <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div class="card p-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm text-slate-300">Benchmarks</span>
-          <select id="benchSelect" class="pill bg-slate-900">
-            <option value="auto">Auto (by player)</option>
-            <option value="global">Global (all players)</option>
-            <option value="band:800">Elo 800–899</option>
-            <option value="band:900">Elo 900–999</option>
-            <option value="band:1000">Elo 1000–1099</option>
-            <option value="band:1100">Elo 1100–1199</option>
-            <option value="band:1200">Elo 1200–1299</option>
-            <option value="band:1300">Elo 1300–1399</option>
-            <option value="band:1400">Elo 1400–1499</option>
-            <option value="band:1500">Elo 1500–1599</option>
-            <option value="band:1600">Elo 1600–1699</option>
-            <option value="band:1700">Elo 1700–1799</option>
-            <option value="band:1800">Elo 1800–1899</option>
-          </select>
-          <label class="ml-1 text-xs text-slate-400 flex items-center gap-2">
-            <input id="benchUseFilter" type="checkbox" class="accent-amber-500" checked>
-            Apply current map filter
-          </label>
-          <span id="status" class="text-xs text-slate-400 ml-auto"></span>
+    <!-- HEADER -->
+    <header id="head" class="mt-3"></header>
+
+    <!-- FILTERS -->
+    <div id="scopeBar" class="mt-4 hidden"></div>
+
+    <!-- BENCHMARKS -->
+    <div id="benchBar" class="mt-3 hidden"></div>
+
+    <!-- PREMIUM / AUTH GATE -->
+    <div id="gateBanner" class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 hidden"></div>
+
+    <!-- Actions -->
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="refreshBtn"
+                  class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30 disabled:opacity-50">
+            Recompute metrics
+          </button>
+          <span id="status" class="text-sm text-slate-400"></span>
         </div>
       </div>
-      <div class="card p-3">
-        <form id="cmpForm" onsubmit="return false" class="flex flex-wrap items-center gap-2">
-          <span class="text-sm text-slate-300">Compare vs</span>
-          <input id="cmpInput" class="pill bg-slate-900 flex-1" placeholder="username or SteamID64…">
-          <button id="cmpBtn" class="pill bg-amber-600/70 border-amber-500/40 hover:bg-amber-500/80">Compare (mirror)</button>
-          <label class="ml-1 text-xs text-slate-400 flex items-center gap-2">
+      <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
+        <form id="cmpForm" class="flex flex-wrap items-center gap-2" onsubmit="return false;">
+          <label class="text-slate-300">Compare vs</label>
+          <input id="cmpInput"
+                 class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                 placeholder="username or SteamID64…">
+          <button id="cmpBtn"
+                  class="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/30 disabled:opacity-50">
+            Compare (mirror)
+          </button>
+          <label class="ml-2 text-xs text-slate-400 flex items-center gap-2" title="Apply the current map filter to the comparison">
             <input id="cmpUseFilter" type="checkbox" class="accent-amber-500" checked>
-            Apply current map
+            Apply current filter
           </label>
         </form>
       </div>
     </div>
 
-    <!-- premium/auth gate -->
-    <div id="gateBanner" class="mt-4 card p-4 hidden"></div>
-
-    <!-- map tabs like before -->
-    <section class="mt-4 card p-3">
-      <div id="mapTabs" class="flex flex-wrap items-center gap-2"></div>
-      <div id="mapPanel" class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-    </section>
-
-    <!-- overview pills -->
-    <section id="chips" class="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></section>
-
-    <!-- sections -->
+    <!-- CONTENT -->
     <div id="content" class="mt-6"></div>
-  </main>
+  </div>
 
 <script>
-/* ---------- Supabase ---------- */
+/* -------------------- Supabase -------------------- */
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
@@ -113,6 +92,7 @@ const steamId = url.searchParams.get('steam_id');
 const MAP_NAMES = {35:'Mini Monke',36:'Small Beach',38:'Small Containers',39:'Tiny Town 2',40:'Tiny Town'};
 const prettyMap = id => MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : `Map ${id}`;
 
+/* -------------------- Utils -------------------- */
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct = x => (x==null||isNaN(x) ? '—' : `${Math.round(x*1000)/10}%`);
 const num = (x,d=1)=> (x==null||isNaN(x) ? '—' : (Math.round(x*Math.pow(10,d))/Math.pow(10,d)));
@@ -120,25 +100,56 @@ const fmtS = s => (s==null||isNaN(s)?'—':`${num(s,1)}s`);
 function median(a){ a=(a||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return null; const m=a.length/2; return a.length%2? a[(m|0)] : (a[m-1]+a[m])/2; }
 function quantile(arr,q){ const a=(arr||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return null; const pos=(a.length-1)*q, lo=Math.floor(pos), hi=Math.ceil(pos); return lo===hi ? a[lo] : a[lo]+(a[hi]-a[lo])*(pos-lo); }
 function p90(a){ return quantile(a,.90); }
+function p10(a){ return quantile(a,.10); }
 function sum(a){ return (a||[]).reduce((t,x)=>t+(Number.isFinite(x)?x:0),0); }
 function avg(a){ a=(a||[]).filter(Number.isFinite); return a.length? sum(a)/a.length : null; }
 function std(a){ a=(a||[]).filter(Number.isFinite); if(!a.length) return null; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); }
-function animate(){ document.querySelectorAll('.fade').forEach(x=>x.classList.add('show')); }
+function lastN(a,n){ return (a||[]).slice(Math.max(0,a.length-n)); }
+
+/* visual */
+function spark(values, w=240, h=48){
+  values=(values||[]).filter(Number.isFinite); if(!values.length) return `<svg width="${w}" height="${h}"></svg>`;
+  const min=Math.min(...values), max=Math.max(...values);
+  const norm=v=>(max===min)? .5 : (v-min)/(max-min);
+  const pts = values.map((v,i)=>[i*(w-6)/Math.max(1,values.length-1)+3, h-6 - norm(v)*(h-12) + 3]);
+  const d = 'M '+pts.map(p=>p.join(' ')).join(' L ');
+  return `<svg width="${w}" height="${h}" class="text-amber-300"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
+}
+function bar(v01, title=''){
+  const v = Math.max(0, Math.min(1, Number(v01)||0));
+  const w = (v*100).toFixed(1)+'%';
+  return `<div class="w-full h-2 rounded bg-slate-800/80 overflow-hidden" title="${esc(title)}">
+    <div class="bar h-2 rounded bg-gradient-to-r from-amber-400 to-amber-200" style="width:${w}"></div>
+  </div>`;
+}
+const io = new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      e.target.classList.add('show','pulse-once'); io.unobserve(e.target);
+      e.target.querySelectorAll('[data-count-to]').forEach(n=>animateCount(n, Number(n.dataset.countTo||0), n.dataset.suffix||''));
+      e.target.querySelectorAll('.bar').forEach(b=>{ const w=b.style.width; b.style.width='0%'; requestAnimationFrame(()=>{ requestAnimationFrame(()=> b.style.width=w ); }); });
+    }
+  });
+},{threshold:.2});
+function mountReveal(scope){ (scope||document).querySelectorAll('.reveal').forEach(x=>io.observe(x)); }
+function animateCount(el, toValue, suffix=''){
+  if (!isFinite(toValue)) { el.textContent = '—'; return; }
+  const duration = 700, start = performance.now(); const from=0, to=Number(toValue);
+  function step(t){ const k = Math.min(1,(t-start)/duration); const v = Math.round((from+(to-from)*k)*10)/10;
+    el.textContent = suffix==='%'? (Math.round(v*10)/10)+suffix : v + suffix;
+    if (k<1) requestAnimationFrame(step);
+  } requestAnimationFrame(step);
+}
 
 /* Premium cosmetics */
-const crownSVG = `<span class="crown" title="Premium member" aria-label="Premium member">
-  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+const crownSVG = `<span title="Premium member" aria-label="Premium member">
+  <svg class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
   </svg>
 </span>`;
-function labelWithPremium(name, prem){ return prem ? `<span class="text-amber-300">${esc(name)}</span>${crownSVG}` : esc(name); }
-
-/* ---------- Auth & premium ---------- */
-async function getUser(){ const { data:{ user } } = await supa.auth.getUser(); return user||null; }
-async function isPremiumUser(user){
-  try{ const { data } = await supa.from('profiles').select('premium_until').eq('id', user.id).maybeSingle();
-    return !!(data?.premium_until && new Date(data.premium_until) > new Date());
-  }catch{ return false; }
+function labelWithPremium(steamId, display, isPrem){
+  const base = esc(display || steamId || 'Player');
+  return isPrem ? `<span class="text-amber-300" title="Premium member">${base}</span>${crownSVG}` : base;
 }
 async function isPremiumSteam(sid){
   try{
@@ -148,80 +159,108 @@ async function isPremiumSteam(sid){
   }catch{ return false; }
 }
 
+/* -------------------- Auth + Gate -------------------- */
+async function getUser(){ const { data:{ user } } = await supa.auth.getUser(); return user||null; }
+async function isPremium(user){
+  try{ const { data } = await supa.from('profiles').select('premium_until').eq('id', user.id).maybeSingle();
+    return !!(data?.premium_until && new Date(data.premium_until) > new Date());
+  }catch{ return false; }
+}
 async function updateGateUI(){
   const gate = document.getElementById('gateBanner');
-  const cmpBtn = document.getElementById('cmpBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const cmpBtn     = document.getElementById('cmpBtn');
   const user = await getUser();
-  if (!user){
+  if (!user) {
     gate.classList.remove('hidden');
     gate.innerHTML = `<div class="flex items-start gap-3">
       <div class="text-amber-300">🔒</div>
       <div>
         <div class="font-semibold mb-1">Sign in required</div>
-        <div class="text-slate-300 text-sm">Perspective is a <b>Premium</b> feature. Sign in with Discord to continue.</div>
-        <div class="mt-2"><button class="pill bg-indigo-600/70 hover:bg-indigo-500 text-white" id="signinBtn">Sign in with Discord</button></div>
+        <div class="text-slate-300 text-sm">Perspective is a <b>Premium</b> feature. Please sign in with Discord to continue.</div>
+        <div class="mt-2"><button id="signinBtn" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Sign in with Discord</button></div>
       </div>
     </div>`;
-    cmpBtn.disabled = true;
+    refreshBtn.disabled = true; cmpBtn.disabled = true;
     document.getElementById('signinBtn').onclick = ()=> supa.auth.signInWithOAuth({ provider:'discord', options:{ redirectTo: location.href }});
-    return {user:null,premium:false};
+    return { user:null, premium:false };
   }
-  const premium = await isPremiumUser(user);
-  if (!premium){
+  const premium = await isPremium(user);
+  if (!premium) {
     gate.classList.remove('hidden');
     gate.innerHTML = `<div class="flex items-start gap-3">
       <div class="text-amber-300">👑</div>
       <div>
         <div class="font-semibold mb-1">Premium only</div>
         <div class="text-slate-300 text-sm">Perspective is available for <b>Premium members</b> only. Upgrade to unlock unlimited analyses and Perspective.</div>
-        <div class="mt-2"><a href="account.html" class="pill bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30">Go Premium (€2)</a></div>
+        <div class="mt-2 flex items-center gap-2">
+          <a href="account.html" class="px-3 py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-sm">Go Premium (€2)</a>
+          <button id="quickCheckout" class="px-3 py-1.5 rounded bg-amber-600/30 text-amber-200 border border-amber-500/40 hover:bg-amber-600/40 text-sm">Quick checkout</button>
+        </div>
       </div>
     </div>`;
-    cmpBtn.disabled = true;
-    return {user, premium:false};
+    refreshBtn.disabled = true; cmpBtn.disabled = true;
+    const quick = document.getElementById('quickCheckout');
+    if (quick) quick.onclick = (e)=>{ e.preventDefault(); if (window.startCheckout) window.startCheckout(); else location.href='account.html'; };
+    return { user, premium:false };
   }
-  gate.classList.add('hidden'); cmpBtn.disabled=false;
-  return {user, premium:true};
+  gate.classList.add('hidden'); refreshBtn.disabled = false; cmpBtn.disabled = false;
+  return { user, premium:true };
 }
 
-/* ---------- Data fetch ---------- */
+/* -------------------- Data fetch -------------------- */
 async function fetchPlayer(){ const { data } = await supa.from('players').select('*').eq('steam_id', steamId).maybeSingle(); return data||null; }
+
 async function fetchMatchesForPlayer(sid, limit=800){
-  const { data } = await supa.from('matches')
+  const { data, error } = await supa.from('matches')
     .select('id, played_at, map_id, winner, p1_id, p2_id, p1_name, p2_name, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
-    .or(`p1_id.eq.${sid},p2_id.eq.${sid}`).order('played_at',{ascending:true}).limit(limit);
+    .or(`p1_id.eq.${sid},p2_id.eq.${sid}`)
+    .order('played_at', { ascending: true })
+    .limit(limit);
+  if (error) { console.warn('matches error', error); return []; }
   return data||[];
 }
-async function fetchAnalysesFor(ids){
-  if(!ids.length) return new Map();
-  const { data } = await supa.from('match_analyses')
-    .select('match_id, p1_quality, p2_quality, p1_stats, p2_stats').in('match_id', ids);
-  const m=new Map(); (data||[]).forEach(r=>m.set(r.match_id,r)); return m;
+async function fetchAnalysesForMatchIds(ids){
+  if (!ids.length) return new Map();
+  const { data, error } = await supa.from('match_analyses')
+    .select('match_id, p1_quality, p2_quality, p1_stats, p2_stats, analyzed_at')
+    .in('match_id', ids);
+  if (error) { console.warn('analyses error', error); return new Map(); }
+  const map = new Map(); (data||[]).forEach(r=> map.set(r.match_id, r)); return map;
 }
 
-/* ---------- Aggregation ---------- */
+/* -------------------- Aggregation (player scope) -------------------- */
 function aggregateMetricsForPlayer(sid, matches, analyses, mapId=null){
   const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
-  const eloSeries=[], results=[], qual=[], speeds=[], distH=[], distT=[], tagShare=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
-  const byMap = new Map();
+  const eloSeries = [];
+  const results = [];
+  const qual=[], speeds=[], distH=[], distT=[], tagShareCalc=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
+  const byMap = new Map(), byOpp = new Map();
 
-  for(const m of scope){
+  for (const m of scope){
     const side = (String(m.p1_id)===String(sid)) ? 'p1' : 'p2';
-    const win  = (m.winner==1) ? (side==='p1') : (m.winner==2) ? (side==='p2') : null;
+    const oppId = (side==='p1') ? m.p2_id : m.p1_id;
+    const oppName = (side==='p1') ? (m.p2_name||m.p2_id) : (m.p1_name||m.p1_id);
+    const win = (m.winner===1 || m.winner==='1') ? (side==='p1') : (m.winner===2 || m.winner==='2') ? (side==='p2') : null;
     if (win!=null) results.push(!!win);
+
     const elo = (side==='p1') ? (m.p1_elo_after ?? m.p1_elo_before) : (m.p2_elo_after ?? m.p2_elo_before);
     if (elo!=null) eloSeries.push(Number(elo));
 
-    const a=analyses.get(m.id);
-    if(a){
-      const s=(side==='p1')? (a.p1_stats||{}) : (a.p2_stats||{});
-      const q=(side==='p1')? a.p1_quality : a.p2_quality;
+    const a = analyses.get(m.id);
+    if (a){
+      const s = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
+      const q = (side==='p1') ? a.p1_quality : a.p2_quality;
       if (isFinite(q)) qual.push(Number(q));
-      const ts=Number(s.seconds_as_tagger), hs=Number(s.seconds_as_hider);
-      if (isFinite(ts) && isFinite(hs) && (ts+hs)>0) tagShare.push(ts/(ts+hs));
-      else if (isFinite(s.time_as_tagger_share)) tagShare.push(Number(s.time_as_tagger_share));
+
+      // robust tagging share computed from seconds:
+      const ts = Number(s.seconds_as_tagger), hs = Number(s.seconds_as_hider);
+      if (isFinite(ts) && isFinite(hs) && (ts+hs)>0) tagShareCalc.push(ts/(ts+hs));
+      else if (isFinite(s.time_as_tagger_share)) tagShareCalc.push(Number(s.time_as_tagger_share));
+
       if (isFinite(ts)) tagSecs.push(ts);
       if (isFinite(hs)) hidSecs.push(hs);
+
       if (isFinite(s.avg_speed_ms)) speeds.push(Number(s.avg_speed_ms));
       if (isFinite(s.avg_distance_as_hider))  distH.push(Number(s.avg_distance_as_hider));
       if (isFinite(s.avg_distance_as_tagger)) distT.push(Number(s.avg_distance_as_tagger));
@@ -230,43 +269,101 @@ function aggregateMetricsForPlayer(sid, matches, analyses, mapId=null){
       if (isFinite(s.accuracy))                acc.push(Number(s.accuracy));
     }
 
-    const key=String(m.map_id);
-    if(!byMap.has(key)) byMap.set(key,{map_id:m.map_id,matches:0,wins:0,q:[],sp:[],ts:[],rm:[]});
-    const bm=byMap.get(key); bm.matches++; if (win) bm.wins++;
-    if(a){
-      const s2=(side==='p1')? (a.p1_stats||{}) : (a.p2_stats||{});
-      const q2=(side==='p1')? a.p1_quality : a.p2_quality;
+    // per map (for table All)
+    const keyM = String(m.map_id);
+    if (!byMap.has(keyM)) byMap.set(keyM, { map_id:m.map_id, matches:0, wins:0, q:[], sp:[], ts:[], rm:[], dh:[], dt:[] });
+    const bm = byMap.get(keyM);
+    bm.matches++; if (win) bm.wins++;
+    if (a){
+      const s2 = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
+      const q2 = (side==='p1') ? a.p1_quality : a.p2_quality;
       if (isFinite(q2)) bm.q.push(Number(q2));
       if (isFinite(s2.avg_speed_ms)) bm.sp.push(Number(s2.avg_speed_ms));
-      const ts2=Number(s2.seconds_as_tagger), hs2=Number(s2.seconds_as_hider);
+      const ts2 = Number(s2.seconds_as_tagger), hs2 = Number(s2.seconds_as_hider);
       if (isFinite(ts2) && isFinite(hs2) && (ts2+hs2)>0) bm.ts.push(ts2/(ts2+hs2));
       else if (isFinite(s2.time_as_tagger_share)) bm.ts.push(Number(s2.time_as_tagger_share));
       if (isFinite(s2.retag_median_seconds)) bm.rm.push(Number(s2.retag_median_seconds));
+      if (isFinite(s2.avg_distance_as_hider)) bm.dh.push(Number(s2.avg_distance_as_hider));
+      if (isFinite(s2.avg_distance_as_tagger)) bm.dt.push(Number(s2.avg_distance_as_tagger));
     }
+
+    // per opponent
+    const ok = String(oppId||'unknown');
+    if (!byOpp.has(ok)) byOpp.set(ok, { id:oppId, name:oppName, matches:0, wins:0, q:[] });
+    const bo = byOpp.get(ok);
+    bo.matches++; if (win) bo.wins++;
+    const q3 = a ? ((side==='p1') ? a.p1_quality : a.p2_quality) : null;
+    if (isFinite(q3)) bo.q.push(Number(q3));
   }
 
-  const count=scope.length, wins=results.filter(Boolean).length, winrate=count? wins/count : null;
-  const metrics={
-    scopeCount:count, wins, winrate,
-    quality:{ average:avg(qual), median:median(qual), spread_iqr:(quantile(qual,.75)-quantile(qual,.25)), spread_std:std(qual), best_match:qual.length?Math.max(...qual):null, worst_match:qual.length?Math.min(...qual):null },
-    tagging:{ share_as_tagger:avg(tagShare), time_as_tagger_average:avg(tagSecs), time_as_hider_average:avg(hidSecs) },
-    speed:{ average_mps:avg(speeds), p90_mps:p90(speeds) },
-    distance:{ average_hider_m:avg(distH), average_tagger_m:avg(distT) },
-    retag:{ median_seconds:median(retMed), average_seconds:avg(retAvg), p90_seconds:p90(retMed) },
-    accuracy:{ average:avg(acc) },
-    eloSeries, maps:[...byMap.values()].sort((a,b)=>a.map_id-b.map_id)
+  const count = scope.length, wins = results.filter(Boolean).length, winrate = count ? wins/count : null;
+  const quality = {
+    average: avg(qual), median: median(qual),
+    lower_quartile: quantile(qual,.25), upper_quartile: quantile(qual,.75),
+    best_match: qual.length? Math.max(...qual):null, worst_match: qual.length? Math.min(...qual):null,
+    spread_std: std(qual), spread_iqr: (quantile(qual,.75)!=null && quantile(qual,.25)!=null) ? (quantile(qual,.75)-quantile(qual,.25)) : null
   };
-  return metrics;
+  const tagging = {
+    share_as_tagger: avg(tagShareCalc),
+    time_as_tagger_average: avg(tagSecs),
+    time_as_tagger_median: median(tagSecs),
+    time_as_hider_average: avg(hidSecs),
+    time_as_hider_median: median(hidSecs)
+  };
+  const speed = { average_mps: avg(speeds), p90_mps: p90(speeds), p10_mps: p10(speeds) };
+  const distance = { average_hider_m: avg(distH), average_tagger_m: avg(distT) };
+  const retag = { median_seconds: median(retMed), average_seconds: avg(retAvg), p90_seconds: p90(retMed) };
+  const accuracy = { average: avg(acc) };
+
+  const eloSeriesAll = eloSeries.slice();
+  const form = lastN(results, 20);
+  let bestStreak=0, cur=0; for(const r of results){ cur = r? cur+1 : 0; bestStreak = Math.max(bestStreak, cur); }
+
+  const mapsArr = Array.from(byMap.values()).map(b=>({
+    map_id: b.map_id,
+    matches: b.matches,
+    winrate: b.matches? b.wins/b.matches : null,
+    average_quality: avg(b.q),
+    average_speed_mps: avg(b.sp),
+    share_as_tagger: avg(b.ts),
+    retag_median_seconds: avg(b.rm),
+    average_hider_distance_m: avg(b.dh),
+    average_tagger_distance_m: avg(b.dt)
+  })).sort((a,b)=> (b.average_quality??-1) - (a.average_quality??-1));
+
+  const oppArr = Array.from(byOpp.values()).map(o=>({
+    id:o.id, name:o.name, matches:o.matches,
+    winrate:o.matches? o.wins/o.matches:null, average_quality: avg(o.q)
+  })).sort((a,b)=> (b.matches - a.matches));
+
+  return {
+    scopeCount: count, wins, winrate, quality, tagging, speed, distance, retag, accuracy,
+    eloSeries: eloSeriesAll, form, bestStreak, maps: mapsArr, opponents: oppArr
+  };
 }
-function aggregateDataset(matches, analyses, mapId=null){
+
+/* -------------------- Benchmarks (dataset aggregation) -------------------- */
+/* We compute dataset metrics over *both* sides (p1 & p2) to approximate per-player expectations. */
+function aggregateMetricsForDataset(matches, analyses, mapId=null){
   const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
-  const qual=[], speeds=[], distH=[], distT=[], tagShare=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
-  for(const m of scope){
-    const a=analyses.get(m.id); if(!a) continue;
-    for(const s of [a.p1_stats||{}, a.p2_stats||{}]){
-      const ts=Number(s.seconds_as_tagger), hs=Number(s.seconds_as_hider);
-      if (isFinite(ts) && isFinite(hs) && (ts+hs)>0) tagShare.push(ts/(ts+hs));
-      else if (isFinite(s.time_as_tagger_share)) tagShare.push(Number(s.time_as_tagger_share));
+  const qual=[], speeds=[], distH=[], distT=[], tagShareCalc=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
+  const results=[];
+
+  for (const m of scope){
+    const a = analyses.get(m.id); if (!a) continue;
+
+    // include both sides
+    const sides = [
+      { s:(a.p1_stats||{}), q:a.p1_quality },
+      { s:(a.p2_stats||{}), q:a.p2_quality }
+    ];
+    for (const side of sides){
+      const s = side.s;
+      const q = side.q;
+      if (isFinite(q)) qual.push(Number(q));
+      const ts = Number(s.seconds_as_tagger), hs = Number(s.seconds_as_hider);
+      if (isFinite(ts) && isFinite(hs) && (ts+hs)>0) tagShareCalc.push(ts/(ts+hs));
+      else if (isFinite(s.time_as_tagger_share)) tagShareCalc.push(Number(s.time_as_tagger_share));
       if (isFinite(ts)) tagSecs.push(ts);
       if (isFinite(hs)) hidSecs.push(hs);
       if (isFinite(s.avg_speed_ms)) speeds.push(Number(s.avg_speed_ms));
@@ -276,300 +373,508 @@ function aggregateDataset(matches, analyses, mapId=null){
       if (isFinite(s.retag_avg_seconds))       retAvg.push(Number(s.retag_avg_seconds));
       if (isFinite(s.accuracy))                acc.push(Number(s.accuracy));
     }
-    if (isFinite(a.p1_quality)) qual.push(Number(a.p1_quality));
-    if (isFinite(a.p2_quality)) qual.push(Number(a.p2_quality));
+
+    // global win rate centers around 50%; keep for reference only
+    if (m.winner===1 || m.winner===2) results.push(true);
   }
+
   return {
-    quality:{average:avg(qual)},
-    tagging:{share_as_tagger:avg(tagShare), time_as_tagger_average:avg(tagSecs), time_as_hider_average:avg(hidSecs)},
-    speed:{average_mps:avg(speeds), p90_mps:p90(speeds)},
-    distance:{average_hider_m:avg(distH), average_tagger_m:avg(distT)},
-    retag:{median_seconds:median(retMed), average_seconds:avg(retAvg), p90_seconds:p90(retMed)},
-    accuracy:{average:avg(acc)}
+    winrate: results.length? 0.5 : null, // neutral baseline
+    quality: { average: avg(qual), median: median(qual) },
+    tagging: {
+      share_as_tagger: avg(tagShareCalc),
+      time_as_tagger_average: avg(tagSecs),
+      time_as_hider_average: avg(hidSecs),
+    },
+    speed: { average_mps: avg(speeds), p90_mps: p90(speeds) },
+    distance: { average_hider_m: avg(distH), average_tagger_m: avg(distT) },
+    retag: { median_seconds: median(retMed), average_seconds: avg(retAvg), p90_seconds: p90(retMed) },
+    accuracy: { average: avg(acc) }
   };
 }
 
-/* ---------- Benchmarks ---------- */
-let benchMode='auto'; // auto | global | band:####
-
-function bandOfElo(e){ return Math.floor(Number(e||0)/100)*100; }
-function eloOf(m,s){ return s==='p1'? (m.p1_elo_after ?? m.p1_elo_before) : (m.p2_elo_after ?? m.p2_elo_before); }
-function playerAutoBand(matches){
-  const elos=[];
-  for(const m of matches){
-    const side = String(m.p1_id)===String(steamId) ? 'p1' : (String(m.p2_id)===String(steamId)?'p2':null);
-    if(!side) continue;
-    const e = eloOf(m,side); if(isFinite(e)) elos.push(Number(e));
-  }
-  return bandOfElo(median(elos)||1200);
+function eloOfMatchForSide(m, side){
+  return (side==='p1') ? (m.p1_elo_after ?? m.p1_elo_before) : (m.p2_elo_after ?? m.p2_elo_before);
 }
-async function fetchBenchmarkBand(min,max,limit=2000){
+
+/* Fetch a recent sample for a given Elo band and build dataset metrics */
+async function fetchBenchmark(bandMin, bandMax, limit=2000){
+  // Fetch recent matches where any side's Elo (before/after) falls within band.
   const orCond =
-    `and(p1_elo_before.gte.${min},p1_elo_before.lt.${max}),`+
-    `and(p2_elo_before.gte.${min},p2_elo_before.lt.${max}),`+
-    `and(p1_elo_after.gte.${min},p1_elo_after.lt.${max}),`+
-    `and(p2_elo_after.gte.${min},p2_elo_after.lt.${max})`;
-  const { data:m } = await supa.from('matches')
-    .select('id,map_id,winner,p1_id,p2_id,p1_elo_before,p1_elo_after,p2_elo_before,p2_elo_after')
-    .or(orCond).order('played_at',{ascending:false}).limit(limit);
-  const ids=(m||[]).map(x=>x.id); const a=await fetchAnalysesFor(ids);
-  return {matches:m||[], analyses:a};
-}
-async function fetchBenchmarkGlobal(limit=2000){
-  const { data:m } = await supa.from('matches')
-    .select('id,map_id,winner,p1_id,p2_id,p1_elo_before,p1_elo_after,p2_elo_before,p2_elo_after')
-    .order('played_at',{ascending:false}).limit(limit);
-  const ids=(m||[]).map(x=>x.id); const a=await fetchAnalysesFor(ids);
-  return {matches:m||[], analyses:a};
+    `and(p1_elo_before.gte.${bandMin},p1_elo_before.lt.${bandMax})` + ',' +
+    `and(p2_elo_before.gte.${bandMin},p2_elo_before.lt.${bandMax})` + ',' +
+    `and(p1_elo_after.gte.${bandMin},p1_elo_after.lt.${bandMax})` + ',' +
+    `and(p2_elo_after.gte.${bandMin},p2_elo_after.lt.${bandMax})`;
+  const { data: m, error } = await supa.from('matches')
+    .select('id, map_id, winner, played_at, p1_id, p2_id, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
+    .or(orCond)
+    .order('played_at', { ascending: false })
+    .limit(limit);
+  if (error) { console.warn('benchmark matches error', error); return { matches:[], analyses:new Map(), metrics:null }; }
+  const ids = (m||[]).map(x=>x.id);
+  const analyses = await fetchAnalysesForMatchIds(ids);
+  const metrics = aggregateMetricsForDataset(m||[], analyses, currentFilter);
+  return { matches:m||[], analyses, metrics };
 }
 
-/* ---------- UI helpers ---------- */
-function chip(label, val, tip, suffix=''){
-  return `<div class="fade chip">
-    <div class="text-slate-400 text-xs tip" data-tip="${esc(tip)}">${label}</div>
-    <div class="mt-1 font-semibold">${val}${suffix}</div>
+/* Global (all players) sample */
+async function fetchBenchmarkGlobal(limit=2000){
+  const { data: m, error } = await supa.from('matches')
+    .select('id, map_id, winner, played_at, p1_id, p2_id, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
+    .order('played_at', { ascending: false })
+    .limit(limit);
+  if (error) { console.warn('global matches error', error); return { matches:[], analyses:new Map(), metrics:null }; }
+  const ids = (m||[]).map(x=>x.id);
+  const analyses = await fetchAnalysesForMatchIds(ids);
+  const metrics = aggregateMetricsForDataset(m||[], analyses, currentFilter);
+  return { matches:m||[], analyses, metrics };
+}
+
+/* Small helpers */
+function deltaBadge(a, b, suffix=''){
+  if(!isFinite(a)||!isFinite(b)) return '';
+  const d = Math.round((a-b)*100)/100;
+  if (d===0) return `<span class="delta text-slate-400">±0${suffix}</span>`;
+  const up=d>0; return `<span class="delta ${up?'text-emerald-400':'text-rose-400'}">${up?'▲':'▼'} ${Math.abs(d)}${suffix}</span>`;
+}
+function kpi(label, you, band, global, fmt=(x)=>x, suffix=''){
+  const y = fmt(you), b = fmt(band), g = fmt(global);
+  return `<div class="kpi">
+    <span class="tip text-slate-300" data-tip="${esc(label)}">${label}</span>
+    <small>• You:</small> <b>${y}</b>
+    <small>• Band:</small> <span>${b}</span>${deltaBadge(you, band, suffix)}
+    <small>• Global:</small> <span>${g}</span>${deltaBadge(you, global, suffix)}
   </div>`;
 }
-function delta(a,b,suffix=''){
-  if(!isFinite(a)||!isFinite(b)) return '';
-  const d=Math.round((a-b)*100)/100;
-  if(d===0) return `<span class="text-slate-400 text-xs">±0${suffix}</span>`;
-  const up=d>0; return `<span class="${up?'delta-up':'delta-down'} text-xs">${up?'▲':'▼'} ${Math.abs(d)}${suffix}</span>`;
+
+/* UI sections */
+function section(title, body){
+  return `<div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
+    <h3 class="text-xl font-semibold mb-3">${title}</h3>${body}</div>`;
 }
-function compRow(label,tip,you,band,glob,fmt=(x)=>x,suffix=''){
-  const Y=fmt(you), B=fmt(band), G=fmt(glob);
-  return `<div class="rowlabel tip head" data-tip="${esc(tip)}">${label}</div>
-    <div class="cell font-semibold">${Y}${suffix}</div>
-    <div class="cell">${B}${suffix} ${delta(you,band,suffix)}</div>
-    <div class="cell">${G}${suffix} ${delta(you,glob,suffix)}</div>`;
-}
-function compSection(title, rowsHTML){
-  return `<section class="mt-4 card p-4 fade">
-    <h3 class="text-lg font-semibold mb-2">${title}</h3>
-    <div class="cmp">
-      <div></div><div class="head">You</div><div class="head">Band</div><div class="head">Global</div>
-      ${rowsHTML}
-    </div>
-  </section>`;
-}
-function mapTabButton(id,label,active){
-  return `<button class="pill ${active?'active':''}" data-map="${id??''}">${label}</button>`;
-}
-function setBar(widthPct){
-  return `<div class="bar-wrap"><div class="bar" style="width:${Math.max(0,Math.min(100,widthPct))}%"></div></div>`;
+function chip(label, value, tip, suffix=''){
+  const show = (value==null||value==='—') ? '—' : '';
+  const dv = (value==null||value==='—') ? '' : `data-count-to="${value}" data-suffix="${suffix}"`;
+  return `<div class="px-3 py-2 rounded-xl bg-slate-800/70 border border-slate-700 text-sm reveal">
+    <span class="tip text-slate-400" data-tip="${esc(tip)}">${label}</span>
+    <span class="ml-1 text-slate-100 font-semibold" ${dv}>${show||value}${suffix}</span>
+  </div>`;
 }
 
-/* ---------- Render ---------- */
-let playerRow=null, isPremSteamFlag=false, matchesCache=[], analysesCache=new Map(), currentMap=null;
-let benchGlobal=null;
-
-async function renderHeader(){
-  const prem = await isPremiumSteam(steamId);
-  isPremSteamFlag = prem;
-  const name = playerRow?.username || steamId;
-  document.getElementById('head').innerHTML =
-    `<div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-lg font-bold text-indigo-300">
-          ${(name||'?').trim().charAt(0).toUpperCase()}
+/* Header */
+function headerCard(p, isPrem){
+  const name = labelWithPremium(p.steam_id, p.username||p.steam_id, isPrem);
+  const avatar = ((p.username||p.steam_id||'?').trim().charAt(0).toUpperCase()||'?');
+  return `
+  <div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-xl font-bold text-indigo-300">${avatar}</div>
+        <div>
+          <div class="text-2xl font-extrabold leading-tight">${name}</div>
+          <div id="chips" class="mt-2 grid grid-cols-2 sm:flex sm:flex-wrap gap-2"></div>
         </div>
-        <div class="text-2xl font-extrabold">${labelWithPremium(name, prem)}</div>
       </div>
-    </div>`;
-  animate();
+      <div class="text-slate-400 text-sm">Perspective</div>
+    </div>
+  </div>`;
 }
 
-function renderMapTabs(){
-  const tabsEl = document.getElementById('mapTabs');
-  const mapIds = [...new Set(matchesCache.map(m=>m.map_id))].sort((a,b)=>a-b);
-  tabsEl.innerHTML = [
-    mapTabButton('', 'All', currentMap==null),
-    ...mapIds.map(id=> mapTabButton(id, MAP_NAMES[id]||`Map ${id}`, String(currentMap)===String(id)))
+/* Overview chips (no abbreviations) */
+function overviewChips(m){
+  return [
+    chip('Matches played', m.scopeCount||0, 'Number of matches included in the current scope (All or the selected map).'),
+    chip('Wins', m.wins||0, 'Number of matches won in the current scope.'),
+    chip('Win rate', m.winrate!=null? Math.round(m.winrate*1000)/10 : '—', 'Percentage of matches won.', '%'),
+    chip('Average quality', m.quality.average!=null? Number(m.quality.average).toFixed(1) : '—', 'Average game quality score for this player.'),
+    chip('Median quality', m.quality.median!=null? Number(m.quality.median).toFixed(1) : '—', 'Middle value of the quality scores. Less sensitive to outliers.'),
+    chip('Quality interquartile range', (m.quality.spread_iqr!=null? Number(m.quality.spread_iqr).toFixed(1):'—'), 'Spread of quality (Q3 − Q1). Lower means more consistency.'),
+    chip('Quality standard deviation', (m.quality.spread_std!=null? Number(m.quality.spread_std).toFixed(2):'—'), 'Standard deviation of quality scores. Lower means more consistent results.'),
+    chip('Best match quality', m.quality.best_match!=null? Number(m.quality.best_match).toFixed(1) : '—', 'Highest quality score observed in this scope.'),
+    chip('Worst match quality', m.quality.worst_match!=null? Number(m.quality.worst_match).toFixed(1) : '—', 'Lowest quality score observed in this scope.'),
   ].join('');
+}
 
-  // FIX: active state toggles immediately on click
-  tabsEl.querySelectorAll('button[data-map]').forEach(b=>{
+/* Sections */
+function sectionForm(m){
+  const dots = m.form.map(w => `<span class="w-3 h-3 rounded-full ${w?'bg-emerald-400':'bg-rose-400'} inline-block"></span>`).join('<span class="w-1 inline-block"></span>');
+  return section('Form and rating trend',
+    `<div class="flex items-center justify-between gap-4 flex-wrap">
+      <div class="text-slate-300 tip" data-tip="Longest consecutive sequence of wins within the scope.">Best win streak: <b>${m.bestStreak||0}</b></div>
+      <div class="flex items-center gap-1" title="Most recent results (green = win, red = loss).">${dots||'<span class="text-slate-500 text-sm">No recent games</span>'}</div>
+      <div class="ml-auto" title="Rating trend over time.">${spark(m.eloSeries)}</div>
+    </div>`);
+}
+
+function sectionTagging(m, benchB, benchG){
+  return section('Tagging profile',
+    `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Share of total time played as the tagger (0–100%).">Tag time share</div>
+        ${bar(m.tagging.share_as_tagger||0,'Tag time share')}
+        <div class="text-slate-100 font-semibold mt-1">${pct(m.tagging.share_as_tagger)}</div>
+        <div class="mt-2 text-sm">${kpi('Share of time as tagger', m.tagging.share_as_tagger*100, (benchB?.tagging?.share_as_tagger??null)*100, (benchG?.tagging?.share_as_tagger??null)*100, x=> isFinite(x)? (Math.round(x*10)/10)+'%':'—','%')}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the tagger per match.">Average time as tagger</div>
+        <div class="text-slate-100 font-semibold">${fmtS(m.tagging.time_as_tagger_average)} <span class="text-slate-400">· median ${fmtS(m.tagging.time_as_tagger_median)}</span></div>
+        <div class="mt-2 text-sm">${kpi('Average time as tagger (seconds)', m.tagging.time_as_tagger_average, benchB?.tagging?.time_as_tagger_average, benchG?.tagging?.time_as_tagger_average, x=> fmtS(x).replace('s',''), 's')}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the hider per match.">Average time as hider</div>
+        <div class="text-slate-100 font-semibold">${fmtS(m.tagging.time_as_hider_average)} <span class="text-slate-400">· median ${fmtS(m.tagging.time_as_hider_median)}</span></div>
+        <div class="mt-2 text-sm">${kpi('Average time as hider (seconds)', m.tagging.time_as_hider_average, benchB?.tagging?.time_as_hider_average, benchG?.tagging?.time_as_hider_average, x=> fmtS(x).replace('s',''), 's')}</div>
+      </div>
+    </div>`);
+}
+
+function sectionSpeedDistance(m, benchB, benchG){
+  return section('Speed and distance',
+    `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average movement speed and 90th percentile (peak bursts).">Average speed and P90</div>
+        <div class="text-slate-100 font-semibold">${num(m.speed.average_mps,2)} m/s · ${num(m.speed.p90_mps,2)} m/s</div>
+        <div class="mt-2 text-sm">${kpi('Average speed (m/s)', m.speed.average_mps, benchB?.speed?.average_mps, benchG?.speed?.average_mps, x=> num(x,2))}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while hiding.">Average hider distance</div>
+        <div class="text-slate-100 font-semibold">${num(m.distance.average_hider_m,2)} m</div>
+        <div class="mt-2 text-sm">${kpi('Average hider distance (m)', m.distance.average_hider_m, benchB?.distance?.average_hider_m, benchG?.distance?.average_hider_m, x=> num(x,2))}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while tagging.">Average tagger distance</div>
+        <div class="text-slate-100 font-semibold">${num(m.distance.average_tagger_m,2)} m</div>
+        <div class="mt-2 text-sm">${kpi('Average tagger distance (m)', m.distance.average_tagger_m, benchB?.distance?.average_tagger_m, benchG?.distance?.average_tagger_m, x=> num(x,2))}</div>
+      </div>
+    </div>`);
+}
+
+function sectionRetagAccuracy(m, benchB, benchG){
+  return section('Retagging and accuracy',
+    `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags.">Retag (median)</div>
+        <div class="text-slate-100 font-semibold">${fmtS(m.retag.median_seconds)}</div>
+        <div class="mt-2 text-sm">${kpi('Retag median (seconds)', m.retag.median_seconds, benchB?.retag?.median_seconds, benchG?.retag?.median_seconds, x=> num(x,1))}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average and 90th percentile of retag time; lower is better.">Retag (average and P90)</div>
+        <div class="text-slate-100 font-semibold">${fmtS(m.retag.average_seconds)} / ${fmtS(m.retag.p90_seconds)}</div>
+        <div class="mt-2 text-sm">${kpi('Retag average (seconds)', m.retag.average_seconds, benchB?.retag?.average_seconds, benchG?.retag?.average_seconds, x=> num(x,1))}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Share of successful attempts; higher means better precision.">Accuracy (average)</div>
+        <div class="text-slate-100 font-semibold">${m.accuracy.average!=null? pct(m.accuracy.average):'—'}</div>
+        <div class="mt-2 text-sm">${kpi('Accuracy (percent)', (m.accuracy.average??null)*100, (benchB?.accuracy?.average??null)*100, (benchG?.accuracy?.average??null)*100, x=> isFinite(x)? (Math.round(x*10)/10)+'%':'—', '%')}</div>
+      </div>
+    </div>`);
+}
+
+function sectionQuality(m, benchB, benchG){
+  return section('Quality and consistency',
+    `<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average game quality score.">Average quality</div>
+        <div class="text-slate-100 font-semibold">${num(m.quality.average,1)}</div>
+        <div class="mt-2 text-sm">${kpi('Average quality (score)', m.quality.average, benchB?.quality?.average, benchG?.quality?.average, x=> num(x,1))}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Median game quality score.">Median quality</div>
+        <div class="text-slate-100 font-semibold">${num(m.quality.median,1)}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3 − Q1). Lower means more consistent outcomes.">Quality interquartile range</div>
+        <div class="text-slate-100 font-semibold">${num(m.quality.spread_iqr,1)}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores. Lower means more consistent outcomes.">Quality standard deviation</div>
+        <div class="text-slate-100 font-semibold">${num(m.quality.spread_std,2)}</div>
+      </div>
+    </div>`);
+}
+
+function sectionMaps(maps){
+  if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
+  const rows = maps.map(mp=>{
+    const wr = mp.winrate!=null? Math.round(mp.winrate*1000)/10 : null;
+    return `<tr class="align-top">
+      <td class="py-3 pl-3"><span class="text-slate-100">${prettyMap(mp.map_id)}</span><span class="text-slate-400"> · ${mp.matches} matches</span></td>
+      <td class="py-3 px-3">${wr==null?'—':wr+'%'} ${bar((wr||0)/100,'Win rate')}</td>
+      <td class="py-3 px-3">Average quality ${num(mp.average_quality,1)}</td>
+      <td class="py-3 px-3">Average speed ${num(mp.average_speed_mps,2)} m/s</td>
+      <td class="py-3 px-3">Tag share ${mp.share_as_tagger!=null? Math.round(mp.share_as_tagger*1000)/10+'%':'—'}</td>
+      <td class="py-3 px-3">Retag median ${fmtS(mp.retag_median_seconds)}</td>
+      <td class="py-3 px-3">Hider distance ${num(mp.average_hider_distance_m,2)} m</td>
+      <td class="py-3 pr-3">Tagger distance ${num(mp.average_tagger_distance_m,2)} m</td>
+    </tr>`;
+  }).join('');
+  return section('Per-map breakdown',
+    `<div class="overflow-x-auto rounded border border-slate-800">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-900/60 text-slate-300">
+          <tr>
+            <th class="text-left pl-3 py-2">Map</th>
+            <th class="text-left px-3 py-2">Win rate</th>
+            <th class="text-left px-3 py-2">Quality</th>
+            <th class="text-left px-3 py-2">Speed</th>
+            <th class="text-left px-3 py-2">Tag share</th>
+            <th class="text-left px-3 py-2">Retag</th>
+            <th class="text-left px-3 py-2">Hider distance</th>
+            <th class="text-left pr-3 py-2">Tagger distance</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800">${rows}</tbody>
+      </table>
+    </div>`);
+}
+
+/* Mirror header */
+function mirrorHeader(leftHtml, rightHtml){
+  return `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-right reveal">${leftHtml}</div>
+    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">${rightHtml}</div>
+  </div>`;
+}
+
+/* -------------------- Render pipeline -------------------- */
+function renderAll(contentEl, m, benchB, benchG){
+  contentEl.innerHTML = `
+    <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      ${overviewChips(m)}
+    </div>
+    ${sectionForm(m)}
+    ${sectionTagging(m, benchB, benchG)}
+    ${sectionSpeedDistance(m, benchB, benchG)}
+    ${sectionRetagAccuracy(m, benchB, benchG)}
+    ${sectionQuality(m, benchB, benchG)}
+    ${sectionMaps(m.maps)}
+    ${section('Most faced opponents', '<div class="text-slate-400 text-sm">Coming soon: per-opponent deltas and focus.</div>')}
+  `;
+  mountReveal(contentEl);
+}
+
+/* --------------- Filters & Benchmarks UI --------------- */
+let matchesCache=[], analysesCache=new Map(), currentFilter=null;
+let benchMode='auto'; // 'auto' | 'global' | 'band:1000' etc
+let benchCache={}; // key -> {metrics}
+
+function bandLabel(min){ return `${min}–${min+99}`; }
+function bandOfElo(e){ return Math.floor(Number(e||0)/100)*100; }
+function pickPlayerBandFromMatches(matches, sid){
+  const elos=[];
+  for (const m of matches){
+    const side = (String(m.p1_id)===String(sid)) ? 'p1' : (String(m.p2_id)===String(sid)) ? 'p2' : null;
+    if (!side) continue;
+    const elo = eloOfMatchForSide(m, side);
+    if (isFinite(elo)) elos.push(Number(elo));
+  }
+  const med = median(elos)||1200; return bandOfElo(med);
+}
+
+async function ensureBench(min, max, key){
+  if (benchCache[key]) return benchCache[key];
+  const res = (key==='global') ? await fetchBenchmarkGlobal(2000) : await fetchBenchmark(min, max, 2000);
+  benchCache[key] = res.metrics;
+  return benchCache[key];
+}
+
+function renderBenchBar(bandAuto){
+  const el = document.getElementById('benchBar');
+  const bands = [800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800];
+  const pill = (id,label,active)=>`<button data-bench="${id}" class="px-3 py-1.5 rounded-full text-sm border ${active?'bg-amber-500/20 text-amber-300 border-amber-400/30':'bg-slate-800/60 text-slate-200 border-slate-700 hover:bg-slate-800'}">${label}</button>`;
+  el.innerHTML = `
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-slate-300 text-sm mr-1">Benchmarks:</span>
+      ${pill('auto', `Auto (${bandLabel(bandAuto)})`, benchMode==='auto')}
+      ${pill('global', 'Global (all players)', benchMode==='global')}
+      ${bands.map(b=> pill(`band:${b}`, `Elo ${bandLabel(b)}`, benchMode===`band:${b}`)).join('')}
+      <label class="ml-2 text-xs text-slate-400 flex items-center gap-2" title="Apply the current map filter to benchmarks">
+        <input id="benchUseFilter" type="checkbox" class="accent-amber-500" checked> Apply current map filter
+      </label>
+    </div>`;
+  el.classList.remove('hidden');
+  el.querySelectorAll('button[data-bench]').forEach(b=>{
     b.onclick = ()=>{
-      currentMap = (b.dataset.map===''? null : b.dataset.map);
-      // toggle classes right away
-      tabsEl.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      recompute(); // then recompute numbers
+      benchMode = b.dataset.bench;
+      renderBenchBar(bandAuto); // refresh active state
+      recomputeAndRender();     // rebuild with chosen bench
     };
   });
 }
 
-function renderMapPanel(metrics){
-  const panel = document.getElementById('mapPanel');
-  const wr = metrics.winrate!=null ? Math.round(metrics.winrate*1000)/10 : null;
-  panel.innerHTML = `
-    <div class="card p-4">
-      <div class="label">Win rate</div>
-      <div class="value">${wr==null?'—':wr+'%'}</div>
-      <div class="mt-2">${wr==null?'':setBar(wr)}</div>
-    </div>
-    <div class="card p-4">
-      <div class="label">Average quality</div>
-      <div class="value">${num(metrics.quality.average,1)}</div>
-    </div>
-    <div class="card p-4">
-      <div class="label">Tag time share</div>
-      <div class="value">${metrics.tagging.share_as_tagger!=null? pct(metrics.tagging.share_as_tagger):'—'}</div>
-    </div>`;
-}
-
-function renderChips(metrics){
-  const el=document.getElementById('chips');
-  el.innerHTML = [
-    chip('Matches played', metrics.scopeCount||0, 'Number of matches in current tab.'),
-    chip('Wins', metrics.wins||0, 'Number of wins in current tab.'),
-    chip('Win rate', metrics.winrate!=null? Math.round(metrics.winrate*1000)/10+'%':'—', 'Percentage of wins.'),
-    chip('Average quality', num(metrics.quality.average,1), 'Average quality score.'),
-    chip('Median quality', num(metrics.quality.median,1), 'Median quality score.'),
-    chip('Quality IQR', num(metrics.quality.spread_iqr,1), 'Interquartile range (Q3–Q1). Lower = more consistent.'),
-    chip('Quality std. dev.', num(metrics.quality.spread_std,2), 'Standard deviation of quality.'),
-    chip('Best match quality', num(metrics.quality.best_match,1), 'Best quality score observed.')
-  ].join('');
-  animate();
-}
-
-function compBlocks(metrics, band, glob){
-  const r=[];
-  // Tagging
-  r.push(compSection('Tagging profile',
-    compRow('Share of time as tagger','Share of total time spent as the tagger.',
-      (metrics.tagging.share_as_tagger??null)*100,(band?.tagging?.share_as_tagger??null)*100,(glob?.tagging?.share_as_tagger??null)*100,
-      x=> isFinite(x)? (Math.round(x*10)/10)+'%':'—','%')
-    +
-    compRow('Average time as tagger (s)','Average number of seconds spent as the tagger per match.',
-      metrics.tagging.time_as_tagger_average,band?.tagging?.time_as_tagger_average,glob?.tagging?.time_as_tagger_average,
-      x=> num(x,1),'s')
-    +
-    compRow('Average time as hider (s)','Average number of seconds spent as the hider per match.',
-      metrics.tagging.time_as_hider_average,band?.tagging?.time_as_hider_average,glob?.tagging?.time_as_hider_average,
-      x=> num(x,1),'s')
-  ));
-
-  // Speed & distance
-  r.push(compSection('Speed and distance',
-    compRow('Average speed (m/s)','Average movement speed.',
-      metrics.speed.average_mps,band?.speed?.average_mps,glob?.speed?.average_mps, x=> num(x,2))
-    +
-    compRow('Hider distance (m)','Average distance traveled while hiding.',
-      metrics.distance.average_hider_m,band?.distance?.average_hider_m,glob?.distance?.average_hider_m,x=> num(x,2))
-    +
-    compRow('Tagger distance (m)','Average distance traveled while tagging.',
-      metrics.distance.average_tagger_m,band?.distance?.average_tagger_m,glob?.distance?.average_tagger_m,x=> num(x,2))
-  ));
-
-  // Retag & accuracy
-  r.push(compSection('Retagging and accuracy',
-    compRow('Retag median (s)','Typical time between consecutive tags.',
-      metrics.retag.median_seconds,band?.retag?.median_seconds,glob?.retag?.median_seconds,x=> num(x,1),'s')
-    +
-    compRow('Retag average (s)','Average time between tags.',
-      metrics.retag.average_seconds,band?.retag?.average_seconds,glob?.retag?.average_seconds,x=> num(x,1),'s')
-    +
-    compRow('Accuracy (%)','Share of successful attempts.',
-      (metrics.accuracy.average??null)*100,(band?.accuracy?.average??null)*100,(glob?.accuracy?.average??null)*100,
-      x=> isFinite(x)? (Math.round(x*10)/10):'—','%')
-  ));
-  return r.join('');
-}
-
-async function recompute(){
+/* -------------------- Init & actions -------------------- */
+let playerRow=null, isPremSelf=false;
+async function init(){
+  const head = document.getElementById('head');
   const status = document.getElementById('status');
-  status.textContent='Computing…';
+  const scopeBar = document.getElementById('scopeBar');
+  const content = document.getElementById('content');
 
-  const metrics = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, currentMap);
-  renderMapPanel(metrics);
-  renderChips(metrics);
+  playerRow = await fetchPlayer();
+  if(!playerRow){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
+  isPremSelf = await isPremiumSteam(steamId);
+  head.innerHTML = headerCard(playerRow, isPremSelf); mountReveal(head);
 
-  // Global benchmarks cache (re-fetched but light)
-  const g = await fetchBenchmarkGlobal(1200);
-  benchGlobal = aggregateDataset(g.matches, g.analyses, document.getElementById('benchUseFilter').checked ? currentMap : null);
+  let gate = await updateGateUI();
+  supa.auth.onAuthStateChange(async () => { gate = await updateGateUI(); });
 
-  // Band
-  let bandMetrics=null;
-  const mode = benchMode;
-  if (mode==='auto'){
-    const bmin = playerAutoBand(matchesCache);
-    const pack = await fetchBenchmarkBand(bmin, bmin+100, 1200);
-    bandMetrics = aggregateDataset(pack.matches, pack.analyses, document.getElementById('benchUseFilter').checked ? currentMap : null);
-  } else if (mode.startsWith('band:')){
-    const bmin = Number(mode.split(':')[1]);
-    const pack = await fetchBenchmarkBand(bmin, bmin+100, 1200);
-    bandMetrics = aggregateDataset(pack.matches, pack.analyses, document.getElementById('benchUseFilter').checked ? currentMap : null);
+  // Preload matches + analyses to know maps
+  status.textContent = 'Loading matches…';
+  matchesCache = await fetchMatchesForPlayer(steamId, 800);
+  status.textContent = `Loading analyses… (${matchesCache.length})`;
+  analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
+
+  // Scope pills
+  function renderScopeBar(){
+    const presentMaps = [...new Set(matchesCache.map(m=>m.map_id))].sort((a,b)=>a-b);
+    const pill = (id,label,active)=>`<button data-map="${id??''}" class="px-3 py-1.5 rounded-full text-sm border ${active?'bg-amber-500/20 text-amber-300 border-amber-400/30':'bg-slate-800/60 text-slate-200 border-slate-700 hover:bg-slate-800'}">${label}</button>`;
+    scopeBar.innerHTML = `
+      <div class="flex flex-wrap items-center gap-2">
+        ${pill('', 'All', currentFilter==null)}
+        ${presentMaps.map(mid=> pill(mid, prettyMap(mid), currentFilter!=null && String(currentFilter)===String(mid))).join('')}
+      </div>`;
+    scopeBar.classList.remove('hidden');
+
+    scopeBar.querySelectorAll('button[data-map]').forEach(b=>{
+      b.onclick = ()=>{ currentFilter = (b.dataset.map==='' ? null : b.dataset.map); recomputeAndRender(); };
+    });
+  }
+  renderScopeBar();
+
+  // Benchmarks bar (auto band from player)
+  const autoBand = pickPlayerBandFromMatches(matchesCache, steamId);
+  renderBenchBar(autoBand);
+
+  // Initial render
+  if (gate.premium) {
+    await recomputeAndRender();
+  } else {
+    content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
 
-  document.getElementById('content').innerHTML = compBlocks(metrics, bandMetrics, benchGlobal);
-  animate();
-  status.textContent='';
+  // Recompute button
+  document.getElementById('refreshBtn').onclick = async ()=>{
+    if (!gate.user || !gate.premium) return;
+    // Force refresh caches
+    matchesCache = await fetchMatchesForPlayer(steamId, 800);
+    analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
+    const autoBand2 = pickPlayerBandFromMatches(matchesCache, steamId);
+    renderBenchBar(autoBand2);
+    await recomputeAndRender();
+  };
+
+  // Compare (mirror) — robust resolver
+  async function resolvePlayer(text){
+    if(!text) return null;
+    if(/^\d{5,}$/.test(text)) return text; // SteamID64 typed
+    // Try RPC, else fallback to players ilike
+    try{
+      const { data } = await supa.rpc('search_players',{ q:text, p_limit:1 });
+      if (data && data.length) return data[0].steam_id;
+    }catch{}
+    const { data: d2 } = await supa.from('players').select('steam_id,username').ilike('username', `%${text}%`).limit(1);
+    return (d2&&d2.length)? d2[0].steam_id : null;
+  }
+  document.getElementById('cmpBtn').onclick = async ()=>{
+    if (!gate.user || !gate.premium) return;
+    const cmpStatus = document.getElementById('status');
+    const query = document.getElementById('cmpInput').value.trim();
+    const applyFilter = document.getElementById('cmpUseFilter').checked;
+    const other = await resolvePlayer(query);
+    if(!other){ cmpStatus.textContent='Player not found for comparison.'; return; }
+
+    // A = current player
+    const A = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, applyFilter? currentFilter : null);
+
+    // B = other player fresh fetch
+    cmpStatus.textContent='Loading opponent…';
+    const mB = await fetchMatchesForPlayer(other, 800);
+    const aB = await fetchAnalysesForMatchIds(mB.map(m=>m.id));
+    const B = aggregateMetricsForPlayer(other, mB, aB, applyFilter? currentFilter : null);
+    cmpStatus.textContent='';
+
+    const premSet = new Set();
+    if (await isPremiumSteam(steamId)) premSet.add(String(steamId));
+    if (await isPremiumSteam(other))    premSet.add(String(other));
+    const { data: pb } = await supa.from('players').select('username').eq('steam_id', other).maybeSingle();
+    const nameB = (pb?.username || other);
+    const nameA = (playerRow.username || steamId);
+
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+    const mirrorBox = document.createElement('div'); content.appendChild(mirrorBox);
+    mirrorBox.innerHTML = mirrorHeader(
+      `<div class="text-lg font-semibold">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
+       <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b></div>
+       <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b></div>
+       <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b></div>`,
+      `<div class="text-lg font-semibold">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
+       <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b></div>
+       <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b></div>
+       <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b></div>`
+    );
+    mountReveal(mirrorBox);
+
+    // Detailed side-by-side (reuse renderAll twice)
+    const cols = document.createElement('div'); cols.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const left  = document.createElement('div');
+    const right = document.createElement('div');
+
+    // Build benchmarks (same as current settings)
+    const { benchBand, benchGlobal } = await getCurrentBenchmetrics();
+    renderAll(left,  A, benchBand, benchGlobal);
+    renderAll(right, B, benchBand, benchGlobal);
+
+    cols.appendChild(left); cols.appendChild(right);
+    content.appendChild(cols);
+    mountReveal(content);
+  };
 }
 
-/* ---------- Compare (mirror) ---------- */
-async function resolvePlayer(q){
-  if(!q) return null;
-  if(/^\d{5,}$/.test(q)) return q;
-  try{ const { data } = await supa.rpc('search_players',{ q, p_limit:1 }); if(data?.length) return data[0].steam_id; }catch{}
-  const { data:d2 } = await supa.from('players').select('steam_id,username').ilike('username', `%${q}%`).limit(1);
-  return d2?.[0]?.steam_id || null;
+/* Compute & render once with current filter + benchmark mode */
+async function getCurrentBenchmetrics(){
+  // Decide band:
+  let bandMin=null, bandMax=null, benchKey='global';
+  if (benchMode==='auto'){
+    const autoBand = pickPlayerBandFromMatches(matchesCache, steamId);
+    bandMin = autoBand; bandMax = autoBand+100; benchKey = `band:${bandMin}`;
+  } else if (benchMode==='global'){
+    // leave null
+  } else if (benchMode.startsWith('band:')){
+    bandMin = Number(benchMode.split(':')[1]); bandMax = bandMin+100; benchKey = benchMode;
+  }
+  const useFilter = document.getElementById('benchUseFilter')?.checked;
+
+  // Ensure caches
+  const benchBand = (bandMin!=null) ? await ensureBench(bandMin, bandMax, benchKey) : null;
+  const benchGlobal = await ensureBench(0, 10000, 'global');
+
+  // If map filter is ON, recompute with currentFilter
+  function filterBenchToMap(metrics){
+    if (!metrics) return metrics;
+    // we cannot re-slice here without raw matches; but our fetchBenchmark already applied currentFilter at compute time
+    return metrics;
+  }
+  return {
+    benchBand: useFilter ? filterBenchToMap(benchBand) : benchBand,
+    benchGlobal: useFilter ? filterBenchToMap(benchGlobal) : benchGlobal
+  };
 }
-document.getElementById('cmpBtn').onclick = async ()=>{
-  const user = await getUser(); const prem = user && await isPremiumUser(user);
-  if(!prem) return;
 
-  const query = document.getElementById('cmpInput').value.trim();
-  const applyFilter = document.getElementById('cmpUseFilter').checked;
-  const other = await resolvePlayer(query); if(!other) { document.getElementById('status').textContent='Player not found'; return; }
+async function recomputeAndRender(){
+  const content = document.getElementById('content');
+  const status = document.getElementById('status');
+  status.textContent = 'Computing…';
 
-  const mA = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, applyFilter? currentMap : null);
+  const metrics = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, currentFilter);
+  const { benchBand, benchGlobal } = await getCurrentBenchmetrics();
 
-  const mBlist = await fetchMatchesForPlayer(other, 800);
-  const aBmap  = await fetchAnalysesFor(mBlist.map(m=>m.id));
-  const mB = aggregateMetricsForPlayer(other, mBlist, aBmap, applyFilter? currentMap : null);
-
-  const { data:pb } = await supa.from('players').select('username').eq('steam_id', other).maybeSingle();
-  const nameB = pb?.username || other;
-  const premA = await isPremiumSteam(steamId);
-  const premB = await isPremiumSteam(other);
-
-  const mirror = document.createElement('section');
-  mirror.className='mt-4 card p-4 fade';
-  mirror.innerHTML = `
-    <h3 class="text-lg font-semibold mb-2">Mirror view</h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div class="chip"><div class="font-semibold">${labelWithPremium(playerRow?.username||steamId, premA)}</div>
-        <div class="text-slate-300 text-sm mt-1">Win rate <b>${mA.winrate!=null? Math.round(mA.winrate*1000)/10+'%':'—'}</b> · Avg quality <b>${num(mA.quality.average,1)}</b></div>
-      </div>
-      <div class="chip"><div class="font-semibold">${labelWithPremium(nameB, premB)}</div>
-        <div class="text-slate-300 text-sm mt-1">Win rate <b>${mB.winrate!=null? Math.round(mB.winrate*1000)/10+'%':'—'}</b> · Avg quality <b>${num(mB.quality.average,1)}</b></div>
-      </div>
-    </div>`;
-  document.getElementById('content').prepend(mirror);
-  animate();
-};
-
-/* ---------- Init ---------- */
-let benchMode = 'auto';
-async function init(){
-  playerRow = await fetchPlayer();
-  await renderHeader();
-
-  const gate = await updateGateUI();
-  supa.auth.onAuthStateChange(updateGateUI);
-
-  matchesCache = await fetchMatchesForPlayer(steamId, 800);
-  analysesCache = await fetchAnalysesFor(matchesCache.map(m=>m.id));
-
-  renderMapTabs();
-  await recompute();
-
-  document.getElementById('benchSelect').addEventListener('change', e=>{
-    benchMode = e.target.value; recompute();
-  });
-  document.getElementById('benchUseFilter').addEventListener('change', ()=>recompute());
+  renderAll(content, metrics, benchBand, benchGlobal);
+  status.textContent = '';
+  mountReveal(content);
 }
+
+/* Run */
 init();
 </script>
 
