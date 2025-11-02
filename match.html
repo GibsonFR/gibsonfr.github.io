@@ -6,6 +6,10 @@
   <title>Match</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.158.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/OBJLoader.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-6xl mx-auto p-4">
@@ -52,10 +56,13 @@
           </div>
         </div>
 
-        <!-- Replayer -->
-        <div id="replayerBlock" class="p-4 rounded bg-slate-900 border border-slate-800 hidden">
+        <!-- Replayer tabs -->
+        <div class="p-4 rounded bg-slate-900 border border-slate-800">
           <div class="flex items-center justify-between">
-            <h3 class="text-base font-semibold">Replayer (beta)</h3>
+            <div class="flex space-x-2">
+              <button id="tab3d" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">3D</button>
+              <button id="tab2d" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">2D</button>
+            </div>
             <div class="space-x-2">
               <button id="rpPlay" class="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500">Play</button>
               <select id="rpSpeed" class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
@@ -64,7 +71,8 @@
               </select>
             </div>
           </div>
-          <canvas id="replayer" width="1200" height="600" class="w-full mt-3 block bg-slate-950 rounded border border-slate-800"></canvas>
+          <div id="replayer3dBlock" class="mt-3 w-full h-[480px] rounded border border-slate-800 hidden"></div>
+          <canvas id="replayer2d" width="1200" height="480" class="w-full mt-3 block bg-slate-950 rounded border border-slate-800 hidden"></canvas>
           <input id="rpSlider" type="range" min="0" max="1000" value="0" class="w-full mt-3">
         </div>
 
@@ -88,6 +96,10 @@ const matchIdValue = isNumericId ? Number(idParam) : idParam;
 
 const el = s => document.querySelector(s);
 const esc = s => (s||'').replace(/[&<>\"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+
+function pct(x, dp=0){ if(x==null) return '—'; return (x*100).toFixed(dp)+'%'; }
+function m2(x, dp=2){ if(x==null) return '—'; return x.toFixed(dp); }
+function sec2(x, dp=2){ if(x==null) return '—'; return x.toFixed(dp)+' s'; }
 
 async function fetchMatchById() {
   const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
@@ -119,21 +131,21 @@ function showNotFound() {
 }
 
 function renderPlayerCards(sel, stats){
-  const keys = [
-    ['possession_share','Tag Possession'],
-    ['avg_distance_overall','Avg Dist (all)'],
-    ['avg_distance_as_tagger','Avg Dist (tag)'],
-    ['avg_distance_as_hider','Avg Dist (hide)'],
-    ['retag_median_seconds','Retag Median'],
-    ['retag_initial_seconds','Retag Opening'],
-    ['retag_consistency_cv_score','Retag Consistency']
+  const rows = [
+    ['possession_share','Tag Possession', pct],
+    ['avg_distance_overall','Avg Dist (all) (m)', m2],
+    ['avg_distance_as_tagger','Avg Dist (tag) (m)', m2],
+    ['avg_distance_as_hider','Avg Dist (hide) (m)', m2],
+    ['retag_median_seconds','Retag Median', sec2],
+    ['retag_initial_seconds','Retag Opening', sec2],
+    ['retag_consistency_cv_score','Retag Consistency', pct]
   ];
   const c = el(sel); c.innerHTML='';
-  for(const [k,lab] of keys){
+  for(const [k,lab,fmt] of rows){
     const v = stats[k];
     c.innerHTML += `<div class="p-2 rounded border border-slate-800 bg-slate-950">
       <div class="text-slate-400">${lab}</div>
-      <div class="font-semibold">${v==null?'—':v}</div>
+      <div class="font-semibold">${fmt(v)}</div>
     </div>`;
   }
 }
@@ -192,43 +204,199 @@ function renderTimeline(tl){
   });
 }
 
-let RP = { dt:0.05, p1:[], p2:[], t:0, playing:false, speed:1 };
+/* ======================
+   Replayer core state
+====================== */
+let RP = { dt:0.05, p1:[], p2:[], t:0, playing:false, speed:1, bounds:null, km:[], mapBundle:null };
+function setFrames(fr){ 
+  RP.dt=fr.dt||0.05; RP.p1=fr.p1||[]; RP.p2=fr.p2||[]; RP.t=0;
+  // compute bounds for 2D fitting
+  const pts = [...RP.p1, ...RP.p2];
+  if(pts.length){
+    let minx=pts[0].x, maxx=pts[0].x, miny=pts[0].y, maxy=pts[0].y;
+    pts.forEach(p=>{ minx=Math.min(minx,p.x); maxx=Math.max(maxx,p.x); miny=Math.min(miny,p.y); maxy=Math.max(maxy,p.y); });
+    RP.bounds = {minx,maxx,miny,maxy};
+  }else{
+    RP.bounds = {minx:-10,maxx:10,miny:-10,maxy:10};
+  }
+}
+
 function jumpTo(t){
   if(!RP.p1.length) return;
   RP.t = Math.max(0, Math.min(t, (RP.p1.length-1)*RP.dt));
   el('#rpSlider').value = Math.round(1000*RP.t/(RP.p1.length*RP.dt));
-  drawFrame();
+  drawFrame2D(); drawFrame3D();
 }
-function drawFrame(){
-  const c = el('#replayer'), g = c.getContext('2d'); g.clearRect(0,0,c.width,c.height);
-  const idx = Math.max(0, Math.min(Math.floor(RP.t/RP.dt), RP.p1.length-1));
-  const A = RP.p1[idx], B = RP.p2[idx]; if(!A||!B) return;
-  const S = 6; const cx=c.width/2, cy=c.height/2;
-  const tx=(x)=> cx + x*S, ty=(y)=> cy - y*S;
-  g.beginPath(); g.arc(tx(A.x), ty(A.y), 5, 0, Math.PI*2); g.stroke();
-  g.beginPath(); g.arc(tx(B.x), ty(B.y), 5, 0, Math.PI*2); g.stroke();
-  const vx=(r)=> Math.cos(r*Math.PI/180)*10, vy=(r)=> Math.sin(r*Math.PI/180)*10;
-  g.beginPath(); g.moveTo(tx(A.x),ty(A.y)); g.lineTo(tx(A.x)+vx(A.rot),ty(A.y)-vy(A.rot)); g.stroke();
-  g.beginPath(); g.moveTo(tx(B.x),ty(B.y)); g.lineTo(tx(B.x)+vx(B.rot),ty(B.y)-vy(B.rot)); g.stroke();
-}
+
 function tick(){
   if(!RP.playing) return;
   RP.t += RP.dt * RP.speed;
   if(RP.t >= (RP.p1.length-1)*RP.dt) RP.playing=false;
-  drawFrame();
+  drawFrame2D(); drawFrame3D();
   el('#rpSlider').value = Math.round(1000*RP.t/(RP.p1.length*RP.dt));
   if(RP.playing) requestAnimationFrame(tick);
 }
-function initReplayer(framesUrl, keyMoments){
-  if(!framesUrl) { el('#replayerBlock').classList.add('hidden'); return; }
-  el('#replayerBlock').classList.remove('hidden');
-  fetch(framesUrl).then(r=>r.json()).then(fr=>{
-    RP = { dt:fr.dt||0.05, p1:fr.p1||[], p2:fr.p2||[], t:0, playing:false, speed:1, km:keyMoments||[] };
-    drawFrame();
-    el('#rpPlay').onclick = () => { RP.playing = !RP.playing; if(RP.playing) tick(); };
-    el('#rpSpeed').onchange = (e)=> RP.speed = parseFloat(e.target.value);
-    el('#rpSlider').oninput = (e)=> jumpTo((parseInt(e.target.value)/1000) * (RP.p1.length*RP.dt));
-  });
+
+/* ========== 2D fallback ========== */
+function drawFrame2D(){
+  const c = el('#replayer2d'); if(c.classList.contains('hidden')) return;
+  const g = c.getContext('2d'); g.clearRect(0,0,c.width,c.height);
+  if(!RP.p1.length) return;
+  const idx = Math.max(0, Math.min(Math.floor(RP.t/RP.dt), RP.p1.length-1));
+  const A = RP.p1[idx], B = RP.p2[idx]; if(!A||!B) return;
+  const pad = 30;
+  const dx = RP.bounds.maxx - RP.bounds.minx || 1;
+  const dy = RP.bounds.maxy - RP.bounds.miny || 1;
+  const scale = Math.min((c.width-2*pad)/dx, (c.height-2*pad)/dy);
+  const cx = (x)=> ((x - RP.bounds.minx)*scale)+pad;
+  const cy = (y)=> (c.height - ((y - RP.bounds.miny)*scale+pad));
+  g.beginPath(); g.arc(cx(A.x), cy(A.y), 6, 0, Math.PI*2); g.stroke();
+  g.beginPath(); g.arc(cx(B.x), cy(B.y), 6, 0, Math.PI*2); g.stroke();
+  const vx=(r)=> Math.cos(r*Math.PI/180)*18, vy=(r)=> Math.sin(r*Math.PI/180)*18;
+  g.beginPath(); g.moveTo(cx(A.x),cy(A.y)); g.lineTo(cx(A.x)+vx(A.rot),cy(A.y)-vy(A.rot)); g.stroke();
+  g.beginPath(); g.moveTo(cx(B.x),cy(B.y)); g.lineTo(cx(B.x)+vx(B.rot),cy(B.y)-vy(B.rot)); g.stroke();
+}
+
+/* ========== 3D replayer ========== */
+let THREE_READY = !!window.THREE;
+let renderer, scene, camera, controls, p1Mesh, p2Mesh;
+function init3D(container){
+  if(!THREE_READY) return false;
+  const w = container.clientWidth, h = container.clientHeight;
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(w,h); renderer.setPixelRatio(window.devicePixelRatio||1);
+  container.innerHTML=''; container.appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1220);
+  camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 5000);
+  camera.position.set(20, 30, 20);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(0,0,0);
+  controls.enableDamping = true;
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(20,40,20); scene.add(dir);
+
+  const grid = new THREE.GridHelper(200, 40, 0x334155, 0x1f2937); // (size, divisions)
+  scene.add(grid);
+
+  const g = new THREE.SphereGeometry(0.8, 16, 16);
+  p1Mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0x93c5fd}));
+  p2Mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0xfca5a5}));
+  scene.add(p1Mesh); scene.add(p2Mesh);
+
+  function animate(){ controls.update(); renderer.render(scene, camera); requestAnimationFrame(animate); }
+  animate();
+  return true;
+}
+
+async function loadMapBundleIfAny(url){
+  if(!url) return false;
+  try{
+    const res = await fetch(url); if(!res.ok) return false;
+    const bundle = await res.json();
+    RP.mapBundle = bundle;
+    // load meshes
+    const gltfLoader = new THREE.GLTFLoader();
+    const objLoader  = new THREE.OBJLoader();
+    const root = new THREE.Group(); scene.add(root);
+
+    const base = url.replace(/bundle\\.json$/,'');
+    const toURL = (src)=> src.startsWith('http') ? src : (base + src);
+    const toRad = (d)=> (d||0)*Math.PI/180;
+
+    async function addMesh(m){
+      return new Promise(async(resolve)=>{
+        const src = toURL(m.src);
+        try{
+          if(src.toLowerCase().endsWith('.glb')||src.toLowerCase().endsWith('.gltf')){
+            gltfLoader.load(src, gltf=>{
+              const o = gltf.scene;
+              o.position.set((m.position?.[0]||0),(m.position?.[1]||0),(m.position?.[2]||0));
+              o.rotation.set(toRad(m.rotation?.[0]||0),toRad(m.rotation?.[1]||0),toRad(m.rotation?.[2]||0));
+              o.scale.set((m.scale?.[0]||1),(m.scale?.[1]||1),(m.scale?.[2]||1));
+              root.add(o); resolve(true);
+            }, undefined, ()=>resolve(false));
+          } else if(src.toLowerCase().endsWith('.obj')){
+            objLoader.load(src, o=>{
+              o.position.set((m.position?.[0]||0),(m.position?.[1]||0),(m.position?.[2]||0));
+              o.rotation.set(toRad(m.rotation?.[0]||0),toRad(m.rotation?.[1]||0),toRad(m.rotation?.[2]||0));
+              o.scale.set((m.scale?.[0]||1),(m.scale?.[1]||1),(m.scale?.[2]||1));
+              root.add(o); resolve(true);
+            }, undefined, ()=>resolve(false));
+          } else {
+            resolve(false);
+          }
+        }catch{ resolve(false); }
+      });
+    }
+
+    if(Array.isArray(bundle.meshes)){
+      for(const m of bundle.meshes){ /* load sequentially to avoid spikes */ await addMesh(m); }
+    }
+    // Fit camera around players bounds if available
+    if(RP.bounds){
+      const cx = (RP.bounds.minx + RP.bounds.maxx)/2;
+      const cz = (RP.bounds.miny + RP.bounds.maxy)/2;
+      controls.target.set(cx,0,cz);
+      camera.position.set(cx+20, 30, cz+20);
+    }
+    return true;
+  }catch{ return false; }
+}
+
+function drawFrame3D(){
+  const container = el('#replayer3dBlock');
+  if(container.classList.contains('hidden')) return;
+  if(!p1Mesh || !p2Mesh) return;
+  if(!RP.p1.length) return;
+
+  const idx = Math.max(0, Math.min(Math.floor(RP.t/RP.dt), RP.p1.length-1));
+  const A = RP.p1[idx], B = RP.p2[idx]; if(!A||!B) return;
+
+  // Map game axes X,Z to Three.js X,Z (Y up)
+  p1Mesh.position.set(A.x, 0.8, A.y);
+  p2Mesh.position.set(B.x, 0.8, B.y);
+
+  // Orient facing yaw around Y axis
+  p1Mesh.rotation.y = (A.rot||0) * Math.PI/180;
+  p2Mesh.rotation.y = (B.rot||0) * Math.PI/180;
+}
+
+/* Tabs handling & controls */
+function show2D(){ el('#replayer2d').classList.remove('hidden'); el('#replayer3dBlock').classList.add('hidden'); drawFrame2D(); }
+function show3D(){ el('#replayer3dBlock').classList.remove('hidden'); el('#replayer2d').classList.add('hidden'); drawFrame3D(); }
+
+async function initReplayer(framesUrl, keyMoments, mapId, mapBundleUrl){
+  el('#tab2d').onclick = ()=> show2D();
+  el('#tab3d').onclick = ()=> show3D();
+  el('#rpPlay').onclick = () => { RP.playing = !RP.playing; if(RP.playing) tick(); };
+  el('#rpSpeed').onchange = (e)=> RP.speed = parseFloat(e.target.value);
+  el('#rpSlider').oninput = (e)=> jumpTo((parseInt(e.target.value)/1000) * (RP.p1.length*RP.dt));
+
+  // load frames
+  let fr=null;
+  if(framesUrl){
+    try{ const r = await fetch(framesUrl); fr = await r.json(); }catch{}
+  }
+  if(!fr){ el('#replayer2d').classList.add('hidden'); el('#replayer3dBlock').classList.add('hidden'); return; }
+  setFrames(fr); RP.km = keyMoments||[];
+
+  // Init 3D
+  const container = el('#replayer3dBlock');
+  const ok3d = init3D(container);
+  if(ok3d){
+    // map bundle: prefer explicit URL from analysis, else guess standard location
+    const guess = mapId ? `${SUPA_URL}/storage/v1/object/public/maps/${mapId}/bundle.json` : null;
+    const chosen = mapBundleUrl || guess;
+    await loadMapBundleIfAny(chosen);
+    show3D();
+  } else {
+    show2D();
+  }
+  drawFrame2D(); drawFrame3D();
 }
 
 async function loadAnalysis(matchId) {
@@ -258,7 +426,9 @@ async function loadAnalysis(matchId) {
   } else {
     el('#progressionBlock').classList.add('hidden');
   }
-  initReplayer(data.frames_url || null, data.key_moments || []);
+
+  const mapId = s.map_id || null;
+  await initReplayer(data.frames_url || null, data.key_moments || [], mapId, data.map_bundle || null);
 
   const imgs = data.images || {};
   const keys = Object.keys(imgs);
