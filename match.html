@@ -29,14 +29,22 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
-            <div id="p1q" class="text-2xl font-bold">—</div>
+            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 — Quality</div>
+            <div class="flex items-end gap-3">
+              <div id="p1q" class="text-3xl font-extrabold">—</div>
+              <div class="text-xs text-slate-400">(overall)</div>
+            </div>
+            <div id="p1sample" class="mt-1 text-xs text-amber-300"></div>
             <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
           </div>
 
           <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
-            <div id="p2q" class="text-2xl font-bold">—</div>
+            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 — Quality</div>
+            <div class="flex items-end gap-3">
+              <div id="p2q" class="text-3xl font-extrabold">—</div>
+              <div class="text-xs text-slate-400">(overall)</div>
+            </div>
+            <div id="p2sample" class="mt-1 text-xs text-amber-300"></div>
             <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
           </div>
         </div>
@@ -56,11 +64,6 @@ const matchIdValue = isNumericId ? Number(idParam) : idParam;
 const el = s => document.querySelector(s);
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-async function fetchMatchById() {
-  const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
-  return data || null;
-}
-
 function card(label, value, suffix='') {
   return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
     <div class="text-slate-400">${label}</div>
@@ -68,16 +71,45 @@ function card(label, value, suffix='') {
   </div>`;
 }
 
-function renderPlayerCards(rootSel, s) {
+function pct(x){
+  if (x==null || isNaN(x)) return '—';
+  return (Math.round(x*1000)/10)+'%';
+}
+function fnum(x, digits=3){
+  if (x==null || isNaN(x)) return '—';
+  const m = Math.pow(10, digits);
+  return Math.round(x*m)/m;
+}
+
+async function fetchMatchById() {
+  const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
+  return data || null;
+}
+
+function renderPlayerCards(rootSel, s, sampleSel){
   const root = el(rootSel);
-  const pct = (x)=> (x==null?'—':Math.round(x*1000)/10+'%');
+  const lowTag  = s.low_sample_tagger ? '· tagger sample low' : '';
+  const lowHid  = s.low_sample_hider  ? '· hider sample low'  : '';
+  el(sampleSel).textContent = [lowTag, lowHid].filter(Boolean).join(' ');
+
   root.innerHTML = [
-    card("Possession", pct(s.possession_share)),
-    card("Accuracy",  s.accuracy!=null?Math.round(s.accuracy*1000)/10:'—', "%"),
-    card("Avg dist (hider)", s.avg_distance_as_hider??'—', " m"),
-    card("Avg dist (tagger)", s.avg_distance_as_tagger??'—', " m"),
-    card("Retag avg", s.retag_avg_seconds??'—', " s"),
-    card("Avg speed", s.avg_speed_ms??'—', " m/s"),
+    // Qualités par rôle
+    card("Quality (tagger)", s.quality_tagger ?? '—'),
+    card("Quality (hider)",  s.quality_hider  ?? '—'),
+    // Temps par rôle
+    card("Time as tagger", pct(s.time_as_tagger_share)),
+    card("Seconds — tagger", s.seconds_as_tagger ?? '—', " s"),
+    card("Seconds — hider",  s.seconds_as_hider  ?? '—', " s"),
+    // Distances / vitesse
+    card("Avg dist (hider)", s.avg_distance_as_hider ?? '—', " m"),
+    card("Avg dist (tagger)", s.avg_distance_as_tagger ?? '—', " m"),
+    card("Avg speed", s.avg_speed_ms ?? '—', " m/s"),
+    // Retag
+    card("Retag median", s.retag_median_seconds ?? '—', " s"),
+    card("Retag initial", s.retag_initial_seconds ?? '—', " s"),
+    card("Retag avg", s.retag_avg_seconds ?? '—', " s"),
+    // Items
+    card("Accuracy", (s.accuracy!=null? Math.round(s.accuracy*1000)/10 : '—'), (s.accuracy!=null? '%':'')),
   ].join("");
 }
 
@@ -123,8 +155,9 @@ async function loadAnalysis(matchId) {
   el('#ver').textContent = data.version || '—';
   el('#p1q').textContent = data.p1_quality ?? '—';
   el('#p2q').textContent = data.p2_quality ?? '—';
-  renderPlayerCards('#p1cards', data.p1_stats || {});
-  renderPlayerCards('#p2cards', data.p2_stats || {});
+
+  renderPlayerCards('#p1cards', data.p1_stats || {}, '#p1sample');
+  renderPlayerCards('#p2cards', data.p2_stats || {}, '#p2sample');
 }
 
 async function queueAnalysis(matchId, replayUrl) {
