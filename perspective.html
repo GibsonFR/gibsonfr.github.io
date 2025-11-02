@@ -7,8 +7,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    .reveal{opacity:0;transform:translateY(8px);transition:opacity .4s ease,transform .4s ease}
-    .reveal.show{opacity:1;transform:translateY(0)}
+    /* Old look vibes + tidy alignment */
+    .pill{padding:.35rem .75rem;border:1px solid #334155;background:#0b1220;border-radius:999px;color:#cbd5e1}
+    .pill.active{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35);color:#fbbf24}
+    .card{background:#0b1220;border:1px solid #334155;border-radius:1rem}
+    .chip{background:#0b1220;border:1px solid #334155;border-radius:.8rem;padding:.6rem .75rem}
+    .grid-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem}
+    .kpi .label{font-size:.75rem;color:#94a3b8}
+    .kpi .value{font-weight:800;font-size:1.25rem}
+    .fade{opacity:0;transform:translateY(6px);transition:opacity .35s ease,transform .35s ease}
+    .fade.show{opacity:1;transform:translateY(0)}
     .tip{position:relative;cursor:help}
     .tip:after{
       content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%) translateY(8px);
@@ -17,17 +25,15 @@
       opacity:0;transition:opacity .15s ease,transform .15s ease;z-index:30
     }
     .tip:hover:after{opacity:1;transform:translateX(-50%) translateY(6px)}
-    .comp-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:.5rem;align-items:center}
-    .comp-grid .head{color:#9ca3af;font-size:.8rem}
-    .cell{padding:.45rem .6rem;border-radius:.5rem;border:1px solid #334155;background:#0b1220}
+    /* Comparison table with clean alignment */
+    .cmp{display:grid;grid-template-columns:minmax(180px,1fr) 120px 120px 120px;gap:.5rem}
+    .cmp .head{color:#94a3b8;font-size:.8rem;white-space:nowrap}
+    .cell{padding:.5rem .6rem;border-radius:.5rem;border:1px solid #334155;background:#0b1220;text-align:center;white-space:nowrap}
+    .rowlabel{display:flex;align-items:center;gap:.4rem;padding-left:.25rem}
     .delta-up{color:#34d399}.delta-down{color:#fb7185}
-    .pill{padding:.35rem .7rem;border-radius:999px;border:1px solid #334155;background:#0b1220}
-    .pill.active{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.35);color:#fbbf24}
+    .crown svg{height:16px;width:16px;display:inline-block;vertical-align:-2px;color:#fcd34d}
     .bar {height:8px;border-radius:999px;background:linear-gradient(90deg,#fbbf24,#fde68a)}
     .bar-wrap{height:8px;border-radius:999px;background:#0b1220;border:1px solid #334155;overflow:hidden}
-    .big-kpi{background:#0b1220;border:1px solid #334155;border-radius:1rem;padding:1rem}
-    .big-val{font-weight:800;font-size:1.6rem}
-    .crown svg{height:16px;width:16px;display:inline-block;vertical-align:-2px;color:#fcd34d}
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100">
@@ -36,14 +42,15 @@
   </div>
 
   <main class="max-w-6xl mx-auto p-4">
-    <header id="head" class="reveal"></header>
+    <!-- header -->
+    <header id="head" class="fade"></header>
 
-    <!-- Controls -->
+    <!-- top controls, styled like the older page -->
     <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <div class="card p-3">
         <div class="flex flex-wrap items-center gap-2">
-          <label class="text-slate-300 text-sm">Comparison band</label>
-          <select id="benchSelect" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+          <span class="text-sm text-slate-300">Benchmarks</span>
+          <select id="benchSelect" class="pill bg-slate-900">
             <option value="auto">Auto (by player)</option>
             <option value="global">Global (all players)</option>
             <option value="band:800">Elo 800–899</option>
@@ -58,19 +65,19 @@
             <option value="band:1700">Elo 1700–1799</option>
             <option value="band:1800">Elo 1800–1899</option>
           </select>
-          <label class="ml-2 text-xs text-slate-400 flex items-center gap-2">
+          <label class="ml-1 text-xs text-slate-400 flex items-center gap-2">
             <input id="benchUseFilter" type="checkbox" class="accent-amber-500" checked>
-            Apply current map to benchmarks
+            Apply current map filter
           </label>
           <span id="status" class="text-xs text-slate-400 ml-auto"></span>
         </div>
       </div>
-      <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <div class="card p-3">
         <form id="cmpForm" onsubmit="return false" class="flex flex-wrap items-center gap-2">
-          <label class="text-slate-300 text-sm">Compare vs</label>
-          <input id="cmpInput" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" placeholder="username or SteamID64…">
-          <button id="cmpBtn" class="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/30 disabled:opacity-50">Compare (mirror)</button>
-          <label class="ml-2 text-xs text-slate-400 flex items-center gap-2">
+          <span class="text-sm text-slate-300">Compare vs</span>
+          <input id="cmpInput" class="pill bg-slate-900 flex-1" placeholder="username or SteamID64…">
+          <button id="cmpBtn" class="pill bg-amber-600/70 border-amber-500/40 hover:bg-amber-500/80">Compare (mirror)</button>
+          <label class="ml-1 text-xs text-slate-400 flex items-center gap-2">
             <input id="cmpUseFilter" type="checkbox" class="accent-amber-500" checked>
             Apply current map
           </label>
@@ -78,19 +85,19 @@
       </div>
     </div>
 
-    <!-- Premium / auth gate -->
-    <div id="gateBanner" class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 hidden"></div>
+    <!-- premium/auth gate -->
+    <div id="gateBanner" class="mt-4 card p-4 hidden"></div>
 
-    <!-- Map tabs -->
-    <section class="mt-4 p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
-      <div class="flex flex-wrap items-center gap-2" id="mapTabs"></div>
+    <!-- map tabs like before -->
+    <section class="mt-4 card p-3">
+      <div id="mapTabs" class="flex flex-wrap items-center gap-2"></div>
       <div id="mapPanel" class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
     </section>
 
-    <!-- Overview chips -->
+    <!-- overview pills -->
     <section id="chips" class="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></section>
 
-    <!-- Sections -->
+    <!-- sections -->
     <div id="content" class="mt-6"></div>
   </main>
 
@@ -113,13 +120,10 @@ const fmtS = s => (s==null||isNaN(s)?'—':`${num(s,1)}s`);
 function median(a){ a=(a||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return null; const m=a.length/2; return a.length%2? a[(m|0)] : (a[m-1]+a[m])/2; }
 function quantile(arr,q){ const a=(arr||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return null; const pos=(a.length-1)*q, lo=Math.floor(pos), hi=Math.ceil(pos); return lo===hi ? a[lo] : a[lo]+(a[hi]-a[lo])*(pos-lo); }
 function p90(a){ return quantile(a,.90); }
-function p10(a){ return quantile(a,.10); }
 function sum(a){ return (a||[]).reduce((t,x)=>t+(Number.isFinite(x)?x:0),0); }
 function avg(a){ a=(a||[]).filter(Number.isFinite); return a.length? sum(a)/a.length : null; }
 function std(a){ a=(a||[]).filter(Number.isFinite); if(!a.length) return null; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); }
-function lastN(a,n){ return (a||[]).slice(Math.max(0,a.length-n)); }
-
-function animateReveal(){ document.querySelectorAll('.reveal').forEach(x=>x.classList.add('show')); }
+function animate(){ document.querySelectorAll('.fade').forEach(x=>x.classList.add('show')); }
 
 /* Premium cosmetics */
 const crownSVG = `<span class="crown" title="Premium member" aria-label="Premium member">
@@ -155,7 +159,7 @@ async function updateGateUI(){
       <div>
         <div class="font-semibold mb-1">Sign in required</div>
         <div class="text-slate-300 text-sm">Perspective is a <b>Premium</b> feature. Sign in with Discord to continue.</div>
-        <div class="mt-2"><button class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm" id="signinBtn">Sign in with Discord</button></div>
+        <div class="mt-2"><button class="pill bg-indigo-600/70 hover:bg-indigo-500 text-white" id="signinBtn">Sign in with Discord</button></div>
       </div>
     </div>`;
     cmpBtn.disabled = true;
@@ -170,9 +174,7 @@ async function updateGateUI(){
       <div>
         <div class="font-semibold mb-1">Premium only</div>
         <div class="text-slate-300 text-sm">Perspective is available for <b>Premium members</b> only. Upgrade to unlock unlimited analyses and Perspective.</div>
-        <div class="mt-2 flex items-center gap-2">
-          <a href="account.html" class="px-3 py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-sm">Go Premium (€2)</a>
-        </div>
+        <div class="mt-2"><a href="account.html" class="pill bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30">Go Premium (€2)</a></div>
       </div>
     </div>`;
     cmpBtn.disabled = true;
@@ -205,7 +207,7 @@ function aggregateMetricsForPlayer(sid, matches, analyses, mapId=null){
 
   for(const m of scope){
     const side = (String(m.p1_id)===String(sid)) ? 'p1' : 'p2';
-    const win  = (m.winner===1||m.winner==='1') ? (side==='p1') : (m.winner===2||m.winner==='2') ? (side==='p2') : null;
+    const win  = (m.winner==1) ? (side==='p1') : (m.winner==2) ? (side==='p2') : null;
     if (win!=null) results.push(!!win);
     const elo = (side==='p1') ? (m.p1_elo_after ?? m.p1_elo_before) : (m.p2_elo_after ?? m.p2_elo_before);
     if (elo!=null) eloSeries.push(Number(elo));
@@ -256,7 +258,6 @@ function aggregateMetricsForPlayer(sid, matches, analyses, mapId=null){
   };
   return metrics;
 }
-
 function aggregateDataset(matches, analyses, mapId=null){
   const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
   const qual=[], speeds=[], distH=[], distT=[], tagShare=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
@@ -302,7 +303,6 @@ function playerAutoBand(matches){
   }
   return bandOfElo(median(elos)||1200);
 }
-
 async function fetchBenchmarkBand(min,max,limit=2000){
   const orCond =
     `and(p1_elo_before.gte.${min},p1_elo_before.lt.${max}),`+
@@ -325,7 +325,7 @@ async function fetchBenchmarkGlobal(limit=2000){
 
 /* ---------- UI helpers ---------- */
 function chip(label, val, tip, suffix=''){
-  return `<div class="reveal cell">
+  return `<div class="fade chip">
     <div class="text-slate-400 text-xs tip" data-tip="${esc(tip)}">${label}</div>
     <div class="mt-1 font-semibold">${val}${suffix}</div>
   </div>`;
@@ -338,17 +338,15 @@ function delta(a,b,suffix=''){
 }
 function compRow(label,tip,you,band,glob,fmt=(x)=>x,suffix=''){
   const Y=fmt(you), B=fmt(band), G=fmt(glob);
-  return `<div class="contents">
-    <div class="tip head" data-tip="${esc(tip)}">${label}</div>
+  return `<div class="rowlabel tip head" data-tip="${esc(tip)}">${label}</div>
     <div class="cell font-semibold">${Y}${suffix}</div>
     <div class="cell">${B}${suffix} ${delta(you,band,suffix)}</div>
-    <div class="cell">${G}${suffix} ${delta(you,glob,suffix)}</div>
-  </div>`;
+    <div class="cell">${G}${suffix} ${delta(you,glob,suffix)}</div>`;
 }
 function compSection(title, rowsHTML){
-  return `<section class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
+  return `<section class="mt-4 card p-4 fade">
     <h3 class="text-lg font-semibold mb-2">${title}</h3>
-    <div class="comp-grid">
+    <div class="cmp">
       <div></div><div class="head">You</div><div class="head">Band</div><div class="head">Global</div>
       ${rowsHTML}
     </div>
@@ -363,20 +361,22 @@ function setBar(widthPct){
 
 /* ---------- Render ---------- */
 let playerRow=null, isPremSteamFlag=false, matchesCache=[], analysesCache=new Map(), currentMap=null;
-let benchGlobal=null, benchBand=null;
+let benchGlobal=null;
 
 async function renderHeader(){
-  isPremSteamFlag = await isPremiumSteam(steamId);
+  const prem = await isPremiumSteam(steamId);
+  isPremSteamFlag = prem;
   const name = playerRow?.username || steamId;
   document.getElementById('head').innerHTML =
-    `<div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+    `<div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="w-12 h-12 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-lg font-bold text-indigo-300">
           ${(name||'?').trim().charAt(0).toUpperCase()}
         </div>
-        <div class="text-2xl font-extrabold">${labelWithPremium(name, isPremSteamFlag)}</div>
+        <div class="text-2xl font-extrabold">${labelWithPremium(name, prem)}</div>
       </div>
     </div>`;
+  animate();
 }
 
 function renderMapTabs(){
@@ -386,8 +386,16 @@ function renderMapTabs(){
     mapTabButton('', 'All', currentMap==null),
     ...mapIds.map(id=> mapTabButton(id, MAP_NAMES[id]||`Map ${id}`, String(currentMap)===String(id)))
   ].join('');
+
+  // FIX: active state toggles immediately on click
   tabsEl.querySelectorAll('button[data-map]').forEach(b=>{
-    b.onclick = ()=>{ currentMap = (b.dataset.map===''? null : b.dataset.map); recompute(); };
+    b.onclick = ()=>{
+      currentMap = (b.dataset.map===''? null : b.dataset.map);
+      // toggle classes right away
+      tabsEl.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      recompute(); // then recompute numbers
+    };
   });
 }
 
@@ -395,31 +403,18 @@ function renderMapPanel(metrics){
   const panel = document.getElementById('mapPanel');
   const wr = metrics.winrate!=null ? Math.round(metrics.winrate*1000)/10 : null;
   panel.innerHTML = `
-    <div class="big-kpi">
-      <div class="text-slate-400 text-xs">Win rate</div>
-      <div class="big-val">${wr==null?'—':wr+'%'}
-        ${wr==null?'':setBar(wr)}
-      </div>
+    <div class="card p-4">
+      <div class="label">Win rate</div>
+      <div class="value">${wr==null?'—':wr+'%'}</div>
+      <div class="mt-2">${wr==null?'':setBar(wr)}</div>
     </div>
-    <div class="big-kpi">
-      <div class="text-slate-400 text-xs">Average quality</div>
-      <div class="big-val">${num(metrics.quality.average,1)}</div>
+    <div class="card p-4">
+      <div class="label">Average quality</div>
+      <div class="value">${num(metrics.quality.average,1)}</div>
     </div>
-    <div class="big-kpi">
-      <div class="text-slate-400 text-xs">Tag time share</div>
-      <div class="big-val">${metrics.tagging.share_as_tagger!=null? pct(metrics.tagging.share_as_tagger):'—'}</div>
-    </div>
-    <div class="big-kpi">
-      <div class="text-slate-400 text-xs">Average speed</div>
-      <div class="big-val">${num(metrics.speed.average_mps,2)} <span class="text-base font-semibold">m/s</span></div>
-    </div>
-    <div class="big-kpi">
-      <div class="text-slate-400 text-xs">Retag median</div>
-      <div class="big-val">${fmtS(metrics.retag.median_seconds)}</div>
-    </div>
-    <div class="big-kpi">
-      <div class="text-slate-400 text-xs">Accuracy</div>
-      <div class="big-val">${metrics.accuracy.average!=null? pct(metrics.accuracy.average):'—'}</div>
+    <div class="card p-4">
+      <div class="label">Tag time share</div>
+      <div class="value">${metrics.tagging.share_as_tagger!=null? pct(metrics.tagging.share_as_tagger):'—'}</div>
     </div>`;
 }
 
@@ -431,10 +426,11 @@ function renderChips(metrics){
     chip('Win rate', metrics.winrate!=null? Math.round(metrics.winrate*1000)/10+'%':'—', 'Percentage of wins.'),
     chip('Average quality', num(metrics.quality.average,1), 'Average quality score.'),
     chip('Median quality', num(metrics.quality.median,1), 'Median quality score.'),
-    chip('Quality IQR', num(metrics.quality.spread_iqr,1), 'Interquartile range (Q3–Q1). Lower means more consistency.'),
+    chip('Quality IQR', num(metrics.quality.spread_iqr,1), 'Interquartile range (Q3–Q1). Lower = more consistent.'),
     chip('Quality std. dev.', num(metrics.quality.spread_std,2), 'Standard deviation of quality.'),
     chip('Best match quality', num(metrics.quality.best_match,1), 'Best quality score observed.')
   ].join('');
+  animate();
 }
 
 function compBlocks(metrics, band, glob){
@@ -485,40 +481,29 @@ async function recompute(){
   const status = document.getElementById('status');
   status.textContent='Computing…';
 
-  // Player metrics
   const metrics = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, currentMap);
   renderMapPanel(metrics);
   renderChips(metrics);
 
-  // Bench sources
-  const useFilter = document.getElementById('benchUseFilter').checked;
-  let bandMetrics=null, globalMetrics=null;
+  // Global benchmarks cache (re-fetched but light)
+  const g = await fetchBenchmarkGlobal(1200);
+  benchGlobal = aggregateDataset(g.matches, g.analyses, document.getElementById('benchUseFilter').checked ? currentMap : null);
 
-  if (!benchGlobal){
-    const g = await fetchBenchmarkGlobal(2000);
-    benchGlobal = aggregateDataset(g.matches, g.analyses, useFilter? currentMap : null);
-  } else {
-    // already computed; for map change we simply re-fetch to respect filter
-    const g = await fetchBenchmarkGlobal(1200);
-    benchGlobal = aggregateDataset(g.matches, g.analyses, useFilter? currentMap : null);
-  }
-
-  if (benchMode==='auto'){
+  // Band
+  let bandMetrics=null;
+  const mode = benchMode;
+  if (mode==='auto'){
     const bmin = playerAutoBand(matchesCache);
-    const pack = await fetchBenchmarkBand(bmin, bmin+100, 1500);
-    bandMetrics = aggregateDataset(pack.matches, pack.analyses, useFilter? currentMap : null);
-  } else if (benchMode==='global'){
-    bandMetrics = null; // will display only Global
-  } else if (benchMode.startsWith('band:')){
-    const bmin = Number(benchMode.split(':')[1]);
-    const pack = await fetchBenchmarkBand(bmin, bmin+100, 1500);
-    bandMetrics = aggregateDataset(pack.matches, pack.analyses, useFilter? currentMap : null);
+    const pack = await fetchBenchmarkBand(bmin, bmin+100, 1200);
+    bandMetrics = aggregateDataset(pack.matches, pack.analyses, document.getElementById('benchUseFilter').checked ? currentMap : null);
+  } else if (mode.startsWith('band:')){
+    const bmin = Number(mode.split(':')[1]);
+    const pack = await fetchBenchmarkBand(bmin, bmin+100, 1200);
+    bandMetrics = aggregateDataset(pack.matches, pack.analyses, document.getElementById('benchUseFilter').checked ? currentMap : null);
   }
 
-  // Sections
   document.getElementById('content').innerHTML = compBlocks(metrics, bandMetrics, benchGlobal);
-
-  animateReveal();
+  animate();
   status.textContent='';
 }
 
@@ -550,22 +535,23 @@ document.getElementById('cmpBtn').onclick = async ()=>{
   const premB = await isPremiumSteam(other);
 
   const mirror = document.createElement('section');
-  mirror.className='mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal';
+  mirror.className='mt-4 card p-4 fade';
   mirror.innerHTML = `
     <h3 class="text-lg font-semibold mb-2">Mirror view</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div class="cell"><div class="font-semibold">${labelWithPremium(playerRow?.username||steamId, premA)}</div>
+      <div class="chip"><div class="font-semibold">${labelWithPremium(playerRow?.username||steamId, premA)}</div>
         <div class="text-slate-300 text-sm mt-1">Win rate <b>${mA.winrate!=null? Math.round(mA.winrate*1000)/10+'%':'—'}</b> · Avg quality <b>${num(mA.quality.average,1)}</b></div>
       </div>
-      <div class="cell"><div class="font-semibold">${labelWithPremium(nameB, premB)}</div>
+      <div class="chip"><div class="font-semibold">${labelWithPremium(nameB, premB)}</div>
         <div class="text-slate-300 text-sm mt-1">Win rate <b>${mB.winrate!=null? Math.round(mB.winrate*1000)/10+'%':'—'}</b> · Avg quality <b>${num(mB.quality.average,1)}</b></div>
       </div>
     </div>`;
   document.getElementById('content').prepend(mirror);
-  animateReveal();
+  animate();
 };
 
 /* ---------- Init ---------- */
+let benchMode = 'auto';
 async function init(){
   playerRow = await fetchPlayer();
   await renderHeader();
