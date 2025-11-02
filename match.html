@@ -1,185 +1,328 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
   <title>Match</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Minimal dark styles to match your existing theme -->
+  <style>
+    :root { --bg:#0b1220; --card:#121a2b; --muted:#8ea3c2; --text:#e8f0ff; --primary:#6c63ff; --border:#24314d; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    a{color:#9fb4ff;text-decoration:none}
+    .container{max-width:980px;margin:24px auto;padding:0 16px}
+    .back{display:inline-block;margin-bottom:8px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+    .muted{color:var(--muted)}
+    .row{display:grid;gap:12px}
+    .row.cols-2{grid-template-columns:1fr 1fr}
+    .row.cols-3{grid-template-columns:1fr 1fr 1fr}
+    .row.cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
+    .btn{background:var(--primary);border:0;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer}
+    .btn[disabled]{opacity:.6;cursor:not-allowed}
+    .tag{display:inline-block;background:#0f1a34;border:1px solid var(--border);padding:2px 8px;border-radius:999px;color:#cbd7ff;font-size:12px}
+    .grid{display:grid;gap:12px}
+    .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+    .grid.cols-4{grid-template-columns:repeat(4,1fr)}
+    .imgCard{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px}
+    .imgCard img{display:block;width:100%;height:auto;border-radius:6px}
+    .header-line{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .pill{padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#0f1a34;color:#dfe7ff}
+    .h1{font-size:18px;font-weight:700;margin:0 0 6px}
+    .h2{font-size:15px;font-weight:700;margin:0 0 10px}
+    .kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .kv .item{background:#0f1a34;border:1px solid var(--border);border-radius:8px;padding:10px}
+    .kv .k{font-size:12px;color:#a5b7d8;margin-bottom:4px}
+    .kv .v{font-weight:700}
+    .spacer{height:12px}
+    .center{display:flex;justify-content:center;align-items:center}
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100">
-  <div class="max-w-6xl mx-auto p-4">
-    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
+<body>
+  <div class="container">
+    <a class="back" href="index.html">← Back</a>
 
-    <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
+    <div id="matchBox" class="card" style="margin-bottom:12px">
+      <div class="muted">Loading…</div>
+    </div>
 
-    <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800 hidden">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">Game Analysis</h2>
-        <button id="analyzeBtn"
-                class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50">
-          Analyze game
-        </button>
+    <div id="analysisBox" class="card">
+      <div class="header-line">
+        <div>
+          <div class="h2">Game Analysis</div>
+          <div id="analysisMeta" class="muted"></div>
+        </div>
+        <button id="analyzeBtn" class="btn">Analyze game</button>
       </div>
 
-      <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
-
-      <div id="analysisResult" class="hidden space-y-6">
-        <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
-            <div id="p1q" class="text-2xl font-bold">—</div>
-            <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
-          </div>
-
-          <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
-            <div id="p2q" class="text-2xl font-bold">—</div>
-            <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
+      <div id="qualityCards" class="row cols-2" style="margin-top:12px; display:none">
+        <div class="card" id="p1Card">
+          <div class="h2" id="p1Title">P1 — Quality</div>
+          <div class="kv">
+            <div class="item"><div class="k">Quality</div><div class="v" id="p1Qual">-</div></div>
+            <div class="item"><div class="k">Possession</div><div class="v" id="p1Pos">-</div></div>
+            <div class="item"><div class="k">Accuracy</div><div class="v" id="p1Acc">-</div></div>
+            <div class="item"><div class="k">Avg dist (hider)</div><div class="v" id="p1DistH">-</div></div>
+            <div class="item"><div class="k">Avg dist (tagger)</div><div class="v" id="p1DistT">-</div></div>
+            <div class="item"><div class="k">Retag median</div><div class="v" id="p1Retag">-</div></div>
+            <div class="item"><div class="k">Avg speed</div><div class="v" id="p1Speed">-</div></div>
           </div>
         </div>
 
-        <div>
-          <div class="text-slate-400 text-xs mb-2">Visuals</div>
-          <div id="gallery" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        <div class="card" id="p2Card">
+          <div class="h2" id="p2Title">P2 — Quality</div>
+          <div class="kv">
+            <div class="item"><div class="k">Quality</div><div class="v" id="p2Qual">-</div></div>
+            <div class="item"><div class="k">Possession</div><div class="v" id="p2Pos">-</div></div>
+            <div class="item"><div class="k">Accuracy</div><div class="v" id="p2Acc">-</div></div>
+            <div class="item"><div class="k">Avg dist (hider)</div><div class="v" id="p2DistH">-</div></div>
+            <div class="item"><div class="k">Avg dist (tagger)</div><div class="v" id="p2DistT">-</div></div>
+            <div class="item"><div class="k">Retag median</div><div class="v" id="p2Retag">-</div></div>
+            <div class="item"><div class="k">Avg speed</div><div class="v" id="p2Speed">-</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div>
+        <div class="h2">Visuals</div>
+        <div id="images-grid" class="grid cols-3">
+          <div class="muted">No images produced.</div>
         </div>
       </div>
     </div>
   </div>
 
-<script>
-const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
-const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
-const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+  <script>
+    // ---- Config loader: window → localStorage → query params
+    function getConfig(){
+      const qp = new URLSearchParams(location.search);
+      const url = window.SUPABASE_URL || localStorage.getItem('SUPABASE_URL') || qp.get('supabase_url') || '';
+      const key = window.SUPABASE_ANON_KEY || localStorage.getItem('SUPABASE_ANON_KEY') || qp.get('supabase_key') || '';
+      if(!url || !key){ console.warn('Supabase config not found. Provide window.SUPABASE_URL & window.SUPABASE_ANON_KEY or set them in localStorage.'); }
+      return { url: url.replace(/\/$/,''), key };
+    }
+    const CFG = getConfig();
+    const REST = CFG.url + '/rest/v1';
+    const HEADERS_JSON = {
+      'apikey': CFG.key,
+      'Authorization': 'Bearer ' + CFG.key,
+      'Content-Type': 'application/json'
+    };
 
-const idParam = new URL(location.href).searchParams.get('id');
-const isNumericId = idParam && /^\d+$/.test(idParam);
-const matchIdValue = isNumericId ? Number(idParam) : idParam;
+    const qs = new URLSearchParams(location.search);
+    const MATCH_ID = qs.get('id');
 
-const el = s => document.querySelector(s);
-const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const elMatch = document.getElementById('matchBox');
+    const elAnalyze = document.getElementById('analyzeBtn');
+    const elAnalysisMeta = document.getElementById('analysisMeta');
+    const elImages = document.getElementById('images-grid');
+    const elQualityRow = document.getElementById('qualityCards');
 
-async function fetchMatchById() {
-  const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
-  return data || null;
-}
+    const elP1Title = document.getElementById('p1Title');
+    const elP2Title = document.getElementById('p2Title');
+    const elP1Qual  = document.getElementById('p1Qual');
+    const elP2Qual  = document.getElementById('p2Qual');
+    const elP1Pos   = document.getElementById('p1Pos');
+    const elP2Pos   = document.getElementById('p2Pos');
+    const elP1Acc   = document.getElementById('p1Acc');
+    const elP2Acc   = document.getElementById('p2Acc');
+    const elP1DistH = document.getElementById('p1DistH');
+    const elP2DistH = document.getElementById('p2DistH');
+    const elP1DistT = document.getElementById('p1DistT');
+    const elP2DistT = document.getElementById('p2DistT');
+    const elP1Retag = document.getElementById('p1Retag');
+    const elP2Retag = document.getElementById('p2Retag');
+    const elP1Speed = document.getElementById('p1Speed');
+    const elP2Speed = document.getElementById('p2Speed');
 
-function card(label, value, suffix='') {
-  return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
-    <div class="text-slate-400">${label}</div>
-    <div class="text-slate-100 font-semibold">${value}${suffix}</div>
-  </div>`;
-}
+    function fmtPct(x){ return (x==null)?'—':(Math.round(x*1000)/10)+'%'; }
+    function fmtNum(x){ return (x==null)?'—':(Math.round(x*10)/10); }
+    function fmtMs(x){ return (x==null)?'—':(Math.round(x*100)/100)+' s'; }
+    function fmtM(x){ return (x==null)?'—':(Math.round(x*100)/100)+' m'; }
+    function fmtMspeed(x){ return (x==null)?'—':(Math.round(x*100)/100)+' m/s'; }
 
-function renderPlayerCards(rootSel, s) {
-  const root = el(rootSel);
-  const pct = (x)=> (x==null?'—':Math.round(x*1000)/10+'%');
-  root.innerHTML = [
-    card("Possession", pct(s.possession_share)),
-    card("Accuracy",  s.accuracy!=null?Math.round(s.accuracy*1000)/10:'—', "%"),
-    card("Avg dist (hider)", s.avg_distance_as_hider??'—', " m"),
-    card("Avg dist (tagger)", s.avg_distance_as_tagger??'—', " m"),
-    card("Retag avg", s.retag_avg_seconds??'—', " s"),
-    card("Avg speed", s.avg_speed_ms??'—', " m/s"),
-  ].join("");
-}
+    async function fetchJSON(url, params){
+      const u = new URL(url);
+      if (params) for (const [k,v] of Object.entries(params)) u.searchParams.set(k,v);
+      const r = await fetch(u.toString(), { headers: HEADERS_JSON });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
 
-function renderMatch(m) {
-  const p1 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||'P1')}</a>`;
-  const p2 = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||'P2')}</a>`;
-  const e1 = m.p1_elo_after ?? m.p1_elo_before ?? '-';
-  const e2 = m.p2_elo_after ?? m.p2_elo_before ?? '-';
-  const winner = m.winner === '1' ? p1 : (m.winner === '2' ? p2 : '—');
-  const replayBtn = m.replay_url
-    ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
-    : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+    async function postJSON(url, body){
+      const r = await fetch(url, { method:'POST', headers: HEADERS_JSON, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
 
-  el('#matchCard').innerHTML = `
-    <div class="space-y-3">
-      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="text-xl font-bold">${p1} <span class="text-slate-400">(${e1})</span> vs ${p2} <span class="text-slate-400">(${e2})</span></div>
-      <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
-      <div class="pt-1">${replayBtn}</div>
-    </div>`;
-}
+    function parseImagesField(analysis){
+      const raw = analysis?.images ?? analysis?.summary?.images ?? [];
+      if (Array.isArray(raw)) return raw.filter(u => typeof u === 'string');
+      if (typeof raw === 'string'){
+        try { const arr = JSON.parse(raw); return Array.isArray(arr)?arr.filter(u => typeof u === 'string'):[]; }
+        catch { return []; }
+      }
+      return [];
+    }
 
-function showNotFound() {
-  el('#matchCard').innerHTML = '<div class="text-red-400">Match not found.</div>';
-  el('#analysisBlock').classList.add('hidden');
-}
+    function renderImages(analysis){
+      const images = parseImagesField(analysis);
+      elImages.innerHTML = '';
+      if (!images.length){
+        const div = document.createElement('div');
+        div.className = 'muted';
+        div.textContent = 'No images produced.';
+        elImages.appendChild(div);
+        return;
+      }
+      const toShow = images.slice(0, 12);
+      for (const url of toShow){
+        const box = document.createElement('div');
+        box.className = 'imgCard';
+        const img = document.createElement('img');
+        img.src = url; img.alt = 'analysis';
+        img.loading = 'lazy';
+        box.appendChild(img);
+        elImages.appendChild(box);
+      }
+      if (images.length > toShow.length){
+        const more = document.createElement('div');
+        more.className = 'muted';
+        more.textContent = `+${images.length - toShow.length} more…`;
+        elImages.appendChild(more);
+      }
+    }
 
-async function loadAnalysis(matchId) {
-  const { data } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
-  if (!data) {
-    el('#analysisStatus').textContent = 'No analysis yet.';
-    el('#analysisResult').classList.add('hidden');
-    return;
-  }
-  el('#analysisStatus').textContent = '';
-  el('#analysisResult').classList.remove('hidden');
+    function renderMatchHeader(m){
+      const when = m.played_at ? new Date(m.played_at).toLocaleString() : '';
+      const p1 = `${m.p1_name || 'P1'} ${m.p1_elo_after ? '('+m.p1_elo_after+')' : ''}`.trim();
+      const p2 = `${m.p2_name || 'P2'} ${m.p2_elo_after ? '('+m.p2_elo_after+')' : ''}`.trim();
 
-  // Titres avec pseudos si dispo
-  const s = data.summary || {};
-  el('#p1title').textContent = `${s.p1_name || 'P1'} — Quality`;
-  el('#p2title').textContent = `${s.p2_name || 'P2'} — Quality`;
+      elMatch.innerHTML = `
+        <div class="muted">${when}</div>
+        <div class="h1"><a href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${p1}</a> vs <a href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${p2}</a></div>
+        <div style="margin:8px 0 12px" class="muted">Winner: <span class="pill">${m.winner === 1 ? (m.p1_name || 'P1') : (m.p2_name || 'P2')}</span> • Map ${m.map_id ?? '-'}</div>
+        <div><a class="btn" href="${m.replay_url || '#'}" download>Download replay</a></div>
+      `;
+    }
 
-  el('#analAt').textContent = new Date(data.analyzed_at).toLocaleString();
-  el('#ver').textContent = data.version || '—';
-  el('#p1q').textContent = data.p1_quality ?? '—';
-  el('#p2q').textContent = data.p2_quality ?? '—';
-  renderPlayerCards('#p1cards', data.p1_stats || {});
-  renderPlayerCards('#p2cards', data.p2_stats || {});
+    function renderAnalysis(a, fallbackNames){
+      const p1n = a.p1_name || fallbackNames.p1 || 'P1';
+      const p2n = a.p2_name || fallbackNames.p2 || 'P2';
+      elP1Title.textContent = `${p1n} — Quality`;
+      elP2Title.textContent = `${p2n} — Quality`;
 
-  const imgs = data.images || {};
-  const keys = Object.keys(imgs);
-  el('#gallery').innerHTML = keys.length
-    ? keys.map(k => `
-        <div class="rounded overflow-hidden border border-slate-800 bg-slate-900">
-          <div class="p-2 text-xs text-slate-300 border-b border-slate-800">${k}</div>
-          <img src="${imgs[k]}" alt="${k}" class="w-full block">
-        </div>`).join('')
-    : `<div class="text-sm text-slate-400">No images produced.</div>`;
-}
+      elAnalysisMeta.textContent = a.analyzed_at ? `Analyzed at ${new Date(a.analyzed_at).toLocaleString()} (${a.version||'v?'})` : '';
 
-async function queueAnalysis(matchId, replayUrl) {
-  el('#analyzeBtn').disabled = true;
-  el('#analysisStatus').textContent = 'Queuing analysis…';
-  const { error } = await supa.from('analysis_requests').insert({
-    match_id: matchId,
-    replay_url: replayUrl || null,
-    requested_by: 'web'
-  });
-  if (error) {
-    el('#analysisStatus').textContent = `Error: ${error.message}`;
-    el('#analyzeBtn').disabled = false;
-    return;
-  }
-  el('#analysisStatus').textContent = 'Queued. Waiting for worker…';
-}
+      elP1Qual.textContent = a.p1_quality!=null ? a.p1_quality : '—';
+      elP2Qual.textContent = a.p2_quality!=null ? a.p2_quality : '—';
 
-function subscribeRealtime(matchId) {
-  supa.channel('match_analyses_live')
-    .on('postgres_changes', { event:'INSERT', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
-      () => loadAnalysis(matchId))
-    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
-      () => loadAnalysis(matchId))
-    .subscribe();
-}
+      const s1 = a.p1_stats || {};
+      const s2 = a.p2_stats || {};
 
-(async function init(){
-  if (!idParam) { showNotFound(); return; }
-  const m = await fetchMatchById();
-  if (!m) { showNotFound(); return; }
-  renderMatch(m);
+      elP1Pos.textContent   = fmtPct(s1.possession_share);
+      elP2Pos.textContent   = fmtPct(s2.possession_share);
+      // Accuracy si dispo, sinon “—”
+      elP1Acc.textContent   = (s1.accuracy!=null)?fmtPct(s1.accuracy):'—';
+      elP2Acc.textContent   = (s2.accuracy!=null)?fmtPct(s2.accuracy):'—';
 
-  el('#analysisBlock').classList.remove('hidden');
-  el('#analyzeBtn').onclick = () => queueAnalysis(matchIdValue, m.replay_url);
+      elP1DistH.textContent = fmtM(s1.avg_distance_as_hider);
+      elP2DistH.textContent = fmtM(s2.avg_distance_as_hider);
+      elP1DistT.textContent = fmtM(s1.avg_distance_as_tagger);
+      elP2DistT.textContent = fmtM(s2.avg_distance_as_tagger);
 
-  await loadAnalysis(matchIdValue);
-  subscribeRealtime(matchIdValue);
-})();
-</script>
+      elP1Retag.textContent = fmtMs(s1.retag_median);
+      elP2Retag.textContent = fmtMs(s2.retag_median);
+
+      elP1Speed.textContent = fmtMspeed(s1.avg_speed);
+      elP2Speed.textContent = fmtMspeed(s2.avg_speed);
+
+      elQualityRow.style.display = 'grid';
+      renderImages(a);
+    }
+
+    async function loadAll(){
+      if (!MATCH_ID){
+        elMatch.innerHTML = `<div class="muted">Match ID missing.</div>`;
+        elAnalyze.disabled = true;
+        return;
+      }
+      // 1) match
+      const matchRows = await fetchJSON(`${REST}/matches`, {
+        id: `eq.${MATCH_ID}`,
+        select: [
+          'id','played_at','winner','map_id','replay_url',
+          'p1_id','p1_name','p1_elo_before','p1_elo_after',
+          'p2_id','p2_name','p2_elo_before','p2_elo_after'
+        ].join(',')
+      });
+      if (!matchRows.length){
+        elMatch.innerHTML = `<div class="muted">Match not found.</div>`;
+        return;
+      }
+      const match = matchRows[0];
+      renderMatchHeader(match);
+
+      // 2) analysis (if exists)
+      const aRows = await fetchJSON(`${REST}/match_analyses`, {
+        match_id: `eq.${MATCH_ID}`,
+        select: '*'
+      });
+      if (aRows.length){
+        renderAnalysis(aRows[0], { p1: match.p1_name, p2: match.p2_name });
+      } else {
+        elAnalysisMeta.textContent = 'No analysis yet.';
+        elImages.innerHTML = `<div class="muted">No images produced.</div>`;
+      }
+
+      // 3) wire analyze button
+      elAnalyze.onclick = async () => {
+        try{
+          elAnalyze.disabled = true;
+          elAnalyze.textContent = 'Queued…';
+          await postJSON(`${REST}/analysis_requests`, [{
+            match_id: match.id,
+            replay_url: match.replay_url || null,
+            requested_by: 'web',
+            status: 'queued'
+          }]);
+          elAnalysisMeta.textContent = 'Analysis queued. Waiting for result…';
+          // Poll until analysis exists
+          const started = Date.now();
+          const poll = setInterval(async () => {
+            try{
+              const rows = await fetchJSON(`${REST}/match_analyses`, {
+                match_id: `eq.${MATCH_ID}`,
+                select: '*'
+              });
+              if (rows.length){
+                clearInterval(poll);
+                renderAnalysis(rows[0], { p1: match.p1_name, p2: match.p2_name });
+                elAnalyze.disabled = false;
+                elAnalyze.textContent = 'Analyze game';
+              } else if (Date.now() - started > 180000) {
+                clearInterval(poll);
+                elAnalysisMeta.textContent = 'Timed out waiting for analysis.';
+                elAnalyze.disabled = false;
+                elAnalyze.textContent = 'Analyze game';
+              }
+            }catch(e){ /* ignore while waiting */ }
+          }, 3000);
+        }catch(err){
+          console.error(err);
+          alert('Failed to queue analysis: ' + err.message);
+          elAnalyze.disabled = false;
+          elAnalyze.textContent = 'Analyze game';
+        }
+      };
+    }
+
+    // bootstrap
+    loadAll().catch(e=>{
+      console.error(e);
+      elMatch.innerHTML = `<div class="muted">Failed to load match.</div>`;
+    });
+  </script>
 </body>
 </html>
