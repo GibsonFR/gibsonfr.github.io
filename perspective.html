@@ -8,19 +8,25 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
-<div class=\"max-w-6xl mx-auto p-4\"><div id=\"authbar\" class=\"mb-3\"></div></div>
+  <div class="max-w-6xl mx-auto p-4">
+    <div id="authbar" class="mb-3"></div>
+  </div>
+
   <div class="max-w-6xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
-    <!-- HEADER rework (même style que player.html) -->
+    <!-- HEADER -->
     <header id="head" class="mt-3"></header>
+
+    <!-- PREMIUM / AUTH GATE -->
+    <div id="gateBanner" class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 hidden"></div>
 
     <!-- Actions -->
     <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
       <div class="p-3 rounded-2xl border border-slate-800 bg-slate-900/40">
         <div class="flex flex-wrap items-center gap-3">
           <button id="buildBtn"
-                  class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30">
+                  class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30 disabled:opacity-50">
             Build perspective
           </button>
           <span id="status" class="text-sm text-slate-400"></span>
@@ -31,9 +37,9 @@
           <label class="text-slate-300">Compare vs</label>
           <input id="cmpInput"
                  class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
-                 placeholder="username ou SteamID64…">
+                 placeholder="username or SteamID64…">
           <button id="cmpBtn"
-                  class="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/30">
+                  class="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/30 disabled:opacity-50">
             Compare
           </button>
           <span id="cmpStatus" class="text-sm text-slate-400"></span>
@@ -51,7 +57,7 @@ const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
 const url = new URL(location.href);
 const steamId = url.searchParams.get('steam_id');
-const WINDOW_ALL = 0; // on calcule 100% des matchs
+const WINDOW_ALL = 0; // 0 = 100% of matches
 
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct = x => (x==null||isNaN(x) ? '—' : `${Math.round(x*1000)/10}%`);
@@ -142,70 +148,167 @@ function renderPerspective(container, p){
   container.innerHTML = html;
 }
 
+/* -------------------- PREMIUM GATE (auth + premium) -------------------- */
+
+async function getUser() {
+  const { data:{ user } } = await supa.auth.getUser();
+  return user || null;
+}
+
+async function isPremium(user){
+  try{
+    const { data, error } = await supa
+      .from('profiles')
+      .select('premium_until')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (error) return false;
+    return !!(data?.premium_until && new Date(data.premium_until) > new Date());
+  } catch { return false; }
+}
+
+async function updateGateUI(){
+  const gate = document.getElementById('gateBanner');
+  const buildBtn = document.getElementById('buildBtn');
+  const cmpBtn   = document.getElementById('cmpBtn');
+
+  const user = await getUser();
+  if (!user) {
+    gate.classList.remove('hidden');
+    gate.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="text-amber-300">🔒</div>
+        <div>
+          <div class="font-semibold mb-1">Sign in required</div>
+          <div class="text-slate-300 text-sm">
+            Perspective is a <b>Premium</b> feature. Please sign in with Discord to continue.
+          </div>
+          <div class="mt-2">
+            <button id="signinBtn" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Sign in with Discord</button>
+          </div>
+        </div>
+      </div>`;
+    if (buildBtn) buildBtn.disabled = true;
+    if (cmpBtn)   cmpBtn.disabled   = true;
+
+    const signinBtn = document.getElementById('signinBtn');
+    if (signinBtn) {
+      signinBtn.onclick = ()=> supa.auth.signInWithOAuth({
+        provider: 'discord',
+        options: { redirectTo: location.href }
+      });
+    }
+    return { user:null, premium:false };
+  }
+
+  const premium = await isPremium(user);
+  if (!premium) {
+    gate.classList.remove('hidden');
+    gate.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="text-amber-300">👑</div>
+        <div>
+          <div class="font-semibold mb-1">Premium only</div>
+          <div class="text-slate-300 text-sm">
+            Perspective is available for <b>Premium members</b> only. Upgrade to unlock unlimited analyses and Perspective.
+          </div>
+          <div class="mt-2 flex items-center gap-2">
+            <a href="account.html" class="px-3 py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-sm">Go Premium (€2)</a>
+            <button id="quickCheckout" class="px-3 py-1.5 rounded bg-amber-600/30 text-amber-200 border border-amber-500/40 hover:bg-amber-600/40 text-sm">Quick checkout</button>
+          </div>
+        </div>
+      </div>`;
+    if (buildBtn) buildBtn.disabled = true;
+    if (cmpBtn)   cmpBtn.disabled   = true;
+
+    const quick = document.getElementById('quickCheckout');
+    if (quick) quick.onclick = (e)=>{ e.preventDefault(); if (window.startCheckout) window.startCheckout(); else location.href='account.html'; };
+
+    return { user, premium:false };
+  }
+
+  // Premium OK
+  gate.classList.add('hidden');
+  if (buildBtn) buildBtn.disabled = false;
+  if (cmpBtn)   cmpBtn.disabled   = false;
+  return { user, premium:true };
+}
+
+/* -------------------- DATA LOAD -------------------- */
+
+async function loadPerspective(pid){
+  const { data } = await supa.from('player_perspectives')
+    .select('*')
+    .eq('player_id', pid)
+    .eq('window_size', WINDOW_ALL)
+    .maybeSingle();
+  return data || null;
+}
+
+async function waitPerspective(pid, timeoutMs=60000){
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const p = await loadPerspective(pid);
+    if (p) return p;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  return null;
+}
+
+/* -------------------- INIT -------------------- */
+
 async function init(){
   const head = document.getElementById('head');
+  const status = document.getElementById('status');
+  const content = document.getElementById('content');
+
+  // Load player header
   const { data: player } = await supa.from('players').select('*').eq('steam_id', steamId).single();
   if(!player){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
   head.innerHTML = headerCard(player);
 
-  const content = document.getElementById('content');
-  const status  = document.getElementById('status');
-
-  async function loadPerspective(pid){
-    const { data } = await supa.from('player_perspectives')
-      .select('*')
-      .eq('player_id', pid)
-      .eq('window_size', WINDOW_ALL)   // 0 = 100% des matchs
-      .maybeSingle();
-    return data || null;
+  // Initial render (if perspective already exists)
+  const existing = await loadPerspective(steamId);
+  if(!existing){
+    content.innerHTML = `<div class="mt-6 text-slate-400">No perspective yet. Click “Build perspective”.</div>`;
+  } else {
+    renderPerspective(content, existing);
   }
 
-  async function waitPerspective(pid, timeoutMs=60000){
-    const t0 = Date.now();
-    while (Date.now() - t0 < timeoutMs) {
-      const p = await loadPerspective(pid);
-      if (p) return p;
-      await new Promise(r => setTimeout(r, 1500));
-    }
-    return null;
-  }
+  // Gate and button handlers
+  let gateState = await updateGateUI();
 
-  async function render(){
-    const p = await loadPerspective(steamId);
-    if(!p){
-      content.innerHTML = `<div class="mt-6 text-slate-400">No perspective yet. Click “Build perspective”.</div>`;
-    }else{
-      renderPerspective(content, p);
-    }
-  }
-  await render();
+  document.getElementById('buildBtn').onclick = async ()=>{
+    gateState = await updateGateUI();
+    if (!gateState.user || !gateState.premium) return;
 
-  // Build / Refresh
-  document.getElementById('buildBtn').onclick = async()=>{
     status.textContent = 'Queuing…';
     const { error } = await supa.from('perspective_requests')
       .insert({ player_id: steamId, window_size: WINDOW_ALL, requested_by: 'web' });
     if (error) { status.textContent = `Insert failed: ${error.message}`; return; }
+
     status.textContent = 'Queued. Waiting for worker…';
     const p = await waitPerspective(steamId);
     if (p) { status.textContent = 'Ready ✓'; renderPerspective(content, p); }
     else   { status.textContent = 'Timeout while waiting for perspective.'; }
   };
 
-  // Compare
   async function resolvePlayer(text){
     if(!text) return null;
     if(/^\d{5,}$/.test(text)) return text; // SteamID64
     const { data } = await supa.rpc('search_players',{ q: text, p_limit:1 });
     return (data&&data.length)? data[0].steam_id : null;
   }
-  document.getElementById('cmpBtn').onclick = async()=>{
+
+  document.getElementById('cmpBtn').onclick = async ()=>{
+    gateState = await updateGateUI();
+    if (!gateState.user || !gateState.premium) return;
+
     const cmpStatus = document.getElementById('cmpStatus');
     const query = document.getElementById('cmpInput').value.trim();
     const other = await resolvePlayer(query);
     if(!other){ cmpStatus.textContent='Player not found.'; return; }
 
-    // s’assurer que la perspective adverse existe
     let pb = await supa.from('player_perspectives').select('*')
       .eq('player_id', other).eq('window_size', WINDOW_ALL).maybeSingle();
     if(!pb.data){
@@ -223,11 +326,9 @@ async function init(){
     const left  = document.createElement('div');
     const right = document.createElement('div');
 
-    // titres clairs au-dessus
     left.innerHTML  = `<div class="mb-2 text-slate-300">${esc(player.username||player.steam_id)}</div>`;
     right.innerHTML = `<div class="mb-2 text-slate-300">${esc(pb.data.username||other)}</div>`;
 
-    // conteneurs detail
     const lbox = document.createElement('div');
     const rbox = document.createElement('div');
     left.appendChild(lbox); right.appendChild(rbox);
@@ -235,17 +336,27 @@ async function init(){
     renderPerspective(lbox, pa);
     renderPerspective(rbox, pb.data);
 
-    const content = document.getElementById('content');
     content.innerHTML = '';
     wrap.appendChild(left); wrap.appendChild(right);
     content.appendChild(wrap);
   };
 
-  // Realtime pour re-render auto si activé
+  // Realtime re-render
   supa.channel('persp_live')
-    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
-    .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, async()=> {
+      const p = await loadPerspective(steamId);
+      if (p) renderPerspective(content, p);
+    })
+    .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, async()=> {
+      const p = await loadPerspective(steamId);
+      if (p) renderPerspective(content, p);
+    })
     .subscribe();
+
+  // Refresh gate instantly on auth change
+  supa.auth.onAuthStateChange(async () => {
+    await updateGateUI();
+  });
 }
 init();
 </script>
@@ -254,39 +365,3 @@ init();
 <script src="payments.js"></script>
 </body>
 </html>
-
-<script>
-(function(){
-  if (!window.supabase || !window.SUPA_URL || !window.SUPA_ANON) return;
-  const supa = window.supa || supabase.createClient(SUPA_URL, SUPA_ANON);
-  window.supa = supa;
-
-  function getParam(name){ const u=new URL(location.href); return u.searchParams.get(name); }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    const buildBtn = document.querySelector('#buildBtn');
-    const status = document.querySelector('#status') || document.createElement('div');
-    if(!status.id){ status.id='status'; document.body.appendChild(status); }
-    const steamId = window.steamId || getParam('steam_id') || window.currentSteamId || null;
-    if(!buildBtn) return;
-
-    buildBtn.addEventListener('click', async () => {
-      const { data:{ user } } = await supa.auth.getUser();
-      if(!user){ status.textContent = 'Sign in with Discord to use Perspective.'; return; }
-      if(!steamId){ status.textContent = 'Missing steam_id.'; return; }
-      status.textContent = 'Queuing…';
-      const { error } = await supa.rpc('request_perspective', { p_player_id: String(steamId), p_window: 0 });
-      if (error) {
-        if (String(error.message).includes('premium_required')) {
-          status.innerHTML = 'Perspective is <b>Premium</b>. <a href=\"#\" id=\"goPro\" style=\"color:#fbbf24;text-decoration:underline;\">Go Premium (€2)</a>';
-          const a=document.getElementById('goPro'); if(a) a.onclick=(e)=>{e.preventDefault(); window.startCheckout();};
-        } else if (String(error.message).includes('not_authenticated')) {
-          status.textContent = 'Sign in with Discord to use Perspective.';
-        } else status.textContent = 'Error: ' + error.message;
-        return;
-      }
-      status.textContent = 'Queued. Waiting for worker…';
-    });
-  });
-})();
-</script>
