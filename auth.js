@@ -1,8 +1,6 @@
 /* auth.js — Discord login via Supabase + premium badge + Steam mapping from links_state.json */
 (() => {
-  if (!window.SUPA_URL || !window.SUPA_ANON) {
-    console.warn('Define SUPA_URL and SUPA_ANON before loading auth.js');
-  }
+  if (!window.SUPA_URL || !window.SUPA_ANON) return;
   const supa = window.supa || supabase.createClient(SUPA_URL, SUPA_ANON);
   window.supa = supa;
 

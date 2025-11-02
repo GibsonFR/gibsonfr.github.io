@@ -6,9 +6,13 @@
   <title>Ranked Tag — Leaderboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
+    window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
+  </script>
 </head>
 <body class="bg-slate-950 text-slate-100">
-<div class=\"max-w-6xl mx-auto p-4\"><div id=\"authbar\" class=\"mb-3\"></div></div>
+  <div class="max-w-6xl mx-auto p-4"><div id="authbar" class="mb-3"></div></div>
   <div class="max-w-6xl mx-auto p-4">
     <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
       <h1 class="text-2xl font-bold">🏆 Ranked Tag — Live Leaderboard</h1>
@@ -43,201 +47,113 @@
     </section>
   </div>
 
-<script>
-const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
-const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
-const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+  <script>
+    const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON);
 
-// ---------- state ----------
-let pageSize = 1000, pageIndex = 0;
-let total = 0;
-let allRows = [];      // toutes les lignes
-let sortedRows = [];   // triées selon currentSort
-let currentSort = { key: 'rank', dir: 'desc' }; // défaut: Rank
+    let pageSize = 1000, pageIndex = 0;
+    let total = 0;
+    let allRows = [];
+    let sortedRows = [];
+    let currentSort = { key: 'rank', dir: 'desc' };
 
-// ---------- utils ----------
-function esc(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function tierOrder(rank){
-  const r=(rank||'').toLowerCase();
-  if(r.startsWith('chall')) return 9;
-  if(r.startsWith('gm')||r.startsWith('grand')) return 8;
-  if(r.startsWith('master')) return 7;
-  if(r.startsWith('diamond')) return 6;
-  if(r.startsWith('platinum')) return 5;
-  if(r.startsWith('gold')) return 4;
-  if(r.startsWith('silver')) return 3;
-  if(r.startsWith('bronze')) return 2;
-  if(r.startsWith('clown')) return 1;
-  return 0;
-}
-function divFromRank(rank){
-  const last=(rank||'').trim().split(/\s+/).pop().toUpperCase();
-  const map={I:1,II:2,III:3,IV:4}; return map[last]||4;
-}
-function header(label,key){
-  const arrow = currentSort.key===key ? (currentSort.dir==='asc'?' ▲':' ▼') : '';
-  return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;
-}
-function applySort(rows){
-  const dir = currentSort.dir, k=currentSort.key;
-  const cmp=(a,b)=>{
-    const s=v=> (v==null? -Infinity : v);
-    if(k==='rank'){
-      const t=tierOrder(b.rank)-tierOrder(a.rank); if(t) return t;
-      const d=divFromRank(a.rank)-divFromRank(b.rank); if(d) return d;
-      const r=(b.rp??0)-(a.rp??0); if(r) return r;
-      return (b.elo??0)-(a.elo??0);
+    function esc(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function tierOrder(rank){const r=(rank||'').toLowerCase();if(r.startsWith('chall'))return 9;if(r.startsWith('gm'))return 8;if(r.startsWith('master'))return 7;if(r.startsWith('diamond'))return 6;if(r.startsWith('platinum'))return 5;if(r.startsWith('gold'))return 4;if(r.startsWith('silver'))return 3;if(r.startsWith('bronze'))return 2;if(r.startsWith('clown'))return 1;return 0;}
+    function divFromRank(rank){const last=(rank||'').trim().split(/\s+/).pop().toUpperCase();const map={I:1,II:2,III:3,IV:4};return map[last]||4;}
+    function header(label,key){const arrow=currentSort.key===key?(currentSort.dir==='asc'?' ▲':' ▼'):'';return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;}
+    function applySort(rows){const dir=currentSort.dir,k=currentSort.key;const cmp=(a,b)=>{const s=v=>(v==null?-Infinity:v);if(k==='rank'){const t=tierOrder(b.rank)-tierOrder(a.rank);if(t)return t;const d=divFromRank(a.rank)-divFromRank(b.rank);if(d)return d;const r=(b.rp??0)-(a.rp??0);if(r)return r;return (b.elo??0)-(a.elo??0);}if(k==='player')return (a.username||'').localeCompare(b.username||'',undefined,{sensitivity:'base'});if(k==='rp')return s(b.rp)-s(a.rp);if(k==='elo')return s(b.elo)-s(a.elo);if(k==='games')return s(b.games)-s(a.games);if(k==='wr')return s(b.win_rate)-s(a.win_rate);return 0;};rows.sort(cmp);if(dir==='asc')rows.reverse();rows.forEach((r,i)=>r.__pos=i+1);return rows;}
+
+    function renderTable(slice) {
+      const thead = `<thead class="bg-slate-900">
+        <tr>
+          ${header('#','rank')}
+          ${header('Player','player')}
+          ${header('Rank','rank')}
+          ${header('RP','rp')}
+          ${header('Elo','elo')}
+          ${header('Games','games')}
+          ${header('Win%','wr')}
+        </tr>
+      </thead>`;
+
+      const body = slice.map(r=>`
+        <tr class="border-t border-slate-800 hover:bg-slate-900">
+          <td class="p-2">${r.__pos}</td>
+          <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
+          <td class="p-2 text-center">${esc(r.rank||'')}</td>
+          <td class="p-2 text-center">${r.rp??''}</td>
+          <td class="p-2 text-center">${r.elo??''}</td>
+          <td class="p-2 text-center">${r.games??0}</td>
+          <td class="p-2 text-center">${r.win_rate??0}</td>
+        </tr>`).join('');
+
+      document.getElementById('board').innerHTML =
+        `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
+
+      document.querySelectorAll('[data-sort]').forEach(th=>{
+        th.onclick=()=>{const key=th.getAttribute('data-sort');if(currentSort.key===key)currentSort.dir=currentSort.dir==='asc'?'desc':'asc';else{currentSort.key=key;currentSort.dir=(key==='player'?'asc':'desc');}sortedRows=applySort([...allRows]);pageIndex=0;render();};
+      });
     }
-    if(k==='player') return (a.username||'').localeCompare(b.username||'',undefined,{sensitivity:'base'});
-    if(k==='rp')     return s(b.rp)-s(a.rp);
-    if(k==='elo')    return s(b.elo)-s(a.elo);
-    if(k==='games')  return s(b.games)-s(a.games);
-    if(k==='wr')     return s(b.win_rate)-s(a.win_rate);
-    return 0;
-  };
-  rows.sort(cmp);
-  if(dir==='asc') rows.reverse();
-  rows.forEach((r,i)=> r.__pos = i+1);
-  return rows;
-}
+    function renderPager(){
+      const pages=Math.max(1,Math.ceil(total/pageSize));
+      const el=document.getElementById('pager');
+      el.innerHTML=`
+        <button id="first" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">« First</button>
+        <button id="prev"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">‹ Prev</button>
+        <span class="text-slate-300">Page <b>${pageIndex+1}</b> / ${pages} · Total <b>${total}</b></span>
+        <button id="next"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Next ›</button>
+        <button id="last"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Last »</button>`;
+      document.getElementById('first').onclick=()=>{pageIndex=0;render();};
+      document.getElementById('prev').onclick =()=>{if(pageIndex>0){pageIndex--;render();}};
+      document.getElementById('next').onclick =()=>{const p=Math.ceil(total/pageSize);if(pageIndex<p-1){pageIndex++;render();}};
+      document.getElementById('last').onclick =()=>{pageIndex=Math.ceil(total/pageSize)-1;render();};
+    }
+    function render(){
+      const start=pageIndex*pageSize,end=start+pageSize;
+      renderTable(sortedRows.slice(start,end)); renderPager();
+    }
 
-// ---------- render ----------
-function renderTable(slice){
-  const thead = `<thead class="bg-slate-900">
-    <tr>
-      ${header('#','rank')}
-      ${header('Player','player')}
-      ${header('Rank','rank')}
-      ${header('RP','rp')}
-      ${header('Elo','elo')}
-      ${header('Games','games')}
-      ${header('Win%','wr')}
-    </tr>
-  </thead>`;
+    async function loadAll(reload=false){
+      document.getElementById('status').textContent = reload ? 'Refreshing…' : 'Loading…';
+      const { count, error } = await supa.from('view_leaderboard').select('steam_id', { count:'exact', head:false }).range(0,0);
+      if(error){ console.error(error); document.getElementById('status').textContent='Error'; return; }
+      total = count||0;
 
-  const body = slice.map(r=>`
-    <tr class="border-t border-slate-800 hover:bg-slate-900">
-      <td class="p-2">${r.__pos}</td>
-      <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
-      <td class="p-2 text-center">${esc(r.rank||'')}</td>
-      <td class="p-2 text-center">${r.rp??''}</td>
-      <td class="p-2 text-center">${r.elo??''}</td>
-      <td class="p-2 text-center">${r.games??0}</td>
-      <td class="p-2 text-center">${r.win_rate??0}</td>
-    </tr>`).join('');
+      const step=1000, pages=Math.ceil(total/step);
+      const rows=[];
+      for(let i=0;i<pages;i++){ const a=i*step,b=a+step-1; const { data, error:e2 }=await supa.from('view_leaderboard').select('steam_id,username,rank,elo,rp,games,wins,win_rate').range(a,b); if(e2){console.error(e2);continue;} rows.push(...(data||[])); document.getElementById('status').textContent=`Loaded ${Math.min(b+1,total)}/${total}`; }
+      allRows=rows; sortedRows=applySort([...allRows]); pageIndex=0; document.getElementById('status').textContent=`Ready · ${total} players`; render();
+    }
 
-  document.getElementById('board').innerHTML =
-    `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
+    async function loadRecent(){
+      const { data, error } = await supa.from('matches').select('id,played_at,p1_name,p2_name,winner,map_id,replay_url').order('played_at',{ascending:false}).limit(20);
+      if(error){ console.error(error); return; }
+      const cont=document.getElementById('recent'); cont.innerHTML='';
+      for(const m of (data||[])){ const w=m.winner==='1'?(m.p1_name||'P1'):(m.winner==='2'?(m.p2_name||'P2'):'—'); cont.innerHTML+=`<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500"><div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div><div class="font-semibold">${esc(m.p1_name||'P1')} vs ${esc(m.p2_name||'P2')}</div><div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${esc(w)}</span> · Map ${m.map_id??'-'}</div></a>`; }
+    }
 
-  document.querySelectorAll('[data-sort]').forEach(th=>{
-    th.onclick = ()=>{
-      const key=th.getAttribute('data-sort');
-      if(currentSort.key===key) currentSort.dir = currentSort.dir==='asc'?'desc':'asc';
-      else { currentSort.key=key; currentSort.dir=(key==='player'?'asc':'desc'); }
-      sortedRows = applySort([...allRows]);
-      pageIndex = 0; render();
-    };
-  });
-}
-function renderPager(){
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const el = document.getElementById('pager');
-  el.innerHTML = `
-    <button id="first" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">« First</button>
-    <button id="prev"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex<=0?'opacity-50':''}">‹ Prev</button>
-    <span class="text-slate-300">Page <b>${pageIndex+1}</b> / ${pages} · Total <b>${total}</b></span>
-    <button id="next"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Next ›</button>
-    <button id="last"  class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${pageIndex>=pages-1?'opacity-50':''}">Last »</button>`;
-  document.getElementById('first').onclick=()=>{pageIndex=0; render();};
-  document.getElementById('prev').onclick =()=>{if(pageIndex>0){pageIndex--; render();}};
-  document.getElementById('next').onclick =()=>{const p=Math.ceil(total/pageSize); if(pageIndex<p-1){pageIndex++; render();}};
-  document.getElementById('last').onclick =()=>{pageIndex=Math.ceil(total/pageSize)-1; render();};
-}
-function render(){
-  const start = pageIndex*pageSize, end=start+pageSize;
-  renderTable(sortedRows.slice(start,end));
-  renderPager();
-}
+    document.getElementById('go').onclick=()=>{const q=document.getElementById('search').value.trim(); if(!q)return; location.href=`player.html?q=${encodeURIComponent(q)}`;};
+    document.getElementById('pageSize').onchange=e=>{pageSize=parseInt(e.target.value,10)||1000;pageIndex=0;render();};
+    document.getElementById('refresh').onclick=()=>loadAll(true);
 
-// ---------- data ----------
-async function loadAll(reload=false){
-  document.getElementById('status').textContent = reload ? 'Refreshing…' : 'Loading…';
-  const { count, error } = await supa.from('view_leaderboard')
-    .select('steam_id', { count: 'exact', head: false })
-    .range(0,0);
-  if(error){ console.error(error); document.getElementById('status').textContent='Error'; return; }
-  total = count||0;
+    supa.channel('realtime:players').on('postgres_changes',{event:'*',schema:'public',table:'players'},()=>{const btn=document.getElementById('refresh');btn.classList.remove('hidden');btn.textContent='Refresh data';}).subscribe();
 
-  const step=1000, pages=Math.ceil(total/step);
-  const rows=[];
-  for(let i=0;i<pages;i++){
-    const a=i*step, b=a+step-1;
-    const { data, error:e2 } = await supa.from('view_leaderboard')
-      .select('steam_id,username,rank,elo,rp,games,wins,win_rate')
-      .range(a,b);
-    if(e2){ console.error(e2); continue; }
-    rows.push(...(data||[]));
-    document.getElementById('status').textContent = `Loaded ${Math.min(b+1,total)}/${total}`;
-  }
-  allRows = rows;
-  sortedRows = applySort([...allRows]);
-  pageIndex = 0;
-  document.getElementById('status').textContent = `Ready · ${total} players`;
-  render();
-}
+    loadAll(); loadRecent();
+  </script>
 
-// ---------- recent matches ----------
-async function loadRecent(){
-  const { data, error } = await supa.from('matches')
-    .select('id, played_at, p1_name, p2_name, winner, map_id, replay_url')
-    .order('played_at',{ascending:false}).limit(20);
-  if(error){ console.error(error); return; }
-  const cont=document.getElementById('recent'); cont.innerHTML='';
-  for(const m of (data||[])){
-    const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
-    cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
-      <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
-      <div class="font-semibold">${esc(m.p1_name||'P1')} vs ${esc(m.p2_name||'P2')}</div>
-      <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${esc(w)}</span> · Map ${m.map_id??'-'}</div>
-    </a>`;
-  }
-}
+  <script src="auth.js"></script>
 
-// ---------- bindings ----------
-document.getElementById('go').onclick = ()=>{
-  const q=document.getElementById('search').value.trim();
-  if(!q) return; window.location.href=`player.html?q=${encodeURIComponent(q)}`;
-};
-document.getElementById('pageSize').onchange = (e)=>{
-  pageSize = parseInt(e.target.value,10)||1000; pageIndex=0; render();
-};
-document.getElementById('refresh').onclick = ()=> loadAll(true);
-
-supa.channel('realtime:players')
-  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, ()=>{
-    const btn=document.getElementById('refresh');
-    btn.classList.remove('hidden'); btn.textContent='Refresh data';
-  }).subscribe();
-
-loadAll();
-loadRecent();
-</script>
-
-<script src="auth.js"></script>
-<script src="payments.js"></script>
-
-<!-- Premium section (PayPal) -->
-<section id="premium" style="max-width:960px;margin:2rem auto;padding:1rem;border:1px solid #334155;border-radius:.75rem;background:#0b1220;">
-  <h2 style="color:#e2e8f0;margin-bottom:.5rem;">Premium — €2 pour 30 jours</h2>
-  <p style="color:#9ca3af;margin-bottom:1rem;">Débloque Perspective et analyses illimitées.</p>
-  <div id="paypal-button-container"></div>
-  <small style="display:block;margin-top:.5rem;color:#94a3b8;">Paiement PayPal sécurisé. Le premium s’active automatiquement après validation.</small>
-</section>
-<script>
-  window.PAYPAL_CLIENT_ID = 'YOUR_PAYPAL_CLIENT_ID';
-  window.PAYPAL_PRICE_EUR = '2.00';
-</script>
-<script src="paypal.js"></script>
-
+  <section id="premium" style="max-width:960px;margin:2rem auto;padding:1rem;border:1px solid #334155;border-radius:.75rem;background:#0b1220;">
+    <h2 style="color:#e2e8f0;margin-bottom:.5rem;">Premium — €2 pour 30 jours</h2>
+    <p style="color:#9ca3af;margin-bottom:1rem;">Débloque Perspective et analyses illimitées.</p>
+    <div id="paypal-button-container"></div>
+    <div id="donate" style="margin-top:.75rem;"></div>
+    <small style="display:block;margin-top:.5rem;color:#94a3b8;">Paiement PayPal sécurisé. Le premium s’active automatiquement après validation.</small>
+  </section>
+  <script>
+    window.PAYPAL_CLIENT_ID = 'YOUR_LIVE_PAYPAL_CLIENT_ID';
+    window.PAYPAL_PRICE_EUR = '2.00';
+    window.PAYPAL_DONATE_LINK = ''; // Optionnel: ex. 'https://paypal.me/yourName'
+  </script>
+  <script src="paypal.js"></script>
 </body>
 </html>

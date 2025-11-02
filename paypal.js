@@ -1,13 +1,12 @@
-/* paypal.js — simple PayPal button that calls a Supabase Edge Function to capture & grant premium */
+/* paypal.js — PayPal button → calls Supabase Edge Function to grant Premium */
 (() => {
   const supa = window.supa || (window.SUPA_URL && window.SUPA_ANON ? supabase.createClient(SUPA_URL, SUPA_ANON) : null);
   if (supa) window.supa = supa;
 
-  const CLIENT_ID = window.PAYPAL_CLIENT_ID || 'YOUR_PAYPAL_CLIENT_ID';
-  const PRICE = window.PAYPAL_PRICE_EUR || '2.00'; // EUR
+  const CLIENT_ID = window.PAYPAL_CLIENT_ID || 'YOUR_LIVE_PAYPAL_CLIENT_ID';
+  const PRICE = window.PAYPAL_PRICE_EUR || '2.00';
   const CURRENCY = 'EUR';
 
-  // Fallback used by auth.js "Go Premium" button
   window.startCheckout = () => {
     const el = document.getElementById('premium'); if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
@@ -21,6 +20,13 @@
       s.onerror = () => reject(new Error('Failed to load PayPal SDK'));
       document.head.appendChild(s);
     });
+  }
+
+  function renderDonate(){
+    const link = window.PAYPAL_DONATE_LINK || '';
+    const host = document.getElementById('donate');
+    if(!host || !link) return;
+    host.innerHTML = `<a href="${link}" target="_blank" rel="noopener" class="inline-block px-3 py-2 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-sm">Donate via PayPal</a>`;
   }
 
   async function initButtons() {
@@ -43,10 +49,7 @@
           const FUNCS = SUPA_URL.replace('.supabase.co', '.functions.supabase.co');
           const r = await fetch(`${FUNCS}/capture-paypal-order`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ orderId: data.orderID, expectedAmount: PRICE, expectedCurrency: CURRENCY })
           });
           if(!r.ok){
@@ -66,7 +69,7 @@
       }
     });
     btns.render('#paypal-button-container');
+    renderDonate();
   }
-
   document.addEventListener('DOMContentLoaded', initButtons);
 })();
