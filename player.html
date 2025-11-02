@@ -14,7 +14,7 @@
     <header id="header" class="mt-2 mb-6"></header>
 
     <section class="mb-8">
-      <h2 class="text-xl font-semibold mb-2">Elo progression</h2>
+      <h2 class="text-xl font-semibold mb-2">Elo Timeline</h2>
       <div class="rounded border border-slate-800 p-3">
         <canvas id="eloChart" height="140"></canvas>
       </div>
@@ -36,11 +36,20 @@ let steamId = url.searchParams.get('steam_id');
 const q = url.searchParams.get('q');
 
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = iso => {
+  try {
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return iso || ''; }
+};
+
 async function resolveQuery(){
   if(steamId) return steamId;
   if(!q) return null;
   const { data } = await supa.rpc('search_players',{ q, p_limit:1 });
-  return (data && data[0]) ? data[0].steam_id : null;
+  if(data && data.length) return data[0].steam_id;
+  return null;
 }
 
 function renderHeader(p){
@@ -55,14 +64,20 @@ function renderHeader(p){
   </div>`;
 }
 
-function drawElo(values){
+function drawElo(labels, values){
   const ctx = document.getElementById('eloChart').getContext('2d');
   new Chart(ctx,{
     type:'line',
-    data:{ labels: values.map((_,i)=>i+1), datasets:[{ label:'Elo', data: values, tension:0.25, pointRadius:0, borderWidth:2, fill:false }]},
+    data:{ labels, datasets:[{ label:'Elo', data: values, tension:0.25, pointRadius:0, borderWidth:2, fill:false }]},
     options:{
-      plugins:{ legend:{ labels:{ color:'#cbd5e1' }}, tooltip:{ enabled:true, callbacks:{ title:()=>'', label:(c)=>` Elo: ${c.parsed.y}`}}},
-      scales:{ x:{ display:false, grid:{display:false}}, y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' }}}
+      plugins:{ legend:{ labels:{ color:'#cbd5e1' } }, tooltip:{ callbacks:{
+        title: () => '',
+        label: (ctx)=> ` Elo: ${ctx.parsed.y}`
+      }}},
+      scales:{
+        x:{ display:false, grid:{ display:false } },
+        y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' } }
+      }
     }
   });
 }
@@ -75,46 +90,49 @@ async function load(){
   if(!player){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
   document.getElementById('header').innerHTML = renderHeader(player);
 
-  // timeline (ratings -> elo_after; fallback matches)
+  // Timeline depuis ratings (fallback matches si vide)
   let { data: rt } = await supa.from('ratings')
-    .select('at, elo_after')
+    .select('at, elo_before, elo_after')
     .eq('player_id', steamId)
-    .order('at',{ascending:true})
-    .limit(3000);
+    .order('at', { ascending: true });
 
   if(!rt || rt.length < 2){
     const { data: mm } = await supa.from('matches')
-      .select('played_at,p1_id,p2_id,p1_elo_after,p2_elo_after')
+      .select('played_at,p1_id,p2_id,p1_elo_before,p1_elo_after,p2_elo_before,p2_elo_after')
       .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
       .order('played_at',{ascending:true})
       .limit(2000);
-    rt = (mm||[]).map(m=>({ elo_after: (m.p1_id===steamId)? m.p1_elo_after : m.p2_elo_after }));
+    rt = (mm||[]).map(m=>{
+      const meIsP1 = m.p1_id===steamId;
+      return { at: m.played_at,
+               elo_before: meIsP1 ? m.p1_elo_before : m.p2_elo_before,
+               elo_after:  meIsP1 ? m.p1_elo_after  : m.p2_elo_after };
+    });
   }
-  drawElo((rt||[]).map(x=>x.elo_after).filter(v=>v!=null));
 
-  // history (list claire, 1 seul lien cliquable)
+  const labels = rt.map((_,i)=> i+1);
+  const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
+  drawElo(labels, values);
+
+  // Historique des matchs
   const { data: matches } = await supa.from('matches')
-    .select('id,played_at,p1_id,p2_id,p1_name,p2_name,p1_elo_after,p2_elo_after,winner,map_id')
+    .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after,p1_elo_before,p2_elo_before')
     .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
     .order('played_at',{ascending:false})
-    .limit(100);
+    .limit(50);
 
   const cont = document.getElementById('matches'); cont.innerHTML='';
   for(const m of (matches||[])){
     const meIsP1 = m.p1_id===steamId;
     const oppNm  = meIsP1 ? (m.p2_name||'Opponent') : (m.p1_name||'Opponent');
-    const myElo  = meIsP1 ? m.p1_elo_after : m.p2_elo_after;
-    const oppElo = meIsP1 ? m.p2_elo_after : m.p1_elo_after;
-    const win    = m.winner=== (meIsP1?1:2);
+    const res    = m.winner==='1' ? (meIsP1 ? 'W' : 'L') : (m.winner==='2' ? (meIsP1 ? 'L' : 'W') : '—');
+    const meElo  = meIsP1 ? (m.p1_elo_after ?? m.p1_elo_before ?? '-') : (m.p2_elo_after ?? m.p2_elo_before ?? '-');
+
     cont.innerHTML += `
-      <a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:bg-slate-900">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-semibold">${esc(oppNm)} <span class="text-slate-400">(${oppElo??''})</span></div>
-            <div class="text-slate-400 text-sm">vs You <span class="text-slate-500">(${myElo??''})</span> · Map ${m.map_id} · ${new Date(m.played_at).toLocaleString()}</div>
-          </div>
-          <div class="${win?'text-emerald-400':'text-rose-400'} text-sm">${win?'Win':'Loss'}</div>
-        </div>
+      <a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
+        <div class="text-slate-300 text-sm">${fmt(m.played_at)}</div>
+        <div class="font-semibold">vs ${esc(oppNm)}</div>
+        <div class="text-slate-400 text-sm">Result: <span class="text-slate-100">${res}</span> · Map ${m.map_id ?? '-' } · Elo ${meElo}</div>
       </a>`;
   }
 }
