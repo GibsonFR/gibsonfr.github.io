@@ -1,115 +1,201 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>CG Ranked — Player</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-:root{--bg:#0b1420;--panel:#101b2a;--muted:#8aa0b8;--text:#e6f0ff;--accent:#2ea3ff;}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui}
-nav{display:flex;gap:24px;align-items:center;padding:16px 24px;border-bottom:1px solid #1c2a3f;background:#0d1623}
-nav .brand{font-weight:700}
-.container{max-width:1100px;margin:24px auto;padding:0 16px}
-.panel{background:var(--panel);border:1px solid #1b2940;border-radius:12px;padding:16px}
-.grid{display:grid;grid-template-columns:1fr;gap:16px}
-h1{margin:0 0 8px 0;font-size:22px}
-.kpis{display:flex;gap:16px;flex-wrap:wrap}
-.kpi{background:#0c1624;border:1px solid #1b2940;border-radius:12px;padding:12px 16px;min-width:120px}
-.kpi .v{font-size:20px;font-weight:700}
-table{width:100%;border-collapse:collapse}
-th,td{padding:10px;border-bottom:1px solid #1b2940;text-align:left}
-th{color:#9fb6cf;font-weight:600}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CG Ranked — Player</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0f1620;
+      --panel:#111a27;
+      --panel-2:#0d1520;
+      --text:#e6eef8;
+      --muted:#9db0c6;
+      --accent:#6ee7ff;
+      --accent-2:#42d392;
+      --line:#1d2a3a;
+      --danger:#ff5d5d;
+      --yellow:#ffd166;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;height:100%}
+    body{
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans";
+      background: radial-gradient(1200px 800px at 20% -10%, #132235 0%, #0f1620 60%);
+      color: var(--text);
+    }
+    a{color:inherit;text-decoration:none}
+    .container{max-width:1200px;margin:0 auto;padding:24px}
+    .nav{position:sticky;top:0;z-index:10;backdrop-filter:saturate(140%) blur(8px);background: rgba(9,14,22,.6);border-bottom:1px solid var(--line)}
+    .nav-wrap{display:flex;gap:16px;align-items:center;max-width:1200px;margin:0 auto;padding:12px 24px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+    .brand-badge{width:28px;height:28px;display:grid;place-items:center;border-radius:6px;background:linear-gradient(135deg,#42d392 0%,#2dd4bf 50%,#06b6d4 100%);color:#08111b;font-weight:900}
+    .btn{background:linear-gradient(180deg,#1a2a3b,#152233);border:1px solid var(--line);color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}
+    .grid{display:grid;grid-template-columns: 1fr; gap:20px}
+    .hero{background:linear-gradient(180deg,#111a27,#0d1520);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:18px}
+    .kpis{display:grid;grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px;margin-top:10px}
+    .kpi{background:#0f1826;border:1px solid var(--line);border-radius:12px;padding:12px}
+    .kpi .label{color:var(--muted);font-size:12px}
+    .kpi .value{font-size:24px;font-weight:700;margin-top:2px}
+    .panel{background:linear-gradient(180deg,#111a27,#0d1520);border:1px solid var(--line);border-radius:14px}
+    .panel h3{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);font-size:18px}
+    .pad{padding:12px 14px}
+    .muted{color:var(--muted)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}
+    th{color:var(--muted);text-align:left;font-weight:600;background:#0f1826}
+    tr:hover td{background:#0f1a28}
+    .footer{opacity:.6;text-align:center;margin:24px 0 40px}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<nav>
-  <div class="brand">CG Ranked</div>
-  <a href="/#/">Leaderboard</a>
-</nav>
-
-<div class="container grid">
-  <section class="panel">
-    <h1 id="title">Player</h1>
-    <div class="kpis">
-      <div class="kpi"><div class="t">Elo</div><div class="v" id="elo">–</div></div>
-      <div class="kpi"><div class="t">RP</div><div class="v" id="rp">–</div></div>
-      <div class="kpi"><div class="t">Games</div><div class="v" id="games">–</div></div>
-      <div class="kpi"><div class="t">Win%</div><div class="v" id="winp">–</div></div>
+  <header class="nav">
+    <div class="nav-wrap">
+      <a class="brand" href="./index.html#leaderboard">
+        <span class="brand-badge">CG</span> Ranked
+      </a>
+      <div style="margin-left:auto;">
+        <button class="btn" onclick="history.back()">← Back</button>
+      </div>
     </div>
-    <canvas id="eloChart" height="120"></canvas>
-  </section>
+  </header>
 
-  <section class="panel">
-    <h1>Match history</h1>
-    <table id="hist">
-      <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Score</th><th>Map</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-</div>
+  <main class="container">
+    <section class="hero">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="width:42px;height:42px;border-radius:10px;background:#0e1723;border:1px solid var(--line);display:grid;place-items:center">👤</div>
+        <div>
+          <div id="playerName" style="font-size:22px;font-weight:700">Player</div>
+          <div id="playerId" class="muted" style="font-size:12px">-</div>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="label">Elo</div><div class="value" id="kpiElo">-</div></div>
+        <div class="kpi"><div class="label">RP</div><div class="value" id="kpiRP">-</div></div>
+        <div class="kpi"><div class="label">Games</div><div class="value" id="kpiGames">-</div></div>
+        <div class="kpi"><div class="label">Win%</div><div class="value" id="kpiWin">-</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Rating over time</h3>
+      <div class="pad">
+        <canvas id="eloChart" height="120"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Match history</h3>
+      <div style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Opponent</th><th>Result</th><th>Score</th><th>Map</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyHistory"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footer muted">UI inspired by chess.com • Built for Crab Game ranked.</p>
+  </main>
 
 <script>
-const SUPABASE_URL  = "https://REPLACE_WITH_YOURS.supabase.co";
-const SUPABASE_ANON = "REPLACE_WITH_PUBLIC_ANON_KEY";
-const headers = {"apikey": SUPABASE_ANON, "Authorization": "Bearer " + SUPABASE_ANON};
+// === CONFIG — REMPLACE UNIQUEMENT CES 2 LIGNES ================================
+const SUPABASE_URL  = "https://qnxjrkedbplfrlkjqifh.supabase.co"; // <= ton projet
+const SUPABASE_ANON = "REPLACE_WITH_PUBLIC_ANON_KEY";             // <= ta clé anon
+// ==============================================================================
 
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const params = new URLSearchParams(location.search);
-const sid = params.get("sid");
+const SID = params.get('sid');
 
-function td(t){const e=document.createElement("td"); e.textContent=t; return e}
-function esc(s){return (s??"").toString()}
+const fmtTime = (iso) => {
+  if (!iso) return '-';
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString();
+  }catch{ return iso; }
+};
+const pct = (w,g) => g>0 ? Math.round((w/g)*100) + '%' : '0%';
 
-async function fetchJSON(url){
-  const r = await fetch(url, {headers});
-  if(!r.ok) throw new Error(await r.text());
-  return await r.json();
+async function loadPlayer(){
+  const { data, error } = await sb.from('players')
+    .select('steam_id, username, rank, elo, rp, games_played, wins, last_active_at')
+    .eq('steam_id', SID).maybeSingle();
+  if (error || !data){
+    document.getElementById('playerName').textContent = "Unknown player";
+    document.getElementById('playerId').textContent = SID ?? "-";
+    return;
+  }
+  document.getElementById('playerName').textContent = data.username ?? data.steam_id;
+  document.getElementById('playerId').textContent   = data.steam_id;
+  document.getElementById('kpiElo').textContent   = data.elo ?? '-';
+  document.getElementById('kpiRP').textContent    = data.rp ?? '-';
+  document.getElementById('kpiGames').textContent = data.games_played ?? 0;
+  document.getElementById('kpiWin').textContent   = pct(data.wins ?? 0, data.games_played ?? 0);
 }
 
-async function load(){
-  const p = await fetchJSON(`${SUPABASE_URL}/rest/v1/players?select=*&steam_id=eq.${encodeURIComponent(sid)}`);
-  const me = p[0];
-  document.getElementById("title").textContent = (me?.username || sid) + " (" + sid + ")";
-  document.getElementById("elo").textContent = esc(me?.elo ?? "–");
-  document.getElementById("rp").textContent = esc(me?.rp ?? "–");
-  const games = Number(me?.games_played||0), wins = Number(me?.wins||0);
-  document.getElementById("games").textContent = games;
-  document.getElementById("winp").textContent = games ? Math.round(100*wins/games)+"%" : "0%";
-
-  const ratings = await fetchJSON(`${SUPABASE_URL}/rest/v1/ratings?select=at,elo_after&player_id=eq.${encodeURIComponent(sid)}&order=at.asc`);
-  const labels = ratings.map(r => (r.at||"").replace("T"," ").split(".")[0]);
-  const series = ratings.map(r => r.elo_after||0);
-  const ctx = document.getElementById("eloChart").getContext("2d");
+async function loadElo(){
+  const { data, error } = await sb.from('ratings')
+    .select('at, elo_after')
+    .eq('player_id', SID)
+    .order('at', {ascending:true})
+    .limit(300);
+  const ctx = document.getElementById('eloChart');
+  const labels = (data||[]).map(r => fmtTime(r.at));
+  const vals   = (data||[]).map(r => r.elo_after || 0);
   new Chart(ctx, {
     type: 'line',
-    data: {labels, datasets:[{label:"Elo", data:series}]},
-    options: {responsive:true, plugins:{legend:{display:false}}, scales:{x:{display:false}}}
-  });
-
-  // build history by joining matches where player is p1 or p2
-  const histBody = document.querySelector("#hist tbody");
-  histBody.innerHTML = "";
-  const m1 = await fetchJSON(`${SUPABASE_URL}/rest/v1/matches?select=*&p1_id=eq.${encodeURIComponent(sid)}&order=played_at.desc&limit=100`);
-  const m2 = await fetchJSON(`${SUPABASE_URL}/rest/v1/matches?select=*&p2_id=eq.${encodeURIComponent(sid)}&order=played_at.desc&limit=100`);
-  const all = [...m1, ...m2].sort((a,b)=> (a.played_at<b.played_at?1:-1));
-  all.forEach(m => {
-    const tr = document.createElement("tr");
-    const youAreP1 = m.p1_id===sid;
-    const opp = youAreP1 ? m.p2_id : m.p1_id;
-    const myScore = youAreP1 ? (m.p1_score||0) : (m.p2_score||0);
-    const opScore = youAreP1 ? (m.p2_score||0) : (m.p1_score||0);
-    const res = myScore>opScore ? "Win" : (myScore<opScore ? "Loss" : "Draw");
-    tr.appendChild(td((m.played_at||"").replace("T"," ").split(".")[0]));
-    tr.appendChild(td(opp));
-    tr.appendChild(td(res));
-    tr.appendChild(td(`${myScore}-${opScore}`));
-    tr.appendChild(td(m.map_id||"-"));
-    histBody.appendChild(tr);
+    data: { labels, datasets:[{ label:'Elo', data:vals, tension:.25 }]},
+    options:{
+      responsive:true,
+      scales:{ x:{ticks:{color:'#9db0c6'}}, y:{ticks:{color:'#9db0c6'}}},
+      plugins:{ legend:{display:false} }
+    }
   });
 }
 
-load();
+async function loadHistory(){
+  // récupère les matchs où le joueur est p1 OU p2
+  const q1 = sb.from('matches').select('played_at, p1_id, p2_id, p1_score, p2_score, map_id').eq('p1_id',SID);
+  const q2 = sb.from('matches').select('played_at, p1_id, p2_id, p1_score, p2_score, map_id').eq('p2_id',SID);
+  const [r1, r2] = await Promise.all([q1, q2]);
+  const rows = [...(r1.data||[]), ...(r2.data||[])].sort((a,b)=> new Date(b.played_at) - new Date(a.played_at)).slice(0,200);
+
+  const body = document.getElementById('tbodyHistory');
+  body.innerHTML = "";
+  rows.forEach(m => {
+    const youAreP1 = m.p1_id === SID;
+    const youScore = youAreP1 ? (m.p1_score||0) : (m.p2_score||0);
+    const oppScore = youAreP1 ? (m.p2_score||0) : (m.p1_score||0);
+    const oppId    = youAreP1 ? m.p2_id : m.p1_id;
+    const res = youScore>oppScore ? 'Win' : (youScore<oppScore ? 'Loss' : 'Draw');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtTime(m.played_at)}</td>
+      <td><a class="ok" href="./player.html?sid=${encodeURIComponent(oppId)}">${(oppId||'').slice(-6)}</a></td>
+      <td>${res}</td>
+      <td>${youScore}–${oppScore}</td>
+      <td>${m.map_id ?? '-'}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+if (!SID){
+  alert("Missing sid parameter");
+}else{
+  loadPlayer();
+  loadElo();
+  loadHistory();
+}
 </script>
 </body>
 </html>
