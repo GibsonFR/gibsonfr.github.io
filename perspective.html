@@ -32,10 +32,9 @@
   <div class="max-w-6xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
-    <!-- HEADER -->
     <header id="head" class="mt-3"></header>
 
-    <!-- FILTERS -->
+    <!-- MAP FILTERS -->
     <div id="scopeBar" class="mt-4 hidden"></div>
 
     <!-- PREMIUM / AUTH GATE -->
@@ -84,7 +83,7 @@ const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 const url = new URL(location.href);
 const steamId = url.searchParams.get('steam_id');
 
-/* Known map names */
+/* Map names */
 const MAP_NAMES = {35:'Mini Monke',36:'Small Beach',38:'Small Containers',39:'Tiny Town 2',40:'Tiny Town'};
 const prettyMap = id => MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : `Map ${id}`;
 
@@ -102,7 +101,7 @@ function avg(a){ a=(a||[]).filter(Number.isFinite); return a.length? sum(a)/a.le
 function std(a){ a=(a||[]).filter(Number.isFinite); if(!a.length) return null; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); }
 function lastN(a,n){ return (a||[]).slice(Math.max(0,a.length-n)); }
 
-/* SVG sparklines */
+/* SVG sparkline */
 function spark(values, w=240, h=48){
   values=(values||[]).filter(Number.isFinite); if(!values.length) return `<svg width="${w}" height="${h}"></svg>`;
   const min=Math.min(...values), max=Math.max(...values);
@@ -112,7 +111,7 @@ function spark(values, w=240, h=48){
   return `<svg width="${w}" height="${h}" class="text-amber-300"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
 }
 
-/* Bars with animation */
+/* Bars */
 function bar(v01, title=''){
   const v = Math.max(0, Math.min(1, Number(v01)||0));
   const w = (v*100).toFixed(1)+'%';
@@ -121,7 +120,7 @@ function bar(v01, title=''){
   </div>`;
 }
 
-/* reveal on scroll */
+/* reveal */
 const io = new IntersectionObserver(entries=>{
   entries.forEach(e=>{
     if(e.isIntersecting){
@@ -219,7 +218,6 @@ async function updateGateUI(){
 
 /* -------------------- Data -------------------- */
 async function fetchPlayer(){ const { data } = await supa.from('players').select('*').eq('steam_id', steamId).maybeSingle(); return data||null; }
-
 async function fetchMatchesForPlayer(sid, limit=800){
   const { data, error } = await supa.from('matches')
     .select('id, played_at, map_id, winner, p1_id, p2_id, p1_name, p2_name, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
@@ -238,15 +236,14 @@ async function fetchAnalysesForMatchIds(ids){
   const map = new Map(); (data||[]).forEach(r=> map.set(r.match_id, r)); return map;
 }
 
-/* -------------------- Aggregation (supports All or single map) -------------------- */
+/* -------------------- Aggregation -------------------- */
 function aggregateMetrics(sid, matches, analyses, mapId=null){
   const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
 
-  const eloSeries = [];
-  const results = [];
+  const eloSeries = [], results = [];
   const qual=[], speeds=[], distH=[], distT=[];
-  const tagShareRaw=[], tagShareFromSecs=[];
-  const tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
+  const tagShareRaw=[], tagShareFromSecs=[], tagSecs=[], hidSecs=[];
+  const retMed=[], retAvg=[], acc=[];
   const byMap = new Map(), byOpp = new Map();
 
   for (const m of scope){
@@ -269,33 +266,27 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
       if (isFinite(s.avg_distance_as_hider))  distH.push(Number(s.avg_distance_as_hider));
       if (isFinite(s.avg_distance_as_tagger)) distT.push(Number(s.avg_distance_as_tagger));
 
-      // collect both versions
-      if (isFinite(s.time_as_tagger_share))    tagShareRaw.push(Number(s.time_as_tagger_share)); // expected 0..1
-      if (isFinite(s.seconds_as_tagger))       tagSecs.push(Number(s.seconds_as_tagger));
-      if (isFinite(s.seconds_as_hider))        hidSecs.push(Number(s.seconds_as_hider));
-
-      // per-match share computed from seconds when possible
+      if (isFinite(s.time_as_tagger_share)) tagShareRaw.push(Number(s.time_as_tagger_share));
+      if (isFinite(s.seconds_as_tagger))    tagSecs.push(Number(s.seconds_as_tagger));
+      if (isFinite(s.seconds_as_hider))     hidSecs.push(Number(s.seconds_as_hider));
       if (isFinite(s.seconds_as_tagger) && isFinite(s.seconds_as_hider)) {
         const total = Number(s.seconds_as_tagger)+Number(s.seconds_as_hider);
-        if (total > 0) tagShareFromSecs.push(Number(s.seconds_as_tagger) / total);
+        if (total>0) tagShareFromSecs.push(Number(s.seconds_as_tagger)/total);
       }
-
-      if (isFinite(s.retag_median_seconds))    retMed.push(Number(s.retag_median_seconds));
-      if (isFinite(s.retag_avg_seconds))       retAvg.push(Number(s.retag_avg_seconds));
-      if (isFinite(s.accuracy))                acc.push(Number(s.accuracy));
+      if (isFinite(s.retag_median_seconds)) retMed.push(Number(s.retag_median_seconds));
+      if (isFinite(s.retag_avg_seconds))    retAvg.push(Number(s.retag_avg_seconds));
+      if (isFinite(s.accuracy))             acc.push(Number(s.accuracy));
     }
 
-    // per map (for "Per-map breakdown" when scope=All)
     const keyM = String(m.map_id);
     if (!byMap.has(keyM)) byMap.set(keyM, { map_id:m.map_id, matches:0, wins:0, q:[], sp:[], ts:[], rm:[], dh:[], dt:[] });
     const bm = byMap.get(keyM);
     bm.matches++; if (win) bm.wins++;
     if (a){
       const s = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
-      const q = (side==='p1') ? a.p1_quality : a.p2_quality;
-      if (isFinite(q)) bm.q.push(Number(q));
+      const q2 = (side==='p1') ? a.p1_quality : a.p2_quality;
+      if (isFinite(q2)) bm.q.push(Number(q2));
       if (isFinite(s.avg_speed_ms)) bm.sp.push(Number(s.avg_speed_ms));
-      // for map table, prefer computed share too
       let shareHere = null;
       if (isFinite(s.seconds_as_tagger) && isFinite(s.seconds_as_hider)) {
         const t = Number(s.seconds_as_tagger)+Number(s.seconds_as_hider);
@@ -304,13 +295,11 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
         shareHere = Number(s.time_as_tagger_share);
       }
       if (shareHere!=null) bm.ts.push(shareHere);
-
       if (isFinite(s.retag_median_seconds)) bm.rm.push(Number(s.retag_median_seconds));
       if (isFinite(s.avg_distance_as_hider)) bm.dh.push(Number(s.avg_distance_as_hider));
       if (isFinite(s.avg_distance_as_tagger)) bm.dt.push(Number(s.avg_distance_as_tagger));
     }
 
-    // per opponent
     const ok = String(oppId||'unknown');
     if (!byOpp.has(ok)) byOpp.set(ok, { id:oppId, name:oppName, matches:0, wins:0, q:[] });
     const bo = byOpp.get(ok);
@@ -325,7 +314,6 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
   const wins = results.filter(Boolean).length;
   const winrate = count ? wins / count : null;
 
-  // choose the most reliable share source
   const share_as_tagger = (tagShareFromSecs.length ? avg(tagShareFromSecs) :
                            tagShareRaw.length ? avg(tagShareRaw) : null);
 
@@ -337,7 +325,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
   };
 
   const tagging = {
-    share_as_tagger, // 0..1
+    share_as_tagger,
     time_as_tagger_average: avg(tagSecs),
     time_as_tagger_median: median(tagSecs),
     time_as_hider_average: avg(hidSecs),
@@ -363,7 +351,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
     retag_median_seconds: avg(b.rm),
     average_hider_distance_m: avg(b.dh),
     average_tagger_distance_m: avg(b.dt)
-  })).sort((a,b)=> (b.average_quality??-1) - (a.average_quality??-1));
+  })).sort((a,b)=> (b.matches - a.matches));
 
   const oppArr = Array.from(byOpp.values()).map(o=>({
     id:o.id, name:o.name, matches:o.matches,
@@ -388,37 +376,6 @@ function chip(label, value, tip, suffix=''){
 function section(title, body){
   return `<div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
     <h3 class="text-xl font-semibold mb-3">${title}</h3>${body}</div>`;
-}
-function row(label, valueHtml){
-  return `<tr>
-    <td class="py-2 pl-3 text-slate-300 whitespace-nowrap">${label}</td>
-    <td class="py-2 pr-3 text-right font-semibold whitespace-nowrap">${valueHtml}</td>
-  </tr>`;
-}
-function badgeDelta(a,b,suffix=''){
-  if(!isFinite(a)||!isFinite(b)) return '';
-  const d = Math.round((a-b)*100)/100;
-  if (d===0) return `<span class="ml-2 text-xs text-slate-400">±0${suffix}</span>`;
-  const up=d>0; return `<span class="ml-2 text-xs ${up?'text-emerald-400':'text-rose-400'}">${up?'▲':'▼'} ${Math.abs(d)}${suffix}</span>`;
-}
-
-/* Header */
-function headerCard(p, isPrem){
-  const name = labelWithPremium(p.steam_id, p.username||p.steam_id, isPrem);
-  const avatar = ((p.username||p.steam_id||'?').trim().charAt(0).toUpperCase()||'?');
-  return `
-  <div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div class="flex items-center gap-4">
-        <div class="w-14 h-14 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-xl font-bold text-indigo-300">${avatar}</div>
-        <div>
-          <div class="text-2xl font-extrabold leading-tight">${name}</div>
-          <div id="chips" class="mt-2 grid grid-cols-2 sm:flex sm:flex-wrap gap-2"></div>
-        </div>
-      </div>
-      <div class="text-slate-400 text-sm">Perspective</div>
-    </div>
-  </div>`;
 }
 
 /* Overview chips */
@@ -546,59 +503,42 @@ function sectionQuality(m){
     </div>`);
 }
 
-function sectionMaps(maps){
+/* Per-map: show only on “All”; render as cards (airy) */
+function sectionMaps(maps, filter){
+  if (filter != null) return ''; // hidden when a specific map is selected
   if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
-  const rows = maps.map(mp=>{
-    const wr = mp.winrate!=null? Math.round(mp.winrate*1000)/10 : null;
-    const cells = [
-      `<span class="text-slate-100">${prettyMap(mp.map_id)}</span><span class="text-slate-400"> · ${mp.matches} matches</span>`,
-      `${wr==null?'—':wr+'%'} ${bar((wr||0)/100,'Win rate')}`,
-      `Avg quality ${num(mp.average_quality,1)}`,
-      `Avg speed ${num(mp.average_speed_mps,2)} m/s`,
-      `Tag share ${mp.share_as_tagger!=null? Math.round(mp.share_as_tagger*1000)/10+'%':'—'}`,
-      `Retag median ${fmtS(mp.retag_median_seconds)}`,
-      `Dist (hider) ${num(mp.average_hider_distance_m,2)} m`,
-      `Dist (tagger) ${num(mp.average_tagger_distance_m,2)} m`
-    ];
-    return `<tr class="align-top">
-      <td class="py-3 pl-3">${cells[0]}</td>
-      <td class="py-3 px-3">${cells[1]}</td>
-      <td class="py-3 px-3">${cells[2]}</td>
-      <td class="py-3 px-3">${cells[3]}</td>
-      <td class="py-3 px-3">${cells[4]}</td>
-      <td class="py-3 px-3">${cells[5]}</td>
-      <td class="py-3 px-3">${cells[6]}</td>
-      <td class="py-3 pr-3">${cells[7]}</td>
-    </tr>`;
-  }).join('');
+  const top = maps.slice(0, 12); // avoid huge grids
+  const cards = top.map(mp=>`
+    <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">${prettyMap(mp.map_id)}</div>
+        <a class="text-xs text-indigo-400 hover:underline" href="?steam_id=${encodeURIComponent(steamId)}">${/* same page – filter handled via pills */''}</a>
+      </div>
+      <div class="mt-2 text-slate-400 text-sm">${mp.matches} matches</div>
+      <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
+        <div><div class="text-slate-400">Win rate</div><div class="font-semibold">${mp.winrate!=null? Math.round(mp.winrate*1000)/10+'%':'—'}</div></div>
+        <div><div class="text-slate-400">Avg quality</div><div class="font-semibold">${num(mp.average_quality,1)}</div></div>
+        <div><div class="text-slate-400">Tag share</div><div class="font-semibold">${mp.share_as_tagger!=null? Math.round(mp.share_as_tagger*1000)/10+'%':'—'}</div></div>
+        <div><div class="text-slate-400">Avg speed</div><div class="font-semibold">${num(mp.average_speed_mps,2)} m/s</div></div>
+        <div class="col-span-2"><div class="text-slate-400">Retag median</div><div class="font-semibold">${fmtS(mp.retag_median_seconds)}</div></div>
+      </div>
+    </div>
+  `).join('');
   return section('Per-map breakdown',
-    `<div class="overflow-x-auto rounded border border-slate-800">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-900/60 text-slate-300">
-          <tr>
-            <th class="text-left pl-3 py-2">Map</th>
-            <th class="text-left px-3 py-2">Win rate</th>
-            <th class="text-left px-3 py-2">Quality</th>
-            <th class="text-left px-3 py-2">Speed</th>
-            <th class="text-left px-3 py-2">Tag share</th>
-            <th class="text-left px-3 py-2">Retag</th>
-            <th class="text-left px-3 py-2">Hider distance</th>
-            <th class="text-left pr-3 py-2">Tagger distance</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-800">${rows}</tbody>
-      </table>
-    </div>`);
+    `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`);
 }
 
 function sectionOpponents(opps){
   if(!opps?.length) return section('Most faced opponents','<div class="text-slate-400 text-sm">No data.</div>');
   const rows = opps.slice(0,20).map(o=>{
     const wr = o.winrate!=null? Math.round(o.winrate*1000)/10 : null;
-    return row(
-      `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(o.id)}">${esc(o.name||o.id)}</a> <span class="text-slate-400">· ${o.matches} matches</span>`,
-      `${wr==null?'—':wr+'%'} · avg quality ${num(o.average_quality,1)}`
-    );
+    return `<tr>
+      <td class="py-2 pl-3">
+        <a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(o.id)}">${esc(o.name||o.id)}</a>
+        <span class="text-slate-400"> · ${o.matches} matches</span>
+      </td>
+      <td class="py-2 pr-3 text-right">${wr==null?'—':wr+'%'} · avg quality ${num(o.average_quality,1)}</td>
+    </tr>`;
   }).join('');
   return section('Most faced opponents',
     `<div class="overflow-x-auto rounded border border-slate-800">
@@ -613,24 +553,6 @@ function mirrorHeader(leftHtml, rightHtml){
     <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">${rightHtml}</div>
   </div>`;
 }
-function renderMirror(container, A, B, nameA, nameB, premSet, idA, idB){
-  const leftName  = labelWithPremium(idA, nameA, premSet.has(String(idA)));
-  const rightName = labelWithPremium(idB, nameB, premSet.has(String(idB)));
-
-  const top = mirrorHeader(
-    `<div class="text-lg font-semibold">${leftName}</div>
-     <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b>${badgeDelta(A.winrate!=null?Math.round(A.winrate*1000)/10:null, B.winrate!=null?Math.round(B.winrate*1000)/10:null,'%')}</div>
-     <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b>${badgeDelta(A.quality.average, B.quality.average)}</div>
-     <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b>${badgeDelta(A.speed.average_mps, B.speed.average_mps)}</div>`,
-    `<div class="text-lg font-semibold">${rightName}</div>
-     <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b>${badgeDelta(B.winrate!=null?Math.round(B.winrate*1000)/10:null, A.winrate!=null?Math.round(A.winrate*1000)/10:null,'%')}</div>
-     <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b>${badgeDelta(B.quality.average, A.quality.average)}</div>
-     <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b>${badgeDelta(B.speed.average_mps, A.speed.average_mps)}</div>`
-  );
-
-  container.innerHTML = top;
-  mountReveal(container);
-}
 
 /* -------------------- Render pipeline -------------------- */
 function renderAll(contentEl, metrics){
@@ -643,7 +565,7 @@ function renderAll(contentEl, metrics){
     ${sectionSpeedDistance(metrics)}
     ${sectionRetagAccuracy(metrics)}
     ${sectionQuality(metrics)}
-    ${sectionMaps(metrics.maps)}
+    ${sectionMaps(metrics.maps, currentFilter)}
     ${sectionOpponents(metrics.opponents)}
   `;
   mountReveal(contentEl);
@@ -661,7 +583,21 @@ async function init(){
   const player = await fetchPlayer();
   if(!player){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
   const isPremSelf = await isPremiumSteam(steamId);
-  head.innerHTML = headerCard(player, isPremSelf); mountReveal(head);
+  head.innerHTML = `
+    <div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-xl font-bold text-indigo-300">
+          ${(player.username||player.steam_id||'?').trim().charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <div class="text-2xl font-extrabold leading-tight">
+            ${labelWithPremium(steamId, player.username||steamId, isPremSelf)}
+          </div>
+          <div id="chips" class="mt-2 grid grid-cols-2 sm:flex sm:flex-wrap gap-2"></div>
+        </div>
+      </div>
+    </div>`;
+  mountReveal(head);
 
   let gate = await updateGateUI();
   supa.auth.onAuthStateChange(async () => { gate = await updateGateUI(); });
@@ -680,7 +616,6 @@ async function init(){
     return metrics;
   }
 
-  // Build filters (All + maps present)
   function renderScopeBar(){
     const presentMaps = [...new Set(matchesCache.map(m=>m.map_id))].sort((a,b)=>a-b);
     const pill = (id,label,active)=>`<button data-map="${id??''}" class="px-3 py-1.5 rounded-full text-sm border ${active?'bg-amber-500/20 text-amber-300 border-amber-400/30':'bg-slate-800/60 text-slate-200 border-slate-700 hover:bg-slate-800'}">${label}</button>`;
@@ -697,13 +632,14 @@ async function init(){
         currentFilter = v==='' ? null : v;
         const m = await build(currentFilter);
         renderAll(content, m);
+        // re-render scope bar to update the active styling (fix for “All stays highlighted”)
+        renderScopeBar();
       };
     });
   }
 
   // Initial render (premium only)
   if (gate.premium){
-    // Prime caches to know maps then render scope bar
     matchesCache = await fetchMatchesForPlayer(steamId, 800);
     analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
     renderScopeBar();
@@ -713,10 +649,8 @@ async function init(){
     content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
 
-  // Recompute button
   document.getElementById('refreshBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
-    // Force refetch
     matchesCache = await fetchMatchesForPlayer(steamId, 800);
     analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
     renderScopeBar();
@@ -724,18 +658,13 @@ async function init(){
     renderAll(content, m);
   };
 
-  // Resolve player with fallback if RPC is missing
   async function resolvePlayerSmart(text){
     if(!text) return null;
-    if(/^\d{5,}$/.test(text)) return text; // SteamID64 provided
-
-    // Try RPC first
+    if(/^\d{5,}$/.test(text)) return text; // SteamID64
     try{
       const rp = await supa.rpc('search_players',{ q:text, p_limit:1 });
       if (!rp.error && rp.data && rp.data.length) return rp.data[0].steam_id;
     }catch{}
-
-    // Fallback to players.username ilike
     try{
       const { data } = await supa.from('players')
         .select('steam_id, username')
@@ -744,11 +673,9 @@ async function init(){
         .maybeSingle();
       if (data?.steam_id) return data.steam_id;
     }catch{}
-
     return null;
   }
 
-  // Compare (mirror), applies current filter if checkbox on
   document.getElementById('cmpBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
     const cmpStatus = document.getElementById('cmpStatus');
@@ -758,11 +685,8 @@ async function init(){
     const other = await resolvePlayerSmart(query);
     if(!other){ cmpStatus.textContent='Player not found.'; return; }
 
-    // Build A metrics from cache (already loaded)
     const A = aggregateMetrics(steamId, matchesCache, analysesCache, applyFilter? currentFilter : null);
 
-    // Build B metrics (fetch fresh)
-    cmpStatus.textContent='Loading opponent…';
     const mB = await fetchMatchesForPlayer(other, 800);
     const aB = await fetchAnalysesForMatchIds(mB.map(m=>m.id));
     const B = aggregateMetrics(other, mB, aB, applyFilter? currentFilter : null);
@@ -775,9 +699,26 @@ async function init(){
 
     const wrap = document.createElement('div'); wrap.className = 'grid grid-cols-1 gap-4';
     const mirrorBox = document.createElement('div'); wrap.appendChild(mirrorBox);
-    renderMirror(mirrorBox, A, B, nameA, nameB, premSet, steamId, other);
+    mirrorBox.innerHTML = `
+      ${ (function(){
+          const left = `
+            <div class="text-lg font-semibold">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
+            <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b></div>
+            <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b></div>
+            <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b></div>`;
+          const right = `
+            <div class="text-lg font-semibold">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
+            <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b></div>
+            <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b></div>
+            <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b></div>`;
+          return `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-right reveal">${left}</div>
+                    <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">${right}</div>
+                  </div>`;
+        })()
+      }`;
+    mountReveal(mirrorBox);
 
-    // detailed columns with same filter
     const cols = document.createElement('div'); cols.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
     const left  = document.createElement('div');
     const right = document.createElement('div');
