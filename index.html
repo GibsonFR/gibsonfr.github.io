@@ -225,5 +225,19 @@ loadRecent();
 
 <script src="auth.js"></script>
 <script src="payments.js"></script>
+
+<!-- Premium section (PayPal) -->
+<section id="premium" style="max-width:960px;margin:2rem auto;padding:1rem;border:1px solid #334155;border-radius:.75rem;background:#0b1220;">
+  <h2 style="color:#e2e8f0;margin-bottom:.5rem;">Premium — €2 pour 30 jours</h2>
+  <p style="color:#9ca3af;margin-bottom:1rem;">Débloque Perspective et analyses illimitées.</p>
+  <div id="paypal-button-container"></div>
+  <small style="display:block;margin-top:.5rem;color:#94a3b8;">Paiement PayPal sécurisé. Le premium s’active automatiquement après validation.</small>
+</section>
+<script>
+  window.PAYPAL_CLIENT_ID = 'YOUR_PAYPAL_CLIENT_ID';
+  window.PAYPAL_PRICE_EUR = '2.00';
+</script>
+<script src="paypal.js"></script>
+
 </body>
 </html>
