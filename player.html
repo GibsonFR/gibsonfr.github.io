@@ -36,13 +36,20 @@ let steamId = url.searchParams.get('steam_id');
 const q = url.searchParams.get('q');
 
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt = iso => {
+const fmtDate = iso => {
   try {
     const d = new Date(iso);
     const pad = n => String(n).padStart(2,'0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   } catch { return iso || ''; }
 };
+const fmtDur = s => {
+  if (s==null || isNaN(s)) return '—';
+  const mm = Math.floor(s/60);
+  const ss = Math.floor(s%60);
+  return `${mm}:${String(ss).padStart(2,'0')}`;
+};
+const pct = x => (x==null||isNaN(x) ? '—' : `${Math.round(x*1000)/10}%`);
 
 async function resolveQuery(){
   if(steamId) return steamId;
@@ -90,7 +97,7 @@ async function load(){
   if(!player){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
   document.getElementById('header').innerHTML = renderHeader(player);
 
-  // Timeline depuis ratings (fallback matches si vide)
+  // Timeline
   let { data: rt } = await supa.from('ratings')
     .select('at, elo_before, elo_after')
     .eq('player_id', steamId)
@@ -114,7 +121,7 @@ async function load(){
   const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
   drawElo(labels, values);
 
-  // Historique des matchs + Quality (si analysés)
+  // Matches
   const { data: matches } = await supa.from('matches')
     .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after,p1_elo_before,p2_elo_before')
     .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
@@ -124,12 +131,12 @@ async function load(){
   const cont = document.getElementById('matches'); cont.innerHTML='';
   if(!matches || !matches.length) return;
 
-  // Récup analyses pour ces matches
+  // Analyses liées
   const ids = matches.map(m=>m.id);
   let aById = {};
   if(ids.length){
     const { data: analyses } = await supa.from('match_analyses')
-      .select('match_id,p1_quality,p2_quality')
+      .select('match_id,p1_quality,p2_quality,p1_stats,p2_stats,summary')
       .in('match_id', ids);
     if(analyses){
       for(const a of analyses) aById[a.match_id] = a;
@@ -137,24 +144,46 @@ async function load(){
   }
 
   for(const m of matches){
-    const meIsP1 = m.p1_id===steamId;
-    const oppNm  = meIsP1 ? (m.p2_name||'Opponent') : (m.p1_name||'Opponent');
-    const res    = m.winner==='1' ? (meIsP1 ? 'W' : 'L') : (m.winner==='2' ? (meIsP1 ? 'L' : 'W') : '—');
-    const meElo  = meIsP1 ? (m.p1_elo_after ?? m.p1_elo_before ?? '-') : (m.p2_elo_after ?? m.p2_elo_before ?? '-');
-
-    // Quality du joueur pour ce match (si analyse dispo)
     const a = aById[m.id];
-    const myQ = a ? (meIsP1 ? a.p1_quality : a.p2_quality) : null;
-    const qPart = (myQ==null ? '' : ` · Quality ${myQ}`);
+    const dur = a?.summary?.duration_s;
+
+    const p1E = (m.p1_elo_after ?? m.p1_elo_before ?? '-');
+    const p2E = (m.p2_elo_after ?? m.p2_elo_before ?? '-');
+
+    const acc1 = a?.p1_stats?.accuracy ?? null;
+    const acc2 = a?.p2_stats?.accuracy ?? null;
+
+    const q1 = a?.p1_quality ?? null;
+    const q2 = a?.p2_quality ?? null;
 
     cont.innerHTML += `
-      <a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
-        <div class="text-slate-300 text-sm">${fmt(m.played_at)}</div>
-        <div class="font-semibold">vs ${esc(oppNm)}</div>
-        <div class="text-slate-400 text-sm">
-          Result: <span class="text-slate-100">${res}</span> ·
-          Map ${m.map_id ?? '-' } ·
-          Elo ${meElo}${qPart}
+      <a href="match.html?id=${m.id}" class="block rounded border border-slate-800 hover:border-indigo-500 bg-slate-900/40">
+        <div class="px-3 py-2 border-b border-slate-800 text-slate-300 text-sm flex items-center justify-between">
+          <div>${fmtDate(m.played_at)} · <span class="text-slate-400">Map ${m.map_id ?? '-'}</span></div>
+          <div class="text-slate-400">Duration <span class="text-slate-100">${fmtDur(dur)}</span></div>
+        </div>
+
+        <div class="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Row style like chess.com: name (elo) ........ Acc / Quality -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${esc(m.p1_name||m.p1_id||'P1')} <span class="text-slate-400">(${p1E})</span></div>
+            </div>
+            <div class="text-right text-sm">
+              <div>Accuracy <span class="text-slate-100">${pct(acc1)}</span></div>
+              ${q1!=null ? `<div class="text-slate-400">Quality <span class="text-slate-100">${q1}</span></div>` : ``}
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${esc(m.p2_name||m.p2_id||'P2')} <span class="text-slate-400">(${p2E})</span></div>
+            </div>
+            <div class="text-right text-sm">
+              <div>Accuracy <span class="text-slate-100">${pct(acc2)}</span></div>
+              ${q2!=null ? `<div class="text-slate-400">Quality <span class="text-slate-100">${q2}</span></div>` : ``}
+            </div>
+          </div>
         </div>
       </a>`;
   }
