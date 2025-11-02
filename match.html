@@ -10,18 +10,41 @@
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-3xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
-    <div id="card" class="mt-4 p-4 rounded border border-slate-800"></div>
 
-    <section class="mt-6 p-4 rounded border border-slate-800">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">Game Analysis</h2>
-        <div id="analysis-actions" class="flex items-center gap-2">
-          <button id="analyzeBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Analyze game</button>
-          <span id="analysisStatus" class="text-slate-400 text-sm"></span>
+    <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
+
+    <!-- Analysis block (ajouté, non intrusif) -->
+    <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800 hidden">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Game Analysis</h2>
+        <button id="analyzeBtn"
+                class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50">
+          Analyze game
+        </button>
+      </div>
+
+      <div id="analysisStatus" class="mt-3 text-sm text-slate-300"></div>
+
+      <div id="analysisResult" class="mt-4 hidden">
+        <h3 class="font-semibold mb-2">Result</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-3 rounded bg-slate-900 border border-slate-800">
+            <div class="text-slate-400 text-xs mb-1">P1 Quality</div>
+            <div id="p1q" class="text-xl font-bold">—</div>
+            <pre id="p1stats" class="mt-2 text-xs whitespace-pre-wrap"></pre>
+          </div>
+          <div class="p-3 rounded bg-slate-900 border border-slate-800">
+            <div class="text-slate-400 text-xs mb-1">P2 Quality</div>
+            <div id="p2q" class="text-xl font-bold">—</div>
+            <pre id="p2stats" class="mt-2 text-xs whitespace-pre-wrap"></pre>
+          </div>
+        </div>
+        <div class="mt-4 p-3 rounded bg-slate-900 border border-slate-800">
+          <div class="text-slate-400 text-xs mb-1">Summary</div>
+          <pre id="summary" class="text-xs whitespace-pre-wrap"></pre>
         </div>
       </div>
-      <div id="analysisBlock" class="space-y-2 text-sm"></div>
-    </section>
+    </div>
   </div>
 
 <script>
@@ -29,139 +52,110 @@ const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
-const idStr = new URL(location.href).searchParams.get('id');
-const matchId = Number(idStr);
-const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const idParam = new URL(location.href).searchParams.get('id');
+const isNumericId = idParam && /^\d+$/.test(idParam);
+const matchIdValue = isNumericId ? Number(idParam) : idParam; // bigint ou uuid
 
-let currentMatch = null;
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const el = sel => document.querySelector(sel);
 
-async function loadMatch(){
-  const { data: m, error } = await supa.from('matches').select('*').eq('id', matchId).single();
-  if(error || !m){ document.getElementById('card').innerHTML='<div class="text-red-400">Match not found.</div>'; return null; }
+async function fetchMatchById() {
+  // Requête robuste: maybeSingle() (évite throw), puis fallback numérique/texte si besoin
+  let q = supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
+  let { data: m, error } = await q;
+  if (m) return { m, error: null };
 
-  currentMatch = m;
+  // Rien trouvé: message clair
+  return { m: null, error: error || new Error('not_found') };
+}
 
+function renderMatch(m) {
   const p1link = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p1_id)}">${esc(m.p1_name||'P1')}</a>`;
   const p2link = `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(m.p2_id)}">${esc(m.p2_name||'P2')}</a>`;
   const e1 = m.p1_elo_after ?? m.p1_elo_before ?? '-';
   const e2 = m.p2_elo_after ?? m.p2_elo_before ?? '-';
-  const winner = m.winner==='1' ? p1link : (m.winner==='2' ? p2link : '—');
+  const winner = m.winner === '1' ? p1link : (m.winner === '2' ? p2link : '—');
   const replayBtn = m.replay_url
-      ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
-      : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+    ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>`
+    : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
 
-  document.getElementById('card').innerHTML = `
+  el('#matchCard').innerHTML = `
     <div class="space-y-3">
       <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
       <div class="text-xl font-bold">${p1link} <span class="text-slate-400">(${e1})</span> vs ${p2link} <span class="text-slate-400">(${e2})</span></div>
       <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
       <div class="pt-1">${replayBtn}</div>
     </div>`;
-  return m;
 }
 
-function renderAnalysis(res){
-  const wrap = document.getElementById('analysisBlock');
-  if(!res){ wrap.innerHTML=''; return; }
-
-  const p1q = res.p1_quality ?? '-';
-  const p2q = res.p2_quality ?? '-';
-  const sum = res.summary || {};
-  const p1s = res.p1_stats || {};
-  const p2s = res.p2_stats || {};
-
-  const kv = (obj) => Object.entries(obj).map(([k,v])=>`<div class="flex justify-between"><span class="text-slate-400">${esc(k)}</span><span class="text-slate-100">${esc(String(v))}</span></div>`).join('');
-
-  wrap.innerHTML = `
-    <div class="rounded border border-slate-800 p-3">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <div class="font-semibold mb-1">P1 quality</div>
-          <div class="text-2xl">${p1q}</div>
-          <div class="mt-2 space-y-1">${kv(p1s)}</div>
-        </div>
-        <div>
-          <div class="font-semibold mb-1">P2 quality</div>
-          <div class="text-2xl">${p2q}</div>
-          <div class="mt-2 space-y-1">${kv(p2s)}</div>
-        </div>
-      </div>
-      <div class="mt-4">
-        <div class="font-semibold mb-1">Summary</div>
-        <pre class="bg-slate-900 p-3 rounded overflow-x-auto text-slate-200 text-xs">${esc(JSON.stringify(sum, null, 2))}</pre>
-      </div>
-      <div class="mt-2 text-slate-400 text-xs">Analyzed at: ${new Date(res.analyzed_at).toLocaleString()}</div>
-    </div>`;
+function showNotFound() {
+  el('#matchCard').innerHTML = '<div class="text-red-400">Match not found.</div>';
+  el('#analysisBlock').classList.add('hidden');
 }
 
-async function loadResult(){
-  const { data: res } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
-  if(res){
-    document.getElementById('analyzeBtn').textContent = 'Re-analyze';
-    document.getElementById('analysisStatus').textContent = `Computed ${new Date(res.analyzed_at).toLocaleString()}`;
-    renderAnalysis(res);
-  }else{
-    document.getElementById('analyzeBtn').textContent = 'Analyze game';
-    document.getElementById('analysisStatus').textContent = 'No analysis yet';
-    renderAnalysis(null);
+async function loadAnalysis(matchId) {
+  const { data, error } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
+  if (!data) {
+    el('#analysisStatus').textContent = 'No analysis yet.';
+    el('#analysisResult').classList.add('hidden');
+    return;
   }
+  // Affiche résultats
+  el('#analysisStatus').textContent = `Analyzed at ${new Date(data.analyzed_at).toLocaleString()} (version ${data.version})`;
+  el('#p1q').textContent = (data.p1_quality ?? '—');
+  el('#p2q').textContent = (data.p2_quality ?? '—');
+  el('#p1stats').textContent = JSON.stringify(data.p1_stats || {}, null, 2);
+  el('#p2stats').textContent = JSON.stringify(data.p2_stats || {}, null, 2);
+  el('#summary').textContent = JSON.stringify(data.summary || {}, null, 2);
+  el('#analysisResult').classList.remove('hidden');
 }
 
-async function loadQueueStatus(){
-  const { data } = await supa.from('analysis_requests')
-    .select('status, created_at, started_at, finished_at, error')
-    .eq('match_id',matchId).maybeSingle();
-  if(!data) return;
-  const s = data.status;
-  const label =
-    s==='queued'  ? 'Queued'  :
-    s==='running' ? 'Running…' :
-    s==='done'    ? 'Done'    :
-    s==='error'   ? 'Error'   : s;
-  document.getElementById('analysisStatus').textContent = label + (data.error ? ` — ${data.error}` : '');
-}
-
-async function queueAnalysis(){
-  if(!currentMatch){ await loadMatch(); }
-  const payload = {
+async function queueAnalysis(matchId, replayUrl) {
+  el('#analyzeBtn').disabled = true;
+  el('#analysisStatus').textContent = 'Queuing analysis…';
+  const { error } = await supa.from('analysis_requests').insert({
     match_id: matchId,
-    replay_url: currentMatch?.replay_url || null,
-    requested_by: 'web',
-    status: 'queued'
-  };
-  const { error } = await supa.from('analysis_requests').upsert(payload, { onConflict: 'match_id' });
-  if(error){ document.getElementById('analysisStatus').textContent = 'Queue error'; console.error(error); return; }
-  document.getElementById('analysisStatus').textContent = 'Queued';
-  await loadQueueStatus();
+    replay_url: replayUrl || null,
+    requested_by: 'web'
+  });
+  if (error) {
+    el('#analysisStatus').textContent = `Error: ${error.message}`;
+    el('#analyzeBtn').disabled = false;
+    return;
+  }
+  el('#analysisStatus').textContent = 'Queued. Waiting for worker…';
 }
 
-// Realtime: se met à jour sur résultat ET sur statut file
-function subscribeRealtime(){
-  supa.channel('analysis_results_'+matchId)
-    .on('postgres_changes', { event:'INSERT', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}`}, async ()=>{ await loadResult(); })
-    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}`}, async ()=>{ await loadResult(); })
-    .on('postgres_changes', { event:'INSERT', schema:'public', table:'analysis_requests', filter:`match_id=eq.${matchId}`}, async ()=>{ await loadQueueStatus(); })
-    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'analysis_requests', filter:`match_id=eq.${matchId}`}, async ()=>{ await loadQueueStatus(); })
+function subscribeRealtime(matchId) {
+  // Quand une analyse arrive, on rafraîchit le rendu
+  supa.channel('match_analyses_live')
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'match_analyses',
+      filter: `match_id=eq.${matchId}`
+    }, (payload) => {
+      el('#analysisStatus').textContent = 'Analysis completed.';
+      loadAnalysis(matchId);
+    })
     .subscribe();
 }
 
-document.getElementById('analyzeBtn').onclick = async ()=>{
-  await queueAnalysis();
-  // petit polling de secours si realtime down
-  let tries=0;
-  const t = setInterval(async ()=>{
-    tries++;
-    await loadResult();
-    await loadQueueStatus();
-    if(tries>60) clearInterval(t);
-  }, 3000);
-};
+(async function init(){
+  if (!idParam) { showNotFound(); return; }
 
-(async function(){
-  const m = await loadMatch(); if(!m) return;
-  await loadResult();
-  await loadQueueStatus();
-  subscribeRealtime();
+  const { m } = await fetchMatchById();
+  if (!m) { showNotFound(); return; }
+
+  renderMatch(m);
+
+  // Active le bloc d’analyse
+  el('#analysisBlock').classList.remove('hidden');
+  el('#analyzeBtn').onclick = () => queueAnalysis(matchIdValue, m.replay_url);
+
+  // Charge état actuel + souscription temps-réel
+  await loadAnalysis(matchIdValue);
+  subscribeRealtime(matchIdValue);
 })();
 </script>
 </body>
