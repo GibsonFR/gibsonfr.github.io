@@ -8,17 +8,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Use the SAME Supabase project as on index.html -->
+  <!-- Same Supabase project as your site -->
   <script>
     window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
     window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 
-    /* PayPal (set these in production)
-       - PAYPAL_CLIENT_ID: required for buttons
-       - PAYPAL_PLAN_ID:   only if you want the monthly subscription button visible
-    */
-    window.PAYPAL_CLIENT_ID = window.PAYPAL_CLIENT_ID || "";          // e.g. "AbcDEF..."
-    window.PAYPAL_PLAN_ID   = window.PAYPAL_PLAN_ID   || "";          // e.g. "P-XXXXXXXXXXXX"
+    /* PayPal (one-time only) */
+    window.PAYPAL_CLIENT_ID   = "YOUR_PAYPAL_CLIENT_ID"; // set your LIVE client id
     window.ONE_TIME_PRICE_EUR = "2.00";
   </script>
 </head>
@@ -46,34 +42,22 @@
 
       <div class="mt-4 p-3 rounded-xl border border-slate-800 bg-slate-900/60">
         <div class="text-slate-400 text-sm mb-1">Linked game profile</div>
-        <div id="linked-player" class="text-slate-100">
-          Looking for your Steam profile…
-        </div>
+        <div id="linked-player" class="text-slate-100">Looking for your Steam profile…</div>
       </div>
     </section>
 
-    <!-- SUBSCRIPTION / PREMIUM -->
+    <!-- PREMIUM (one-time 30-day pass) -->
     <section class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
       <h2 class="text-xl font-semibold mb-2">Premium</h2>
       <p class="text-slate-300 mb-4">Premium unlocks <b>Perspective</b> and unlimited daily analyses.</p>
 
       <div id="prem-state" class="mb-4 text-slate-300">Checking your status…</div>
 
-      <div class="grid md:grid-cols-2 gap-4">
-        <!-- Monthly subscription -->
-        <div class="p-4 rounded-xl border border-slate-800">
-          <h3 class="font-semibold mb-1">€2/month subscription</h3>
-          <p class="text-slate-400 mb-3 text-sm">Recurring via PayPal. Cancel anytime from your PayPal account.</p>
-          <div id="paypal-subscribe" class="min-h-[45px]"></div>
-          <div id="sub-note" class="text-xs text-slate-400 mt-2"></div>
-        </div>
-
-        <!-- One-time pass -->
-        <div class="p-4 rounded-xl border border-slate-800">
-          <h3 class="font-semibold mb-1">30-day pass (€2 one-time)</h3>
-          <p class="text-slate-400 mb-3 text-sm">One-time purchase: grants 30 days of Premium immediately.</p>
-          <div id="paypal-onetime" class="min-h-[45px]"></div>
-        </div>
+      <div class="p-4 rounded-xl border border-slate-800">
+        <h3 class="font-semibold mb-1">30-day pass (€2 one-time)</h3>
+        <p class="text-slate-400 mb-3 text-sm">One-time purchase: grants 30 days of Premium immediately.</p>
+        <div id="paypal-onetime" class="min-h-[45px]"></div>
+        <div id="one-note" class="text-xs text-amber-300 mt-2"></div>
       </div>
 
       <div id="prem-msg" class="mt-3 text-sm text-slate-400"></div>
@@ -122,7 +106,6 @@
       try{
         const discordId = getDiscordId(user);
         if(!discordId){ el.textContent = 'No Discord ID found.'; return; }
-        // links_state.json must be at site root, format: { "<discordId>": "<steamId64>", ... }
         const res = await fetch('links_state.json', { cache:'no-store' });
         if(!res.ok){ el.textContent = 'Could not load link state.'; return; }
         const map = await res.json();
@@ -140,7 +123,7 @@
       if(!user) return;
 
       const meta = user.user_metadata || {};
-      const { data: p } = await supa.from('profiles').select('username,premium_until,subscription_id').eq('user_id',user.id).maybeSingle();
+      const { data: p } = await supa.from('profiles').select('username,premium_until').eq('user_id',user.id).maybeSingle();
 
       const name  = p?.username || meta.full_name || meta.name || '—';
       const email = user.email || meta.email || '—';
@@ -163,83 +146,71 @@
     document.addEventListener('DOMContentLoaded', loadProfile);
   </script>
 
-  <!-- PayPal mounting (Subscription + One-time) -->
+  <!-- PayPal (one-time) -->
   <script>
     function ensurePayPal(params, cb){
-      if(!window.PAYPAL_CLIENT_ID) return; // no button if not configured
+      if(!window.PAYPAL_CLIENT_ID){ 
+        const note = document.getElementById('one-note');
+        if(note) note.textContent = 'PayPal is not configured (missing PAYPAL_CLIENT_ID).';
+        return; 
+      }
       const s = document.createElement('script');
       s.src = 'https://www.paypal.com/sdk/js?' + new URLSearchParams(params).toString();
       s.onload = cb;
       document.head.appendChild(s);
     }
-    async function callEdge(fn, payload){
+
+    async function callCapture(orderId){
+      // call your edge function `capture-paypal-order`
       const { data:{ session } } = await supa.auth.getSession();
-      const res = await fetch(`${window.SUPA_URL}/functions/v1/${fn}`, {
+      const res = await fetch(`${window.SUPA_URL}/functions/v1/capture-paypal-order`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${session?.access_token||''}`, 'Content-Type':'application/json' },
-        body: JSON.stringify(payload||{})
+        headers: {
+          'Authorization': `Bearer ${session?.access_token||''}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId,
+          expectedAmount: window.ONE_TIME_PRICE_EUR,
+          expectedCurrency: 'EUR'
+        })
       });
       const j = await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(j.error || res.statusText || 'Request failed');
+      if(!res.ok) throw new Error(j.error || res.statusText || 'Capture failed');
       return j;
     }
 
-    function mountPayPal(){
+    function mountOneTime(){
       if(!window.paypal) return;
+      const host = document.getElementById('paypal-onetime');
+      if(!host) return;
 
-      // Subscription (requires PAYPAL_PLAN_ID)
-      const subHost = document.getElementById('paypal-subscribe');
-      const subNote = document.getElementById('sub-note');
-      if(window.PAYPAL_PLAN_ID && subHost){
-        paypal.Buttons({
-          style: { label: 'subscribe' },
-          createSubscription: (data, actions) =>
-            actions.subscription.create({ plan_id: window.PAYPAL_PLAN_ID }),
-          onApprove: async (data, actions) => {
-            try{
-              await callEdge('activate-paypal-sub', { subscriptionId: data.subscriptionID });
-              document.getElementById('prem-msg').textContent = 'Subscription activated. Thank you!';
-              loadProfile();
-            }catch(e){
-              document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
-            }
+      paypal.Buttons({
+        style: { label: 'pay' },
+        createOrder: (data, actions) => actions.order.create({
+          intent: 'CAPTURE',
+          purchase_units: [{ amount: { currency_code: 'EUR', value: window.ONE_TIME_PRICE_EUR || '2.00' } }]
+        }),
+        onApprove: async (data, actions) => {
+          const order = await actions.order.capture(); // capture on client for instant UX
+          try{
+            await callCapture(order.id);              // validate + set premium on server
+            document.getElementById('prem-msg').textContent = '30-day pass activated. Enjoy!';
+            // refresh profile state
+            setTimeout(loadProfile, 800);
+          }catch(e){
+            document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
           }
-        }).render('#paypal-subscribe');
-      } else if (subHost){
-        subNote.textContent = 'Set PAYPAL_PLAN_ID to enable the monthly subscription button.';
-      }
-
-      // One-time pass (30 days)
-      if(document.getElementById('paypal-onetime')){
-        paypal.Buttons({
-          style: { label: 'pay' },
-          createOrder: (data, actions) => actions.order.create({
-            intent:'CAPTURE',
-            purchase_units:[{ amount:{ currency_code:'EUR', value: window.ONE_TIME_PRICE_EUR || '2.00' } }]
-          }),
-          onApprove: async (data, actions) => {
-            const order = await actions.order.capture();
-            try{
-              await callEdge('capture-paypal-order', { orderId: order.id });
-              document.getElementById('prem-msg').textContent = '30-day pass activated. Enjoy!';
-              loadProfile();
-            }catch(e){
-              document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
-            }
-          }
-        }).render('#paypal-onetime');
-      }
+        }
+      }).render('#paypal-onetime');
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      if(!window.PAYPAL_CLIENT_ID) return; // hide if not configured
-      // For subscriptions, PayPal needs vault + intent=subscription
       ensurePayPal({
         'client-id': window.PAYPAL_CLIENT_ID,
-        'vault': 'true',
-        'intent': 'subscription',
-        'currency': 'EUR'
-      }, mountPayPal);
+        'currency': 'EUR',
+        'intent': 'capture'
+      }, mountOneTime);
     });
   </script>
 </body>
