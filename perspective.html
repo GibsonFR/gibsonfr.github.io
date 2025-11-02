@@ -88,19 +88,16 @@ function renderPerspective(container, p){
     ${chips(s)}
   </div>`;
 
-  // Maps
   const mapRows = (p.maps||[]).map(m=>[
     `Map ${m.map_id}`, m.matches, pct(m.winrate), num(m.avg_quality,1), num(m.avg_duration,1)+'s', new Date(m.last_played).toLocaleDateString()
   ]);
   html += table('By Map', ['Map','Matches','Winrate','Avg Quality','Avg Duration','Last played'], mapRows);
 
-  // Elo bands
   const eloRows = (p.elo_bands||[]).map(b=>[
     b.label, b.matches, pct(b.winrate), num(b.avg_quality,1)
   ]);
   html += table('Vs Opponent Elo bands', ['Band','Matches','Winrate','Avg Quality'], eloRows);
 
-  // Roles
   const r = p.roles||{};
   const roleRows = [
     ['Tagger secs (avg)', num(r.tagger_seconds_avg,1)],
@@ -110,7 +107,6 @@ function renderPerspective(container, p){
   ];
   html += table('Roles', ['Metric','Value'], roleRows);
 
-  // Opponents (top 10)
   const oppRows = (p.opponents||[]).slice(0,10).map(o=>[
     esc(o.name||o.id), o.matches, pct(o.winrate), num(o.avg_quality,1)
   ]);
@@ -135,14 +131,19 @@ function renderPerspective(container, p){
 
   async function loadPerspective(pid, windowSize){
     const { data } = await supa.from('player_perspectives')
-      .select('*').eq('player_id', pid).eq('window', windowSize).maybeSingle();
+      .select('*')
+      .eq('player_id', pid)
+      .eq('window_size', windowSize)   // FIX
+      .maybeSingle();
     return data || null;
   }
 
   async function queueBuild(pid, windowSize){
-    document.getElementById('status').textContent = 'Queuing…';
-    await supa.from('perspective_requests').insert({ player_id: pid, window: windowSize, requested_by: 'web' });
-    document.getElementById('status').textContent = 'Queued. Waiting for worker…';
+    const status = document.getElementById('status');
+    status.textContent = 'Queuing…';
+    const { error } = await supa.from('perspective_requests')
+      .insert({ player_id: pid, window_size: windowSize, requested_by: 'web' }); // FIX + show error
+    status.textContent = error ? `Insert failed: ${error.message}` : 'Queued. Waiting for worker…';
   }
 
   const content = document.getElementById('content');
@@ -163,10 +164,8 @@ function renderPerspective(container, p){
     await queueBuild(steamId, Number(winSel.value));
   };
 
-  // Compare
   async function resolveCompare(text){
     if(!text) return null;
-    // try exact steam id
     if(/^\d{5,}$/.test(text)) return text;
     const { data } = await supa.rpc('search_players',{ q: text, p_limit:1 });
     return (data && data.length) ? data[0].steam_id : null;
@@ -179,7 +178,6 @@ function renderPerspective(container, p){
     const a = await loadPerspective(steamId, w);
     const b = await loadPerspective(target, w);
     if(!a || !b){ alert('One of the perspectives is missing. Build them first.'); return; }
-
     const wrap = document.createElement('div');
     wrap.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
     const left  = document.createElement('div');
@@ -190,7 +188,6 @@ function renderPerspective(container, p){
     content.innerHTML = ''; content.appendChild(wrap);
   };
 
-  // live refresh when worker writes the record
   supa.channel('persp_live')
     .on('postgres_changes',{ event:'INSERT', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
     .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
