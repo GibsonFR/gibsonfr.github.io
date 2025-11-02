@@ -54,39 +54,57 @@
     const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
     // ---------- PREMIUM MARKING ----------
-    // Set des steam_id premium (renseigné au moins pour l'utilisateur connecté si Premium).
+    // Set of premium steam IDs. Filled from DB (profiles) and at least for the signed-in user.
     const premiumSteam = new Set();
 
-    // Petit SVG couronne (style chess.com)
-    const crownSVG = `<svg aria-hidden="true" class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
-    </svg>`;
+    // Crown icon (inline SVG). Tooltip set on the wrapper <span>.
+    const crownSVG = `<span title="Premium member" aria-label="Premium member">
+      <svg class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
+      </svg>
+    </span>`;
 
     function premiumNameHtml(row) {
       const baseName = esc(row.username || row.steam_id);
-      const premium = premiumSteam.has(row.steam_id);
-      const title = premium ? ' title="Premium member"' : '';
-      // Couleur légère ambrée + icône si premium, sinon style original indigo
-      if (premium) {
+      const isPremium = premiumSteam.has(String(row.steam_id));
+      const title = isPremium ? ' title="Premium member"' : '';
+      if (isPremium) {
         return `<a${title} class="text-amber-300 hover:text-amber-200" href="player.html?steam_id=${encodeURIComponent(row.steam_id)}">${baseName}</a>${crownSVG}`;
       }
-      return `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(row.steam_id)}"${title}>${baseName}</a>`;
+      return `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(row.steam_id)}">${baseName}</a>`;
     }
 
-    // Essaie de récupérer la liste globale via une edge function optionnelle (retour attendu: { steam_ids: string[] })
-    async function tryFetchPremiumList() {
+    // Fetch all premium steam IDs directly from Supabase (requires RLS policy to allow select)
+    async function fetchPremiumDirect() {
       try {
-        const { data:{ session } } = await supa.auth.getSession();
-        const res = await fetch(`${SUPA_URL}/functions/v1/premium-list`, {
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
-        });
-        if (!res.ok) return;
-        const j = await res.json().catch(()=>null);
-        if (j && Array.isArray(j.steam_ids)) j.steam_ids.forEach(id => premiumSteam.add(String(id)));
-      } catch {}
+        const nowIso = new Date().toISOString();
+        const step = 1000;
+        let from = 0;
+        for (;;) {
+          const { data, error } = await supa
+            .from('profiles')
+            .select('steam_id,premium_until')
+            .not('steam_id', 'is', null)
+            .gt('premium_until', nowIso)
+            .range(from, from + step - 1);
+
+          if (error) {
+            console.warn('[premium] select error', error);
+            break;
+          }
+          if (!data || data.length === 0) break;
+          for (const r of data) {
+            if (r.steam_id) premiumSteam.add(String(r.steam_id));
+          }
+          if (data.length < step) break;
+          from += step;
+        }
+      } catch (e) {
+        console.warn('[premium] fetch failed', e);
+      }
     }
 
-    // Renseigne au moins le steam_id de l'utilisateur s'il est Premium
+    // Self-mark (ensures at least the signed-in user is marked premium if applicable)
     function getDiscordId(user){
       const ids = user?.identities || [];
       const disc = ids.find(i => i?.provider === 'discord');
@@ -95,16 +113,16 @@
       return String(fromIdent || fromMeta || '').trim() || null;
     }
     async function markSelfIfPremium() {
-      const { data:{ user } } = await supa.auth.getUser();
-      if (!user) return;
-      // Profil (premium_until)
-      const { data: prof } = await supa.from('profiles')
-        .select('premium_until')
-        .eq('id', user.id).maybeSingle();
-      const active = !!(prof?.premium_until && new Date(prof.premium_until) > new Date());
-      if (!active) return;
-      // Lien Discord -> SteamID (links_state.json)
       try {
+        const { data:{ user } } = await supa.auth.getUser();
+        if (!user) return;
+        const { data: prof } = await supa.from('profiles')
+          .select('premium_until')
+          .eq('id', user.id)
+          .maybeSingle();
+        const active = !!(prof?.premium_until && new Date(prof.premium_until) > new Date());
+        if (!active) return;
+
         const res = await fetch('links_state.json', { cache:'no-store' });
         if (!res.ok) return;
         const map = await res.json();
@@ -115,7 +133,7 @@
     }
 
     async function initPremium() {
-      await Promise.all([ markSelfIfPremium(), tryFetchPremiumList() ]);
+      await Promise.all([ markSelfIfPremium(), fetchPremiumDirect() ]);
     }
 
     // ---------- state ----------
@@ -289,7 +307,7 @@
         btn.classList.remove('hidden'); btn.textContent='Refresh data';
       }).subscribe();
 
-    // Charge les données et les statuts premium (re-render quand la liste premium arrive)
+    // Load data + premium markers (re-render after premium list arrives)
     loadAll();
     loadRecent();
     initPremium().then(()=> render());
