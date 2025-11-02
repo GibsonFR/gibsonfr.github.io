@@ -46,11 +46,11 @@
         <div class="flex flex-wrap items-center gap-3">
           <button id="queueBtn"
                   class="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/30 disabled:opacity-50">
-            Queue Perspective compute
+            Build Perspective (send to worker)
           </button>
           <button id="refreshBtn"
                   class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30 disabled:opacity-50">
-            Recompute metrics
+            Recompute metrics (local)
           </button>
           <span id="status" class="text-sm text-slate-400"></span>
         </div>
@@ -88,6 +88,7 @@ const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
 const url = new URL(location.href);
 const steamId = url.searchParams.get('steam_id');
+const WINDOW_ALL = 0; // 0 = 100% of matches (as in your old flow)
 
 /* Map names */
 const MAP_NAMES = {35:'Mini Monke',36:'Small Beach',38:'Small Containers',39:'Tiny Town 2',40:'Tiny Town'};
@@ -210,23 +211,20 @@ async function updateGateUI(){
         <div class="text-slate-300 text-sm">Perspective is available for <b>Premium members</b> only. Upgrade to unlock unlimited analyses and Perspective.</div>
         <div class="mt-2 flex items-center gap-2">
           <a href="account.html" class="px-3 py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-sm">Go Premium (€2)</a>
-          <button id="quickCheckout" class="px-3 py-1.5 rounded bg-amber-600/30 text-amber-200 border border-amber-500/40 hover:bg-amber-600/40 text-sm">Quick checkout</button>
         </div>
       </div>
     </div>`;
     refreshBtn.disabled = true; queueBtn.disabled = true; cmpBtn.disabled = true;
-    const quick = document.getElementById('quickCheckout');
-    if (quick) quick.onclick = (e)=>{ e.preventDefault(); if (window.startCheckout) window.startCheckout(); else location.href='account.html'; };
     return { user, premium:false };
   }
   gate.classList.add('hidden');
-  document.getElementById('refreshBtn').disabled = false;
-  document.getElementById('queueBtn').disabled   = false;
-  document.getElementById('cmpBtn').disabled     = false;
+  refreshBtn.disabled = false;
+  queueBtn.disabled   = false;
+  cmpBtn.disabled     = false;
   return { user, premium:true };
 }
 
-/* -------------------- Data -------------------- */
+/* -------------------- Data (local metrics) -------------------- */
 async function fetchPlayer(){ const { data } = await supa.from('players').select('*').eq('steam_id', steamId).maybeSingle(); return data||null; }
 async function fetchMatchesForPlayer(sid, limit=800){
   const { data, error } = await supa.from('matches')
@@ -246,7 +244,7 @@ async function fetchAnalysesForMatchIds(ids){
   const map = new Map(); (data||[]).forEach(r=> map.set(r.match_id, r)); return map;
 }
 
-/* -------------------- Aggregation -------------------- */
+/* -------------------- Aggregation (local metrics) -------------------- */
 function aggregateMetrics(sid, matches, analyses, mapId=null){
   const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
 
@@ -374,7 +372,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
   };
 }
 
-/* -------------------- UI builders -------------------- */
+/* -------------------- UI builders (local) -------------------- */
 function chip(label, value, tip, suffix=''){
   const show = (value==null||value==='—') ? '—' : '';
   const dv = (value==null||value==='—') ? '' : `data-count-to="${value}" data-suffix="${suffix}"`;
@@ -387,34 +385,30 @@ function section(title, body){
   return `<div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
     <h3 class="text-xl font-semibold mb-3">${title}</h3>${body}</div>`;
 }
-
-/* Overview chips */
 function overviewChips(m){
   return [
     chip('Matches played', m.scopeCount||0, 'Number of matches included in the current scope (All or the selected map).'),
     chip('Wins', m.wins||0, 'Number of matches won in the current scope.'),
     chip('Win rate', m.winrate!=null? Math.round(m.winrate*1000)/10 : '—', 'Percentage of matches won.', '%'),
     chip('Average quality', m.quality.average!=null? Number(m.quality.average).toFixed(1) : '—', 'Average game quality score for this player.'),
-    chip('Median quality', m.quality.median!=null? Number(m.quality.median).toFixed(1) : '—', 'Middle value of the quality scores. Less sensitive to outliers.'),
-    chip('Quality interquartile range', (m.quality.spread_iqr!=null? Number(m.quality.spread_iqr).toFixed(1):'—'), 'Spread of quality (Q3 − Q1). Lower means more consistency.'),
-    chip('Quality standard deviation', (m.quality.spread_std!=null? Number(m.quality.spread_std).toFixed(2):'—'), 'Standard deviation of quality scores. Lower means more consistent results.'),
-    chip('Best match quality', m.quality.best_match!=null? Number(m.quality.best_match).toFixed(1) : '—', 'Highest quality score observed in this scope.'),
-    chip('Worst match quality', m.quality.worst_match!=null? Number(m.quality.worst_match).toFixed(1) : '—', 'Lowest quality score observed in this scope.'),
-    chip('Tag time share', m.tagging.share_as_tagger!=null? Math.round(m.tagging.share_as_tagger*1000)/10 : '—', 'Share of total time spent as the tagger (0–100%).', '%'),
-    chip('Average time as tagger', m.tagging.time_as_tagger_average!=null? Number(m.tagging.time_as_tagger_average).toFixed(1) : '—', 'Mean number of seconds spent as the tagger per match.', 's'),
-    chip('Average time as hider', m.tagging.time_as_hider_average!=null? Number(m.tagging.time_as_hider_average).toFixed(1) : '—', 'Mean number of seconds spent as the hider per match.', 's'),
-    chip('Average speed', m.speed.average_mps!=null? Number(m.speed.average_mps).toFixed(2) : '—', 'Average movement speed across matches, in meters per second.', ' m/s'),
-    chip('90th percentile speed', m.speed.p90_mps!=null? Number(m.speed.p90_mps).toFixed(2) : '—', 'Speed that only the fastest 10% of moments exceed.', ' m/s'),
-    chip('Average hider distance', m.distance.average_hider_m!=null? Number(m.distance.average_hider_m).toFixed(2) : '—', 'Average distance traveled while hiding, per match.', ' m'),
-    chip('Average tagger distance', m.distance.average_tagger_m!=null? Number(m.distance.average_tagger_m).toFixed(2) : '—', 'Average distance traveled while tagging, per match.', ' m'),
-    chip('Retag median', m.retag.median_seconds!=null? Number(m.retag.median_seconds).toFixed(1) : '—', 'Typical time between consecutive tags (median).', 's'),
-    chip('Retag average', m.retag.average_seconds!=null? Number(m.retag.average_seconds).toFixed(1) : '—', 'Average time between consecutive tags.', 's'),
-    chip('Retag 90th percentile', m.retag.p90_seconds!=null? Number(m.retag.p90_seconds).toFixed(1) : '—', 'Slow retag time; 90% of retags are faster than this.', 's'),
-    chip('Accuracy (average)', m.accuracy.average!=null? Math.round(m.accuracy.average*1000)/10 : '—', 'Proportion of hits vs attempts (if available in analyses).', '%')
+    chip('Median quality', m.quality.median!=null? Number(m.quality.median).toFixed(1) : '—', 'Middle value of the quality scores.'),
+    chip('Quality IQR', (m.quality.spread_iqr!=null? Number(m.quality.spread_iqr).toFixed(1):'—'), 'Q3 − Q1; lower means more consistency.'),
+    chip('Quality standard deviation', (m.quality.spread_std!=null? Number(m.quality.spread_std).toFixed(2):'—'), 'Spread of quality scores.'),
+    chip('Best match quality', m.quality.best_match!=null? Number(m.quality.best_match).toFixed(1) : '—', 'Highest quality score observed.'),
+    chip('Worst match quality', m.quality.worst_match!=null? Number(m.quality.worst_match).toFixed(1) : '—', 'Lowest quality score observed.'),
+    chip('Tag time share', m.tagging.share_as_tagger!=null? Math.round(m.tagging.share_as_tagger*1000)/10 : '—', 'Share of time as tagger.', '%'),
+    chip('Average time as tagger', m.tagging.time_as_tagger_average!=null? Number(m.tagging.time_as_tagger_average).toFixed(1) : '—', 'Seconds per match as tagger.', 's'),
+    chip('Average time as hider', m.tagging.time_as_hider_average!=null? Number(m.tagging.time_as_hider_average).toFixed(1) : '—', 'Seconds per match as hider.', 's'),
+    chip('Average speed', m.speed.average_mps!=null? Number(m.speed.average_mps).toFixed(2) : '—', 'Movement speed (m/s).', ' m/s'),
+    chip('90th percentile speed', m.speed.p90_mps!=null? Number(m.speed.p90_mps).toFixed(2) : '—', 'Top-burst speed (m/s).', ' m/s'),
+    chip('Average hider distance', m.distance.average_hider_m!=null? Number(m.distance.average_hider_m).toFixed(2) : '—', 'Distance as hider (m).', ' m'),
+    chip('Average tagger distance', m.distance.average_tagger_m!=null? Number(m.distance.average_tagger_m).toFixed(2) : '—', 'Distance as tagger (m).', ' m'),
+    chip('Retag median', m.retag.median_seconds!=null? Number(m.retag.median_seconds).toFixed(1) : '—', 'Typical time between tags.', 's'),
+    chip('Retag average', m.retag.average_seconds!=null? Number(m.retag.average_seconds).toFixed(1) : '—', 'Average time between tags.', 's'),
+    chip('Retag p90', m.retag.p90_seconds!=null? Number(m.retag.p90_seconds).toFixed(1) : '—', 'Slow retag (90th percentile).', 's'),
+    chip('Accuracy (average)', m.accuracy.average!=null? Math.round(m.accuracy.average*1000)/10 : '—', 'Share of successful attempts.', '%')
   ].join('');
 }
-
-/* Sections (same as avant) */
 function sectionForm(m){
   const dots = m.form.map(w => `<span class="w-3 h-3 rounded-full ${w?'bg-emerald-400':'bg-rose-400'} inline-block"></span>`).join('<span class="w-1 inline-block"></span>');
   return section('Form & rating',
@@ -445,7 +439,7 @@ function sectionSpeedDistance(m){
   return section('Speed & distance',
     `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average movement speed across all moments in the scope, and the 90th percentile (peak bursts).">Average speed / P90</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average movement speed and 90th percentile (peak bursts).">Average speed / P90</div>
         <div class="text-slate-100 font-semibold">${num(m.speed.average_mps,2)} m/s · ${num(m.speed.p90_mps,2)} m/s</div>
       </div>
       <div>
@@ -462,7 +456,7 @@ function sectionRetagAccuracy(m){
   return section('Retagging & accuracy',
     `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags. Median is robust to outliers.">Retag (median)</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags.">Retag (median)</div>
         <div class="text-slate-100 font-semibold">${fmtS(m.retag.median_seconds)}</div>
       </div>
       <div>
@@ -478,37 +472,15 @@ function sectionRetagAccuracy(m){
 function sectionQuality(m){
   return section('Quality & consistency',
     `<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average game quality score.">Average quality</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.average,1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Median game quality score.">Median quality</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.median,1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3 − Q1). Lower = more consistent results.">Quality IQR</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.spread_iqr,1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores.">Quality standard deviation</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.spread_std,2)}</div>
-      </div>
-      <div class="md:col-span-2">
-        <div class="text-slate-300 tip mb-1" data-tip="Distribution band (25%–75%) and extremes.">${num(m.quality.lower_quartile,1)} to ${num(m.quality.upper_quartile,1)} (IQR)</div>
-        ${bar(m.quality.average!=null && m.quality.upper_quartile!=null && m.quality.lower_quartile!=null ? ( (m.quality.average - m.quality.lower_quartile) / Math.max(0.001,(m.quality.upper_quartile - m.quality.lower_quartile)) ): 0, 'Average inside the IQR band')}
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Best single-match quality in scope.">Best match quality</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.best_match,1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Worst single-match quality in scope.">Worst match quality</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.worst_match,1)}</div>
-      </div>
+      <div><div class="text-slate-300 tip mb-1" data-tip="Average game quality score.">Average quality</div><div class="text-slate-100 font-semibold">${num(m.quality.average,1)}</div></div>
+      <div><div class="text-slate-300 tip mb-1" data-tip="Median game quality score.">Median quality</div><div class="text-slate-100 font-semibold">${num(m.quality.median,1)}</div></div>
+      <div><div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3 − Q1). Lower = more consistent.">Quality IQR</div><div class="text-slate-100 font-semibold">${num(m.quality.spread_iqr,1)}</div></div>
+      <div><div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores.">Quality SD</div><div class="text-slate-100 font-semibold">${num(m.quality.spread_std,2)}</div></div>
+      <div class="md:col-span-2"><div class="text-slate-300 tip mb-1" data-tip="Average position inside the IQR band.">${num(m.quality.lower_quartile,1)} to ${num(m.quality.upper_quartile,1)} (IQR)</div>${bar(m.quality.average!=null && m.quality.upper_quartile!=null && m.quality.lower_quartile!=null ? ( (m.quality.average - m.quality.lower_quartile) / Math.max(0.001,(m.quality.upper_quartile - m.quality.lower_quartile)) ): 0, 'Average inside the IQR band')}</div>
+      <div><div class="text-slate-300 tip mb-1" data-tip="Best single-match quality in scope.">Best match quality</div><div class="text-slate-100 font-semibold">${num(m.quality.best_match,1)}</div></div>
+      <div><div class="text-slate-300 tip mb-1" data-tip="Worst single-match quality in scope.">Worst match quality</div><div class="text-slate-100 font-semibold">${num(m.quality.worst_match,1)}</div></div>
     </div>`);
 }
-/* Per-map as cards only on All */
 function sectionMaps(maps, filter){
   if (filter != null) return '';
   if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
@@ -546,8 +518,6 @@ function sectionOpponents(opps){
       <table class="min-w-full text-sm"><tbody class="divide-y divide-slate-800">${rows}</tbody></table>
     </div>`);
 }
-
-/* Mirror compare kept (unchanged) */
 function renderAll(contentEl, metrics){
   contentEl.innerHTML = `
     <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -564,55 +534,59 @@ function renderAll(contentEl, metrics){
   mountReveal(contentEl);
 }
 
-/* -------------------- JOB QUEUE -------------------- */
-const JOB_TABLES = ['analysis_requests','perspective_requests','perspective_jobs'];
+/* -------------------- LEGACY PERSPECTIVE (worker output) -------------------- */
+async function loadPerspectiveRow(pid){
+  // The worker writes here:
+  const { data } = await supa.from('player_perspectives')
+    .select('*')
+    .eq('player_id', pid)
+    .eq('window_size', WINDOW_ALL)
+    .maybeSingle();
+  return data || null;
+}
+function renderLegacySummary(container, perspectiveRow){
+  // Optional: show a small “worker summary” card if available
+  if (!perspectiveRow) { container.innerHTML = ''; return; }
+  const s = perspectiveRow.summary || {};
+  container.innerHTML = `
+    <div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <div class="text-sm text-slate-300 mb-2">Worker summary</div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div><div class="text-slate-400">Matches</div><div class="font-semibold">${s.matches ?? '—'}</div></div>
+        <div><div class="text-slate-400">Wins</div><div class="font-semibold">${s.wins ?? '—'}</div></div>
+        <div><div class="text-slate-400">Win rate</div><div class="font-semibold">${s.winrate!=null? Math.round(s.winrate*1000)/10+'%':'—'}</div></div>
+        <div><div class="text-slate-400">Avg quality</div><div class="font-semibold">${s.avg_quality!=null? Number(s.avg_quality).toFixed(1):'—'}</div></div>
+        <div><div class="text-slate-400">Median quality</div><div class="font-semibold">${s.med_quality!=null? Number(s.med_quality).toFixed(1):'—'}</div></div>
+        <div><div class="text-slate-400">Avg duration</div><div class="font-semibold">${s.avg_duration!=null? Number(s.avg_duration).toFixed(1)+'s':'—'}</div></div>
+      </div>
+    </div>`;
+}
+
+/* -------------------- JOB FLOW (old way) -------------------- */
 let jobChannel = null;
-
-function pickCols(obj, allowed){
-  const out = {}; for (const k of allowed) if (obj[k] !== undefined) out[k] = obj[k]; return out;
-}
-
-async function tryInsert(table, rowShapes){
-  for (const shape of rowShapes){
-    try{
-      const { data, error } = await supa.from(table).insert(shape).select().single();
-      if (!error && data) return { table, row: data };
-    }catch(e){}
-  }
-  return null;
-}
-
-async function queuePerspective(steamId, mapId, user){
-  const requested_by = user?.id || null;
-  const requested_by_name = user?.user_metadata?.name || user?.email || user?.id || 'unknown';
-  const common = { steam_id: steamId, map_id: mapId ?? null, requested_by, requested_by_name, type:'perspective', requested_at: new Date().toISOString(), status:'queued' };
-
-  // Try each table with multiple shapes (broad → minimal) to fit your schema
-  const attempts = [];
-  for (const tbl of JOB_TABLES){
-    attempts.push({ tbl, shapes: [
-      common,
-      pickCols(common, ['steam_id','map_id','requested_by','requested_by_name','type','requested_at']),
-      pickCols(common, ['steam_id','map_id','requested_by','requested_by_name']),
-      pickCols(common, ['steam_id','requested_by'])
-    ]});
-  }
-
-  for (const t of attempts){
-    const res = await tryInsert(t.tbl, t.shapes);
-    if (res) return res; // {table, row}
-  }
-  throw new Error('Could not enqueue perspective job (no compatible table).');
-}
-
-function listenJob(table, id, onUpdate){
+function subscribePerspectiveRealtime(pid, onReady){
   if (jobChannel) { try{ supa.removeChannel(jobChannel); }catch{} jobChannel=null; }
   jobChannel = supa
-    .channel('perspective-jobs-'+id)
-    .on('postgres_changes',
-        { event: '*', schema: 'public', table, filter: `id=eq.${id}` },
-        payload => { onUpdate(payload.new || payload.old || {}); })
+    .channel('persp_live_'+pid)
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'player_perspectives', filter:`player_id=eq.${pid}` }, payload => onReady(payload.new))
+    .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'player_perspectives', filter:`player_id=eq.${pid}` }, payload => onReady(payload.new))
     .subscribe();
+}
+async function queuePerspectiveOld(pid, requestedBy){
+  // EXACT old pattern: insert into perspective_requests
+  const { error } = await supa.from('perspective_requests')
+    .insert({ player_id: pid, window_size: WINDOW_ALL, requested_by: requestedBy || 'web' });
+  if (error) throw new Error(error.message || 'Insert failed');
+}
+async function waitPerspective(pid, timeoutMs=90000){
+  const t0 = Date.now();
+  // quick poll loop (fallback in case realtime is slow)
+  while (Date.now() - t0 < timeoutMs) {
+    const row = await loadPerspectiveRow(pid);
+    if (row) return row;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  return null;
 }
 
 /* -------------------- INIT -------------------- */
@@ -677,19 +651,24 @@ async function init(){
         currentFilter = v==='' ? null : v;
         const m = await build(currentFilter);
         renderAll(content, m);
-        // re-render to update active style (fix: All stayed highlighted)
-        renderScopeBar();
+        renderScopeBar(); // update active pill
       };
     });
   }
 
-  // Initial premium render
+  // Initial render (premium only)
   if (gate.premium){
     matchesCache = await fetchMatchesForPlayer(steamId, 800);
     analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
     renderScopeBar();
     const metrics = aggregateMetrics(steamId, matchesCache, analysesCache, currentFilter);
     renderAll(content, metrics);
+
+    // If worker row already exists, show a small worker summary card
+    const legacyRow = await loadPerspectiveRow(steamId);
+    const legacyBox = document.createElement('div');
+    content.prepend(legacyBox);
+    renderLegacySummary(legacyBox, legacyRow);
   } else {
     content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
@@ -708,24 +687,36 @@ async function init(){
     if (!gate.user || !gate.premium) return;
     try{
       jobInfo.textContent = 'Queuing…';
-      const res = await queuePerspective(steamId, currentFilter, gate.user);
-      const jobTable = res.table, jobId = res.row.id;
-      jobInfo.textContent = `Queued (table: ${jobTable}, id: ${jobId}). Waiting for worker…`;
-
-      listenJob(jobTable, jobId, (row)=>{
-        const st = row.status || row.state || row.result || 'updated';
-        jobInfo.textContent = `Job ${jobId}: ${st}`;
-        if (String(st).toLowerCase().includes('done') || String(st).toLowerCase().includes('completed') || String(st).toLowerCase().includes('success')){
-          document.getElementById('refreshBtn').click();
-        }
+      // subscribe realtime before inserting (to catch fast workers)
+      subscribePerspectiveRealtime(steamId, async (row) => {
+        jobInfo.textContent = 'Worker finished. Refreshing…';
+        const legacyBox = document.createElement('div');
+        document.getElementById('content').prepend(legacyBox);
+        renderLegacySummary(legacyBox, row);
+        document.getElementById('refreshBtn').click(); // refresh local metrics view
       });
+
+      await queuePerspectiveOld(steamId, gate.user?.id || 'web');
+      jobInfo.textContent = 'Queued. Waiting for worker…';
+
+      // fallback polling in case realtime misses
+      const row = await waitPerspective(steamId, 90000);
+      if (row){
+        jobInfo.textContent = 'Ready ✓';
+        const legacyBox = document.createElement('div');
+        document.getElementById('content').prepend(legacyBox);
+        renderLegacySummary(legacyBox, row);
+        document.getElementById('refreshBtn').click();
+      } else {
+        jobInfo.textContent = 'Still queued / timeout. It will appear here when ready.';
+      }
     }catch(e){
       console.error(e);
       jobInfo.textContent = 'Failed to queue: ' + (e.message||e);
     }
   };
 
-  // Compare (unchanged from last version)
+  // Compare (mirror)
   async function resolvePlayerSmart(text){
     if(!text) return null;
     if(/^\d{5,}$/.test(text)) return text;
