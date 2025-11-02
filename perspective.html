@@ -22,17 +22,15 @@
       opacity:0;transition:opacity .15s ease,transform .15s ease;z-index:20
     }
     .tip:hover:after{opacity:1;transform:translateX(-50%) translateY(6px)}
-    /* Mirror compare rows keep columns aligned */
+    /* Mirror compare rows: force each row to align left vs right */
     .mirror-row{display:grid;grid-template-columns:1fr;gap:1rem}
     @media (min-width: 768px){.mirror-row{grid-template-columns:1fr 1fr}}
+    /* Equalize card heights per row (prevents misalignment in compare) */
+    .mirror-row > div { display:flex; }
+    .mirror-row > div > .card { flex: 1 1 auto; display:flex; flex-direction:column; }
     .card{border:1px solid rgb(30 41 59);background:rgba(15,23,42,.4);border-radius:1rem;padding:1rem}
     .pill{border-radius:9999px;border:1px solid rgb(51 65 85);background:rgba(30,41,59,.6);color:#e5e7eb}
     .pill-active{background:rgba(245,158,11,.2);color:#fbbf24;border-color:rgba(245,158,11,.3)}
-    /* Hourly chart: responsive grid (prevents overflow) */
-    .hour-grid{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:4px;align-items:end}
-    .dropdown{position:absolute;z-index:30;margin-top:.5rem;min-width:16rem;max-width:90vw;background:#0b1220;border:1px solid #334155;border-radius:.75rem;box-shadow:0 10px 30px rgba(0,0,0,.35);overflow:hidden}
-    .dropdown-item{display:flex;justify-content:space-between;gap:.75rem;width:100%;padding:.6rem .8rem}
-    .dropdown-item:hover{background:#121a2b}
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100">
@@ -69,7 +67,7 @@
         <div id="jobInfo" class="mt-2 text-xs text-slate-400"></div>
       </div>
 
-      <div class="card relative">
+      <div class="card">
         <form id="cmpForm" class="flex flex-wrap items-center gap-2" onsubmit="return false;">
           <label class="text-slate-300">Compare vs</label>
           <input id="cmpInput" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" placeholder="username or SteamID64…">
@@ -82,8 +80,6 @@
           </label>
           <span id="cmpStatus" class="text-sm text-slate-400"></span>
         </form>
-        <!-- Ambiguous search dropdown -->
-        <div id="cmpDropdown" class="dropdown hidden"></div>
       </div>
     </div>
 
@@ -112,9 +108,11 @@ const num = (x,d=1)=> (x==null||isNaN(x) ? '—' : (Math.round(x*Math.pow(10,d))
 const fmtS = s => (s==null||isNaN(s)?'—':`${num(s,1)}s`);
 function median(a){ a=(a||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return null; const m=a.length/2; return a.length%2? a[(m|0)] : (a[m-1]+a[m])/2; }
 function quantile(arr,q){ const a=(arr||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return null; const pos=(a.length-1)*q, lo=Math.floor(pos), hi=Math.ceil(pos); return lo===hi ? a[lo] : a[lo]+(a[hi]-a[lo])*(pos-lo); }
-function p90(a){ return quantile(a,.90); } function p10(a){ return quantile(a,.10); }
+function p90(a){ return quantile(a,.90); }
+function p10(a){ return quantile(a,.10); }
 function sum(a){ return (a||[]).reduce((t,x)=>t+(Number.isFinite(x)?x:0),0); }
 function avg(a){ a=(a||[]).filter(Number.isFinite); return a.length? sum(a)/a.length : null; }
+function std(a){ a=(a||[]).filter(Number.isFinite); if(!a.length) return null; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); }
 function lastN(a,n){ return (a||[]).slice(Math.max(0,a.length-n)); }
 function clamp01(x){ return Math.max(0, Math.min(1, Number(x)||0)); }
 
@@ -265,6 +263,7 @@ function groupSessions(sortedMatches, gapMs=5*60*1000){
   return sessions;
 }
 function hourlyBuckets(matches, sid){
+  // Local timezone (browser) buckets 0..23
   const buckets = Array.from({length:24}, ()=>({matches:0,wins:0}));
   for (const m of matches){
     const side = String(m.p1_id)===String(sid)?'p1':'p2';
@@ -276,7 +275,10 @@ function hourlyBuckets(matches, sid){
 }
 
 function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
+  // Filter by map
   let scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
+
+  // Elo-band filter (bands are ints like 1000, 1100… representing [band .. band+99])
   if (eloBandSet && eloBandSet.size){
     scope = scope.filter(m=>{
       const side = (String(m.p1_id)===String(sid)) ? 'p1' : 'p2';
@@ -335,6 +337,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
       const s = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
       const q2 = (side==='p1') ? a.p1_quality : a.p2_quality;
       if (isFinite(q2)) bm.q.push(Number(q2));
+      if (isFinite(s.avg_speed_ms)) bm.sp.push(Number(s.avg_speed_ms));
       let shareHere = null;
       if (isFinite(s.seconds_as_tagger) && isFinite(s.seconds_as_hider)) {
         const t = Number(s.seconds_as_tagger)+Number(s.seconds_as_hider);
@@ -370,6 +373,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
     lower_quartile: quantile(qual,.25), upper_quartile: quantile(qual,.75),
     best_match: qual.length? Math.max(...qual):null, worst_match: qual.length? Math.min(...qual):null,
     spread_std: std(qual),
+    // simpler description: "middle 50% spread"
     spread_iqr: (quantile(qual,.75)!=null && quantile(qual,.25)!=null) ? (quantile(qual,.75)-quantile(qual,.25)) : null
   };
 
@@ -407,6 +411,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
     winrate:o.matches? o.wins/o.matches:null, average_quality: avg(o.q)
   })).sort((a,b)=> (b.matches - a.matches));
 
+  // Sessions & time-of-day
   const sessions = groupSessions(scope);
   const sessionStats = {
     sessions: sessions.length,
@@ -540,11 +545,52 @@ function sectionQuality(m){
       <div><div class="text-slate-300 tip mb-1" data-tip="Median game quality score.">Median quality</div><div class="text-slate-100 font-semibold">${num(m.quality.median,1)}</div></div>
       <div><div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3−Q1). **Middle 50% spread**. Smaller = more consistent.">Quality IQR</div><div class="text-slate-100 font-semibold">${num(m.quality.spread_iqr,1)}</div></div>
       <div><div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores.">Quality SD</div><div class="text-slate-100 font-semibold">${num(m.quality.spread_std,2)}</div></div>
-      <div class="md:col-span-2"><div class="text-slate-300 tip mb-1" data-tip="Average inside the IQR band.">${num(m.quality.lower_quartile,1)} to ${num(m.quality.upper_quartile,1)} (IQR)</div>${bar(m.quality.average!=null && m.quality.upper_quartile!=null && m.quality.lower_quartile!=null ? ( (m.quality.average - m.quality.lower_quartile) / Math.max(0.001,(m.quality.upper_quartile - m.quality.lower_quartile)) ): 0, 'Average inside the IQR band')}</div>
+      <div class="md:col-span-2"><div class="text-slate-300 tip mb-1" data-tip="Average position inside the IQR band.">${num(m.quality.lower_quartile,1)} to ${num(m.quality.upper_quartile,1)} (IQR)</div>${bar(m.quality.average!=null && m.quality.upper_quartile!=null && m.quality.lower_quartile!=null ? ( (m.quality.average - m.quality.lower_quartile) / Math.max(0.001,(m.quality.upper_quartile - m.quality.lower_quartile)) ): 0, 'Average inside the IQR band')}</div>
       <div><div class="text-slate-300 tip mb-1" data-tip="Best single-match quality in scope.">Best match quality</div><div class="text-slate-100 font-semibold">${num(m.quality.best_match,1)}</div></div>
       <div><div class="text-slate-300 tip mb-1" data-tip="Worst single-match quality in scope.">Worst match quality</div><div class="text-slate-100 font-semibold">${num(m.quality.worst_match,1)}</div></div>
     </div>`);
 }
+
+/* >>> Responsive, no-overflow version <<< */
+function sectionSessionsAndTime(m){
+  // Adaptive sizes based on viewport width
+  const BAR_MAX = window.innerWidth < 640 ? 40 : 64; // max bar height in px
+  const BAR_W_CLASS = window.innerWidth < 640 ? 'w-2' : 'w-4';
+  const LABELS_H = 24; // two tiny lines below bars
+  const CHART_H = BAR_MAX + LABELS_H;
+
+  const hourBars = m.hourly.map(h=>{
+    const v = h.winrate==null ? 0 : h.winrate;
+    const height = Math.round(clamp01(v)*BAR_MAX);
+    const labelWR = h.winrate==null ? '—' : `${Math.round(v*100)}%`;
+    return `<div class="flex flex-col items-center gap-1">
+      <div class="${BAR_W_CLASS} bg-amber-400/80 rounded shrink-0" style="height:${height}px"></div>
+      <div class="text-[10px] leading-none text-slate-400">${h.hour}</div>
+      <div class="text-[10px] leading-none text-slate-500" title="${labelWR}">${h.matches||0}</div>
+    </div>`;
+  }).join('');
+
+  return section('Playtime & sessions',
+    `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <div class="text-slate-400">Sessions (≤5 min gap)</div>
+        <div class="text-lg font-semibold">${m.sessionStats.sessions||0}</div>
+        <div class="mt-2 text-slate-400">Avg matches per session</div>
+        <div class="font-semibold">${num(m.sessionStats.avg_matches_per_session,2)}</div>
+      </div>
+      <div>
+        <div class="text-slate-400">Best session win rate</div>
+        <div class="text-lg font-semibold">${m.sessionStats.best_wr!=null? Math.round(m.sessionStats.best_wr*100):'—'}%</div>
+        <div class="mt-2 text-slate-400">Worst session win rate</div>
+        <div class="font-semibold">${m.sessionStats.worst_wr!=null? Math.round(m.sessionStats.worst_wr*100):'—'}%</div>
+      </div>
+      <div class="md:col-span-1">
+        <div class="text-slate-400 mb-1">Win rate by hour (your timezone)</div>
+        <div class="flex items-end gap-1" style="height:${CHART_H}px">${hourBars}</div>
+      </div>
+    </div>`);
+}
+
 function sectionMaps(maps, filter){
   if (filter != null) return '';
   if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
@@ -580,37 +626,6 @@ function sectionOpponents(opps){
   return section('Most faced opponents',
     `<div class="overflow-x-auto rounded border border-slate-800">
       <table class="min-w-full text-sm"><tbody class="divide-y divide-slate-800">${rows}</tbody></table>
-    </div>`);
-}
-function sectionSessionsAndTime(m){
-  const hourBars = m.hourly.map(h=>{
-    const v = h.winrate==null ? 0 : h.winrate;
-    const height = Math.round(clamp01(v)*64); // 0..64px
-    const matches = h.matches||0;
-    const tip = `Hour ${h.hour}\nWin rate: ${h.winrate==null?'—':Math.round(v*100)+'%'}\nMatches: ${matches}`;
-    return `<div class="flex flex-col items-center gap-1">
-      <div class="w-full bg-amber-400/80 rounded" style="height:${height}px" title="${esc(tip)}"></div>
-      <div class="text-[10px] text-slate-400">${h.hour}</div>
-    </div>`;
-  }).join('');
-  return section('Playtime & sessions',
-    `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <div class="text-slate-400">Sessions (≤5 min gap)</div>
-        <div class="text-lg font-semibold">${m.sessionStats.sessions||0}</div>
-        <div class="mt-2 text-slate-400">Avg matches per session</div>
-        <div class="font-semibold">${num(m.sessionStats.avg_matches_per_session,2)}</div>
-      </div>
-      <div>
-        <div class="text-slate-400">Best session win rate</div>
-        <div class="text-lg font-semibold">${m.sessionStats.best_wr!=null? Math.round(m.sessionStats.best_wr*100):'—'}%</div>
-        <div class="mt-2 text-slate-400">Worst session win rate</div>
-        <div class="font-semibold">${m.sessionStats.worst_wr!=null? Math.round(m.sessionStats.worst_wr*100):'—'}%</div>
-      </div>
-      <div class="">
-        <div class="text-slate-400 mb-1">Win rate by hour (your timezone)</div>
-        <div class="hour-grid h-24">${hourBars}</div>
-      </div>
     </div>`);
 }
 function renderAll(contentEl, metrics){
@@ -769,7 +784,6 @@ async function init(){
   const status = document.getElementById('status');
   const jobInfo = document.getElementById('jobInfo');
   const content = document.getElementById('content');
-  const dropdown = document.getElementById('cmpDropdown');
 
   const player = await fetchPlayer();
   if(!player){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
@@ -801,6 +815,7 @@ async function init(){
     renderFilterBar();
     await recomputeAndRender();
 
+    // If worker row already exists, show summary
     const legacyRow = await loadPerspectiveRow(steamId);
     const legacyBox = document.createElement('div');
     content.prepend(legacyBox);
@@ -809,6 +824,7 @@ async function init(){
     content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
 
+  // Buttons
   document.getElementById('refreshBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
     matchesCache = await fetchMatchesForPlayer(steamId, 1200);
@@ -848,40 +864,43 @@ async function init(){
     }
   };
 
-  // -------- Compare (mirror) with ambiguous search picker ----------
-  async function searchCandidates(q){
-    // Try RPC if you have one
+  // Compare (mirror)
+  async function resolvePlayerSmart(text){
+    if(!text) return null;
+    if(/^\d{5,}$/.test(text)) return text;
     try{
-      const rp = await supa.rpc('search_players',{ q, p_limit: 8 });
-      if (!rp.error && Array.isArray(rp.data) && rp.data.length) return rp.data.map(r=>({ steam_id:r.steam_id, username:r.username }));
+      const rp = await supa.rpc('search_players',{ q:text, p_limit:1 });
+      if (!rp.error && rp.data && rp.data.length) return rp.data[0].steam_id;
     }catch{}
-    // Fallback: ilike on players
-    const { data } = await supa.from('players')
-      .select('steam_id, username')
-      .ilike('username', `%${q}%`)
-      .limit(8);
-    return (data||[]).map(r=>({ steam_id:r.steam_id, username:r.username }));
+    try{
+      const { data } = await supa.from('players').select('steam_id, username').ilike('username', `%${text}%`).limit(1).maybeSingle();
+      if (data?.steam_id) return data.steam_id;
+    }catch{}
+    return null;
   }
-  function hideDropdown(){ dropdown.classList.add('hidden'); dropdown.innerHTML=''; }
-  document.addEventListener('click', (e)=>{
-    const form = document.getElementById('cmpForm');
-    if (!form.contains(e.target)) hideDropdown();
-  });
 
-  async function runCompareWith(other, applyFilter){
+  document.getElementById('cmpBtn').onclick = async ()=>{
+    if (!gate.user || !gate.premium) return;
     const cmpStatus = document.getElementById('cmpStatus');
     cmpStatus.textContent = '';
+    const query = document.getElementById('cmpInput').value.trim();
+    const applyFilter = document.getElementById('cmpUseFilter').checked;
+    const other = await resolvePlayerSmart(query);
+    if(!other){ cmpStatus.textContent='Player not found.'; return; }
 
+    // Build both sides with identical filters to keep symmetry
     const A = aggregateMetrics(steamId, matchesCache, analysesCache, applyFilter? currentMapFilter : null, applyFilter? currentEloBands : new Set());
     const mB = await fetchMatchesForPlayer(other, 1200);
     const aB = await fetchAnalysesForMatchIds(mB.map(m=>m.id));
     const B = aggregateMetrics(other, mB, aB, applyFilter? currentMapFilter : null, applyFilter? currentEloBands : new Set());
+    cmpStatus.textContent='';
 
     const premSet = await fetchPremiumSet([steamId, other]);
     const { data: pb } = await supa.from('players').select('username').eq('steam_id', other).maybeSingle();
     const nameB = (pb?.username || other);
     const nameA = (player.username || steamId);
 
+    // Mirror summary header
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="mirror-row">
@@ -899,12 +918,16 @@ async function init(){
         </div>
       </div>`;
     const rows = document.createElement('div');
+
+    // Build sections row-by-row for alignment
     function rowPair(leftHTML, rightHTML){
       const row = document.createElement('div'); row.className='mirror-row';
       row.innerHTML = `<div>${leftHTML}</div><div>${rightHTML}</div>`;
       rows.appendChild(row);
     }
+    // Chips
     rowPair(`<div class="card">${overviewChips(A)}</div>`, `<div class="card">${overviewChips(B)}</div>`);
+    // Rest
     rowPair(sectionForm(A), sectionForm(B));
     rowPair(sectionTagging(A), sectionTagging(B));
     rowPair(sectionSpeedDistance(A), sectionSpeedDistance(B));
@@ -915,56 +938,14 @@ async function init(){
     const content = document.getElementById('content');
     content.innerHTML = ''; content.appendChild(wrap); content.appendChild(rows);
     mountReveal(content);
-  }
-
-  document.getElementById('cmpBtn').onclick = async ()=>{
-    if (!gate.user || !gate.premium) return;
-    const q = document.getElementById('cmpInput').value.trim();
-    const applyFilter = document.getElementById('cmpUseFilter').checked;
-    if (!q){ document.getElementById('cmpStatus').textContent='Type a username or SteamID'; return; }
-
-    // If it's clearly a SteamID, jump directly
-    if(/^\d{5,}$/.test(q)){ hideDropdown(); await runCompareWith(q, applyFilter); return; }
-
-    const list = await searchCandidates(q);
-    if (!list.length){ hideDropdown(); document.getElementById('cmpStatus').textContent='No players found.'; return; }
-    if (list.length === 1){ hideDropdown(); await runCompareWith(list[0].steam_id, applyFilter); return; }
-
-    // Show chooser dropdown
-    const premSet = await fetchPremiumSet(list.map(r=>String(r.steam_id)));
-    dropdown.innerHTML = list.map(r=>{
-      const crown = premSet.has(String(r.steam_id)) ? ' 👑' : '';
-      return `<button class="dropdown-item text-left" data-sid="${r.steam_id}">
-        <span class="truncate">${esc(r.username||r.steam_id)}${crown}</span>
-        <span class="text-slate-400 text-xs">${r.steam_id}</span>
-      </button>`;
-    }).join('');
-    dropdown.classList.remove('hidden');
-    // place under input
-    const input = document.getElementById('cmpInput');
-    const rect = input.getBoundingClientRect();
-    dropdown.style.left = input.offsetLeft+'px';
-    dropdown.style.right = 'auto';
-    dropdown.style.top = (input.offsetTop + input.offsetHeight) + 'px';
-
-    dropdown.querySelectorAll('[data-sid]').forEach(btn=>{
-      btn.onclick = async ()=>{
-        const sid = btn.getAttribute('data-sid');
-        hideDropdown();
-        await runCompareWith(sid, applyFilter);
-      };
-    });
-
-    // Enter selects first
-    const onEnter = async (ev)=>{
-      if (ev.key === 'Enter'){
-        ev.preventDefault();
-        const first = dropdown.querySelector('[data-sid]');
-        if (first){ hideDropdown(); await runCompareWith(first.getAttribute('data-sid'), applyFilter); }
-      }
-    };
-    input.addEventListener('keydown', onEnter, { once:true });
   };
+
+  // Re-render on resize (throttled) so the hourly chart and compare heights stay tidy
+  let _rszTimer=null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(_rszTimer);
+    _rszTimer = setTimeout(()=> recomputeAndRender(), 120);
+  });
 }
 init();
 </script>
