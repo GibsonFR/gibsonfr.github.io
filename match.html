@@ -1,105 +1,99 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Match</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    html, body { height:100%; }
-    canvas { display:block; }
-  </style>
+  <style>html,body{height:100%}canvas{display:block}</style>
 </head>
 <body class="bg-slate-950 text-slate-100">
-  <div class="max-w-6xl mx-auto p-4">
-    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
+<div class="max-w-6xl mx-auto p-4">
+  <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
-    <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
+  <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
 
-    <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">Game Insights</h2>
-        <button id="analyzeBtn"
-                class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50">
-          Re-analyze (worker)
-        </button>
-      </div>
-      <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
-
-      <div id="analysisResult" class="space-y-6 hidden">
-        <div class="text-sm text-slate-400">
-          Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
-            <div id="p1q" class="text-2xl font-bold">—</div>
-            <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
-          </div>
-          <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
-            <div id="p2q" class="text-2xl font-bold">—</div>
-            <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
-          </div>
-        </div>
-
-        <div>
-          <div class="text-slate-400 text-xs mb-2">Key events (chess-style)</div>
-          <div id="eventsList" class="text-sm space-y-1"></div>
-        </div>
-      </div>
+  <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold">Game Insights</h2>
+      <button id="analyzeBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50">
+        Re-analyze (worker)
+      </button>
     </div>
-
-    <!-- 3D Replay -->
-    <div id="replayBlock" class="mt-6 p-4 rounded border border-slate-800">
-      <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-lg font-semibold">3D Replay</h2>
-        <div class="flex items-center gap-2 text-sm">
-          <span id="replayStatus" class="opacity-70"></span>
-          <span class="mx-1 opacity-30">•</span>
-          <label class="opacity-70">Speed</label>
-          <select id="speedSel" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
-            <option value="0.5">0.5×</option>
-            <option value="1" selected>1×</option>
-            <option value="2">2×</option>
-            <option value="4">4×</option>
-          </select>
-          <button id="followP1" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">Follow P1</button>
-          <button id="followP2" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">Follow P2</button>
+    <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
+    <div id="analysisResult" class="space-y-6 hidden">
+      <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 rounded bg-slate-900 border border-slate-800">
+          <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
+          <div id="p1q" class="text-2xl font-bold">—</div>
+          <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
+        </div>
+        <div class="p-4 rounded bg-slate-900 border border-slate-800">
+          <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
+          <div id="p2q" class="text-2xl font-bold">—</div>
+          <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
         </div>
       </div>
-
-      <div class="flex flex-col md:flex-row gap-4">
-        <div class="grow">
-          <div id="threeWrap" class="rounded border border-slate-800 overflow-hidden" style="aspect-ratio:16/9;"></div>
-          <div class="mt-3">
-            <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" class="w-full">
-            <div class="flex justify-between text-xs text-slate-400 mt-1">
-              <div>t=<span id="timeNow">0.00</span>s</div>
-              <div>Duration=<span id="timeMax">0.00</span>s</div>
-            </div>
-            <div class="mt-2 flex gap-2">
-              <button id="playBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Play</button>
-              <button id="pauseBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Pause</button>
-              <button id="centerBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Center</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="md:w-80">
-          <div class="text-slate-400 text-xs mb-2">Tag timeline</div>
-          <div id="tagTimeline" class="h-32 bg-slate-900 border border-slate-800 rounded relative overflow-hidden"></div>
-          <div class="mt-4 text-slate-400 text-xs mb-2">Events</div>
-          <div id="tagEvents" class="h-48 overflow-auto text-sm space-y-1"></div>
-        </div>
+      <div>
+        <div class="text-slate-400 text-xs mb-2">Key events (chess-style)</div>
+        <div id="eventsList" class="text-sm space-y-1"></div>
       </div>
     </div>
   </div>
 
+  <!-- 3D Replay -->
+  <div id="replayBlock" class="mt-6 p-4 rounded border border-slate-800">
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="text-lg font-semibold">3D Replay</h2>
+      <div class="flex items-center gap-2 text-sm">
+        <span id="replayStatus" class="opacity-70"></span>
+        <span class="mx-1 opacity-30">•</span>
+        <label class="opacity-70">Speed</label>
+        <select id="speedSel" class="bg-slate-900 border border-slate-700 rounded px-2 py-1">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <button id="followP1" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">Follow P1</button>
+        <button id="followP2" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700">Follow P2</button>
+        <label class="ml-2 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer">
+          Load .rpl<input id="localRpl" type="file" accept=".rpl" class="hidden">
+        </label>
+      </div>
+    </div>
+
+    <div class="flex flex-col md:flex-row gap-4">
+      <div class="grow">
+        <div id="threeWrap" class="rounded border border-slate-800 overflow-hidden" style="aspect-ratio:16/9;"></div>
+        <div class="mt-3">
+          <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" class="w-full">
+          <div class="flex justify-between text-xs text-slate-400 mt-1">
+            <div>t=<span id="timeNow">0.00</span>s</div>
+            <div>Duration=<span id="timeMax">0.00</span>s</div>
+          </div>
+          <div class="mt-2 flex gap-2">
+            <button id="playBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Play</button>
+            <button id="pauseBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Pause</button>
+            <button id="centerBtn" class="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Center</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="md:w-80">
+        <div class="text-slate-400 text-xs mb-2">Tag timeline</div>
+        <div id="tagTimeline" class="h-32 bg-slate-900 border border-slate-800 rounded relative overflow-hidden"></div>
+        <div class="mt-4 text-slate-400 text-xs mb-2">Events</div>
+        <div id="tagEvents" class="h-48 overflow-auto text-sm space-y-1"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-/* Supabase */
+/* === Supabase client === */
 const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
@@ -150,15 +144,17 @@ function renderMatch(m) {
       <div class="text-slate-300">Winner: <span class="text-slate-100">${winner}</span> · Map ${m.map_id ?? '-'}</div>
       <div class="pt-1">${replayBtn}</div>
     </div>`;
-  // Update follow buttons with usernames
+  // follow labels = pseudos
   el('#followP1').textContent = `Follow ${p1n}`;
   el('#followP2').textContent = `Follow ${p2n}`;
 }
+
 function showNotFound() {
   el('#matchCard').innerHTML = '<div class="text-red-400">Match not found.</div>';
   el('#analysisBlock').classList.add('hidden');
   el('#replayBlock').classList.add('hidden');
 }
+
 async function loadAnalysis(matchId, names) {
   const { data } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
   if (!data) {
@@ -179,49 +175,8 @@ async function loadAnalysis(matchId, names) {
   el('#p2q').textContent = data.p2_quality ?? '—';
   renderPlayerCards('#p1cards', data.p1_stats || {});
   renderPlayerCards('#p2cards', data.p2_stats || {});
+}
 
-  try {
-    const url = `${SUPA_URL}/storage/v1/object/public/analysis/${matchId}/insights.json`;
-    const res = await fetch(url, {cache:'no-store'});
-    if (res.ok) {
-      const ins = await res.json();
-      renderEventsList(ins.events || [], names);
-    }
-  } catch {}
-}
-function renderEventsList(events, names) {
-  const root = el('#eventsList');
-  if (!events.length) { root.innerHTML = `<div class="text-slate-400">No key events detected.</div>`; return; }
-  root.innerHTML = events.map(e => {
-    const who = e.player===1 ? (names?.p1||'P1') : (names?.p2||'P2');
-    const lab = e.type.replace(/_/g,' ');
-    return `<div class="flex items-center gap-2">
-      <span class="px-1.5 py-0.5 text-[11px] rounded bg-slate-800 border border-slate-700">${lab}</span>
-      <span class="opacity-70">at</span>
-      <button data-jump="${e.t}" class="jump underline text-indigo-400 hover:text-indigo-300">${e.t.toFixed(2)}s</button>
-      <span class="opacity-70">(${who})</span>
-      ${e.note?`<span class="opacity-60">— ${esc(e.note)}</span>`:''}
-    </div>`;
-  }).join('');
-  root.querySelectorAll('.jump').forEach(b=>{
-    b.onclick = ()=> seekTo(parseFloat(b.dataset.jump)||0);
-  });
-}
-async function queueAnalysis(matchId, replayUrl) {
-  el('#analyzeBtn').disabled = true;
-  el('#analysisStatus').textContent = 'Queuing analysis…';
-  const { error } = await supa.from('analysis_requests').insert({
-    match_id: matchId,
-    replay_url: replayUrl || null,
-    requested_by: 'web'
-  });
-  if (error) {
-    el('#analysisStatus').textContent = `Error: ${error.message}`;
-    el('#analyzeBtn').disabled = false;
-    return;
-  }
-  el('#analysisStatus').textContent = 'Queued. Waiting for worker…';
-}
 function subscribeRealtime(matchId, names) {
   supa.channel('match_analyses_live')
     .on('postgres_changes', { event:'INSERT', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
@@ -231,52 +186,67 @@ function subscribeRealtime(matchId, names) {
     .subscribe();
 }
 
-/* Replayer hook */
-let __matchRow = null;
-function seekTo(t){ if (window.__replaySeek) window.__replaySeek(t); }
+/* ===== Helpers replayer ===== */
+function setStatus(txt){ el('#replayStatus').textContent = txt; console.log('[replay]', txt); }
 
-(async function init(){
-  if (!idParam) { showNotFound(); return; }
-  const m = await fetchMatchById();
-  if (!m) { showNotFound(); return; }
-  __matchRow = m;
-  const names = { p1: m.p1_name || 'P1', p2: m.p2_name || 'P2' };
-  renderMatch(m);
-  el('#analyzeBtn').onclick = () => queueAnalysis(matchIdValue, m.replay_url);
-  await loadAnalysis(matchIdValue, names);
-  subscribeRealtime(matchIdValue, names);
-  if (window.__replayInit) window.__replayInit({ match: m, matchId: matchIdValue, supaUrl: SUPA_URL, names });
-})();
+async function fetchArrayBufferStrict(url){
+  const res = await fetch(url, {cache:'no-store', mode:'cors', redirect:'follow'});
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return await res.arrayBuffer();
+}
+async function tryFetchAny(urls){
+  let lastErr=null;
+  for (const u of urls){
+    try{ const buf = await fetchArrayBufferStrict(u); return {buf, url:u}; }
+    catch(e){ lastErr = e; console.warn('fetch fail', u, e); }
+  }
+  throw lastErr || new Error('all candidates failed');
+}
+
+// Try to make a PUBLIC URL automatically if needed
+function buildReplayCandidates(m){
+  const out = [];
+  if (m.replay_url) {
+    out.push(m.replay_url);
+    if (m.replay_url.includes('/storage/v1/object/') && !m.replay_url.includes('/object/public/')){
+      out.push(m.replay_url.replace('/storage/v1/object/', '/storage/v1/object/public/'));
+    }
+  }
+  if (m.replay_path) {
+    if (/^https?:\/\//.test(m.replay_path)) out.push(m.replay_path);
+    else out.push(`${SUPA_URL}/storage/v1/object/public/${m.replay_path.replace(/^\/+/,'')}`);
+  }
+  // Fallback convention: replays/<matchId>.rpl (si tu as choisi ce nommage)
+  out.push(`${SUPA_URL}/storage/v1/object/public/replays/${m.id}.rpl`);
+  // Et dernier recours côté site (GH Pages /replays/{id}.rpl)
+  out.push(`replays/${m.id}.rpl`);
+  return Array.from(new Set(out));
+}
+
+function drawTagTimeline(container, duration, events, onJump){
+  container.innerHTML = ''; container.style.position='relative';
+  if (!duration || !events?.length) return;
+  events.forEach(ev=>{
+    const x = (ev.t/duration)*100;
+    const div = document.createElement('div');
+    div.className='absolute top-0 bottom-0';
+    div.style.left = `calc(${x}% - 1px)`; div.style.width='2px';
+    div.style.background = ev.player===1?'#60a5fa':'#f472b6';
+    div.title = `${ev.type.replace(/_/g,' ')} @ ${ev.t.toFixed(2)}s`;
+    div.style.cursor='pointer';
+    div.onclick = ()=> onJump(ev.t);
+    container.appendChild(div);
+  });
+}
 </script>
 
 <!-- Three.js replayer -->
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js';
 
 const $ = (s)=>document.querySelector(s);
 const fmt2 = (x)=> (Math.round(x*100)/100).toFixed(2);
-
-function setStatus(txt){ $('#replayStatus').textContent = txt; }
-
-function drawTagTimeline(container, duration, events, onJump){
-  container.innerHTML = '';
-  container.style.position='relative';
-  if (!duration || !events?.length) return;
-  events.forEach(ev=>{
-    const x = (ev.t/duration)*100;
-    const div = document.createElement('div');
-    div.className='absolute top-0 bottom-0';
-    div.style.left = `calc(${x}% - 1px)`;
-    div.style.width = '2px';
-    div.style.background = ev.player===1?'#60a5fa':'#f472b6';
-    div.title = `${ev.type.replace(/_/g,' ')} @ ${fmt2(ev.t)}s`;
-    div.style.cursor='pointer';
-    div.onclick = ()=> onJump(ev.t);
-    container.appendChild(div);
-  });
-}
 
 function parseRPL(buf){
   const dv = new DataView(buf);
@@ -298,11 +268,12 @@ function parseRPL(buf){
     const bytes = new Uint8Array(buf, off, n); off+=n;
     return new TextDecoder().decode(bytes);
   };
+
   // header
-  const sig = String.fromCharCode(new Uint8Array(buf,0,1)[0], new Uint8Array(buf,1,1)[0], new Uint8Array(buf,2,1)[0], new Uint8Array(buf,3,1)[0]);
+  if (String.fromCharCode(dv.getUint8(0),dv.getUint8(1),dv.getUint8(2),dv.getUint8(3))!=='RPL1')
+    throw new Error('Invalid RPL signature');
   off=4;
-  if (sig!=='RPL1') throw new Error('Invalid RPL signature');
-  const ver = u8(); // expect 0x04
+  const ver = u8(); // 0x04
   const map_id = i32();
   const p1 = u64();
   const p2 = u64();
@@ -310,14 +281,18 @@ function parseRPL(buf){
   const p1_name = readStr();
   const p2_name = readStr();
   const n1 = i32(), n2 = i32(), nt = i32(), nu = i32();
+
   const p1_samples = new Array(n1);
   const p2_samples = new Array(n2);
-  for (let i=0;i<n1;i++){ const t=f32(), x=f32(), y=f32(), z=f32(), yaw=f32(), pitch=f32(); p1_samples[i]=[t,x,y,z,yaw,pitch]; }
-  for (let i=0;i<n2;i++){ const t=f32(), x=f32(), y=f32(), z=f32(), yaw=f32(), pitch=f32(); p2_samples[i]=[t,x,y,z,yaw,pitch]; }
+  for (let i=0;i<n1;i++){ p1_samples[i]=[f32(),f32(),f32(),f32(),f32(),f32()]; }
+  for (let i=0;i<n2;i++){ p2_samples[i]=[f32(),f32(),f32(),f32(),f32(),f32()]; }
+
   const tag_events = new Array(nt);
-  for (let i=0;i<nt;i++){ const t=f32(), who=u8(); tag_events[i]=[t,who]; }
+  for (let i=0;i<nt;i++){ tag_events[i]=[f32(),u8()]; }
+
   const use_item = new Array(nu);
-  for (let i=0;i<nu;i++){ const t=f32(), who=u8(); use_item[i]=[t,who]; }
+  for (let i=0;i<nu;i++){ use_item[i]=[f32(),u8()]; }
+
   return { ver,map_id,p1,p2,winner,p1_name,p2_name,p1_samples,p2_samples,tag_events,use_item };
 }
 
@@ -376,58 +351,35 @@ function makeClientInsights(times, owner, p1pos, p2pos){
   return { events, distance: dist };
 }
 
-async function safeFetchArrayBuffer(url){
-  try{
-    const res = await fetch(url, {cache:'no-store', mode:'cors'});
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.arrayBuffer();
-  }catch(e){
-    throw new Error(`fetch failed: ${e.message}`);
-  }
-}
-
-function buildReplayer({match, matchId, supaUrl, names}){
+function buildReplayer({match, names}){
   const wrap = $('#threeWrap');
   const scrub = $('#scrub'), timeNow = $('#timeNow'), timeMax = $('#timeMax');
   const tagTimeline = $('#tagTimeline'), tagEvents = $('#tagEvents');
-  const speedSel = $('#speedSel'), playBtn=$('#playBtn'), pauseBtn=$('#pauseBtn'), centerBtn=$('#centerBtn');
-  const followP1 = $('#followP1'), followP2 = $('#followP2');
 
   let duration=0, times=[], owner=[], p1pos=[], p2pos=[], insights=null;
   let playing=false, speed=1, t=0, follow=0;
 
-  // Three.js setup
+  // Three.js
   const renderer = new THREE.WebGLRenderer({antialias:true});
   wrap.innerHTML=''; wrap.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b1220);
   const camera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 1000);
   camera.position.set(12,12,12);
+
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+
   const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 0.8);
   const dir  = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(5,10,7);
   scene.add(hemi, dir);
 
-  const grid = new THREE.GridHelper(100, 100, 0x29405a, 0x172334); grid.position.y = -0.01; scene.add(grid);
-
-  // Optional: map mesh if present
-  (async()=>{
-    try{
-      const url = `${supaUrl}/storage/v1/object/public/maps/${match.map_id}/scene.obj`;
-      const txt = await fetch(url, {cache:'force-cache'}).then(r=>r.ok?r.text():Promise.reject());
-      const loader = new OBJLoader();
-      const obj = loader.parse(txt);
-      obj.traverse(o=>{ if (o.isMesh) o.material = new THREE.MeshStandardMaterial({color:0x222a35, metalness:0, roughness:1}); });
-      obj.position.y = 0;
-      scene.add(obj);
-    }catch{}
-  })();
+  const grid = new THREE.GridHelper(100, 100, 0x29405a, 0x172334);
+  grid.position.y = -0.01;
+  scene.add(grid);
 
   const p1 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 16), new THREE.MeshStandardMaterial({color:0x60a5fa}));
   const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 16), new THREE.MeshStandardMaterial({color:0xf472b6}));
-  p1.userData.name = names?.p1 || 'P1';
-  p2.userData.name = names?.p2 || 'P2';
   scene.add(p1,p2);
 
   const trailGeom1 = new THREE.BufferGeometry();
@@ -489,10 +441,10 @@ function buildReplayer({match, matchId, supaUrl, names}){
   $('#scrub').addEventListener('input', ()=> setTime(parseFloat($('#scrub').value||'0')*duration));
   window.__replaySeek = (jump)=>{ playing=false; setTime(jump); };
 
-  function renderTagList(events){
+  function renderTagList(events, names){
     const root = $('#tagEvents');
     const p1n = names?.p1 || 'P1', p2n = names?.p2 || 'P2';
-    root.innerHTML = events.map(e=>{
+    root.innerHTML = (events||[]).map(e=>{
       const who = e.player===1? p1n : p2n;
       const lab = e.type.replace(/_/g,' ');
       return `<div class="flex items-center gap-2">
@@ -504,67 +456,152 @@ function buildReplayer({match, matchId, supaUrl, names}){
     root.querySelectorAll('.jump').forEach(b=> b.onclick = ()=> window.__replaySeek(parseFloat(b.dataset.jump)||0));
   }
 
-  function applyTimeline(tl){
+  function applyTimeline(tl, names){
     times = tl.times; p1pos = tl.p1_pos; p2pos = tl.p2_pos; owner = tl.owner;
     duration = times?.length ? (times[times.length-1] || 0) : 0;
     $('#timeMax').textContent = fmt2(duration);
     setTime(0);
-    if (!tl.events?.length){
-      insights = makeClientInsights(times, owner, p1pos, p2pos);
-    } else {
-      insights = { events: tl.events };
+    const insights = makeClientInsights(times, owner, p1pos, p2pos);
+    renderTagList(insights.events, names);
+    // vertical marks
+    const cont = $('#tagTimeline'); cont.innerHTML=''; cont.style.position='relative';
+    for (const e of insights.events){
+      const x = (e.t/duration)*100;
+      const d = document.createElement('div');
+      d.className='absolute top-0 bottom-0'; d.style.left=`calc(${x}% - 1px)`; d.style.width='2px';
+      d.style.background = e.player===1?'#60a5fa':'#f472b6';
+      d.title = `${e.type.replace(/_/g,' ')} @ ${fmt2(e.t)}s`;
+      d.style.cursor='pointer'; d.onclick = ()=> window.__replaySeek(e.t);
+      cont.appendChild(d);
     }
-    renderTagList(insights.events||[]);
-    drawTagTimeline($('#tagTimeline'), duration, insights.events||[], (t)=>window.__replaySeek(t));
   }
 
-  (async()=>{
-    // 1) Try timeline.json (public analysis bucket)
-    try{
-      const url = `${supaUrl}/storage/v1/object/public/analysis/${matchId}/timeline.json`;
-      const res = await fetch(url, {cache:'no-store'});
-      if (res.ok){
-        const tl = await res.json();
-        applyTimeline(tl);
-        setStatus('Source: analysis/timeline.json');
-        return;
-      }
-    }catch(e){ /* ignore and fallback */ }
+  return {
+    async loadFromUrlCandidates(candidates, names){
+      setStatus('Loading replay…');
+      try{
+        const {buf, url} = await window.tryFetchAny(candidates);
+        const rpl = parseRPL(buf);
+        // build 20Hz timeline
+        const maxT = Math.max(
+          rpl.p1_samples.length? rpl.p1_samples[rpl.p1_samples.length-1][0] : 0,
+          rpl.p2_samples.length? rpl.p2_samples[rpl.p2_samples.length-1][0] : 0,
+          rpl.tag_events.length? rpl.tag_events[rpl.tag_events.length-1][0] : 0
+        );
+        const dt = 0.05;
+        const tt = Array.from({length: Math.floor(maxT/dt)+1}, (_,i)=> i*dt);
+        const ev = (function compressOwnerEvents(evs){
+          if (!evs || !evs.length) return [];
+          const sorted = [...evs].sort((a,b)=>a[0]-b[0]);
+          const out=[sorted[0]];
+          for (let i=1;i<sorted.length;i++){
+            const [t,w]=sorted[i]; if (w!==out[out.length-1][1]) out.push([t,w]);
+          }
+          return out;
+        })(rpl.tag_events||[]);
+        const owner = [];
+        let cur=0, k=0;
+        for (const t of tt){
+          while (k<ev.length && ev[k][0] <= t){ cur = ev[k][1]; k++; }
+          owner.push(cur);
+        }
+        const p1 = (function interp(samples,times){
+          if (!samples?.length) return times.map(()=>[0,0,0]);
+          const out=[]; let i=0;
+          for (const t of times){
+            while (i+1<samples.length && samples[i+1][0]<t) i++;
+            if (i+1>=samples.length){ const [,x,y,z]=samples[samples.length-1]; out.push([x,y,z]); }
+            else{
+              const [t0,x0,y0,z0]=samples[i], [t1,x1,y1,z1]=samples[i+1];
+              const u = t1===t0 ? 0 : Math.min(1, Math.max(0, (t-t0)/(t1-t0)));
+              out.push([x0+(x1-x0)*u, y0+(y1-y0)*u, z0+(z1-z0)*u]);
+            }
+          }
+          return out;
+        })(rpl.p1_samples, tt);
+        const p2 = (function interp(samples,times){
+          if (!samples?.length) return times.map(()=>[0,0,0]);
+          const out=[]; let i=0;
+          for (const t of times){
+            while (i+1<samples.length && samples[i+1][0]<t) i++;
+            if (i+1>=samples.length){ const [,x,y,z]=samples[samples.length-1]; out.push([x,y,z]); }
+            else{
+              const [t0,x0,y0,z0]=samples[i], [t1,x1,y1,z1]=samples[i+1];
+              const u = t1===t0 ? 0 : Math.min(1, Math.max(0, (t-t0)/(t1-t0)));
+              out.push([x0+(x1-x0)*u, y0+(y1-y0)*u, z0+(z1-z0)*u]);
+            }
+          }
+          return out;
+        })(rpl.p2_samples, tt);
 
-    // 2) Fallback: parse the .rpl directly
-    if (!match.replay_url){
-      setStatus('No timeline.json and no replay_url available.');
-      return;
-    }
-    try{
-      const buf = await safeFetchArrayBuffer(match.replay_url);
-      const rpl = parseRPL(buf);
-
-      const maxT = Math.max(
-        rpl.p1_samples.length? rpl.p1_samples[rpl.p1_samples.length-1][0] : 0,
-        rpl.p2_samples.length? rpl.p2_samples[rpl.p2_samples.length-1][0] : 0,
-        rpl.tag_events.length? rpl.tag_events[rpl.tag_events.length-1][0] : 0
-      );
-      const dt = 0.05;
-      times = Array.from({length: Math.floor(maxT/dt)+1}, (_,i)=> i*dt);
-      const events = compressOwnerEvents(rpl.tag_events||[]);
-      owner = [];
-      let cur=0, k=0;
-      for (const tt of times){
-        while (k<events.length && events[k][0] <= tt){ cur = events[k][1]; k++; }
-        owner.push(cur);
+        applyTimeline({times:tt, p1_pos:p1, p2_pos:p2, owner}, names);
+        setStatus(`Source: ${url}`);
+      }catch(e){
+        setStatus(`Replay load failed: ${e.message}`);
       }
-      p1pos = interpAtTimes(rpl.p1_samples, times);
-      p2pos = interpAtTimes(rpl.p2_samples, times);
-      applyTimeline({ times, p1_pos:p1pos, p2_pos:p2pos, owner });
-      setStatus('Source: parsed replay (.rpl)');
-    }catch(e){
-      setStatus(`Replay load failed: ${e.message}`);
-    }
-  })();
+    },
+    loadFromLocalFile(file, names){
+      const fr = new FileReader();
+      fr.onload = ()=> {
+        try{
+          const rpl = parseRPL(fr.result);
+          const maxT = Math.max(
+            rpl.p1_samples.length? rpl.p1_samples[rpl.p1_samples.length-1][0] : 0,
+            rpl.p2_samples.length? rpl.p2_samples[rpl.p2_samples.length-1][0] : 0,
+            rpl.tag_events.length? rpl.tag_events[rpl.tag_events.length-1][0] : 0
+          );
+          const dt = 0.05;
+          const times = Array.from({length: Math.floor(maxT/dt)+1}, (_,i)=> i*dt);
+          const ev = compressOwnerEvents(rpl.tag_events||[]);
+          const owner = []; let cur=0, k=0;
+          for (const t of times){ while (k<ev.length && ev[k][0] <= t){ cur = ev[k][1]; k++; } owner.push(cur); }
+          const p1 = window.interpAtTimes(rpl.p1_samples, times);
+          const p2 = window.interpAtTimes(rpl.p2_samples, times);
+          applyTimeline({times, p1_pos:p1, p2_pos:p2, owner}, names);
+          setStatus(`Source: local file (${file.name})`);
+        }catch(err){ setStatus(`Local parse failed: ${err.message}`); }
+      };
+      fr.onerror = ()=> setStatus('Local file read error');
+      fr.readAsArrayBuffer(file);
+    },
+    controls: { setTime, get playing(){return playing;}, set playing(v){playing=v;}, set speed(v){speed=v;}, set follow(v){follow=v;} }
+  };
 }
 
-window.__replayInit = buildReplayer;
+window.tryFetchAny = window.tryFetchAny || (async (urls)=>{ throw new Error('patch failed'); });
+window.interpAtTimes = window.interpAtTimes || ((a,b)=>b.map(()=>[0,0,0]));
+
+(async function init(){
+  if (!idParam) { document.querySelector('#matchCard').innerHTML='<div class="text-red-400">Missing id.</div>'; return; }
+  const m = await fetchMatchById();
+  if (!m) { document.querySelector('#matchCard').innerHTML='<div class="text-red-400">Match not found.</div>'; return; }
+  const names = { p1: m.p1_name || 'P1', p2: m.p2_name || 'P2' };
+  renderMatch(m);
+  await loadAnalysis(matchIdValue, names);
+  subscribeRealtime(matchIdValue, names);
+
+  const rep = buildReplayer({match:m, names});
+  // Collect candidates and try
+  const candidates = buildReplayCandidates(m);
+  window.tryFetchAny = async (urls)=>{ // bind helper defined above (in non-module script)
+    let last=null; for (const u of urls){ try{ const res = await fetch(u, {cache:'no-store', mode:'cors', redirect:'follow'}); if(!res.ok) throw new Error(`${res.status}`); return {buf:await res.arrayBuffer(), url:u}; }catch(e){ last=e; } } throw last||new Error('no url'); };
+  };
+  await rep.loadFromUrlCandidates(candidates, names);
+
+  // Local file loader (debug / offline)
+  $('#localRpl').addEventListener('change', (e)=>{
+    const f = e.target.files?.[0]; if (f) rep.loadFromLocalFile(f, names);
+  });
+
+  // Wire basic controls
+  $('#playBtn').onclick = ()=> rep.controls.playing = true;
+  $('#pauseBtn').onclick = ()=> rep.controls.playing = false;
+  $('#centerBtn').onclick = ()=> {};
+  $('#speedSel').onchange = ()=> rep.controls.speed = parseFloat($('#speedSel').value||'1');
+  $('#followP1').onclick = ()=> rep.controls.follow = 1;
+  $('#followP2').onclick = ()=> rep.controls.follow = 2;
+  $('#scrub').addEventListener('input', ()=> rep.controls.setTime(parseFloat($('#scrub').value||'0')*parseFloat($('#timeMax').textContent||'0')));
+})();
 </script>
 </body>
 </html>
