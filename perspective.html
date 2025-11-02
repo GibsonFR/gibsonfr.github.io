@@ -416,23 +416,7 @@ function aggregateMetrics(sid, matches, analyses, mapId=null, eloBandSet=null){
   const sessions = groupSessions(scope);
   const sessionStats = {
     sessions: sessions.length,
-    avg_matches_per_session: sessions.length? (sessions.map(s=>s.length).reduce((a,b)=>a+b,0)/sessions.length) : null,
-    best_wr: sessions.length? Math.max(...sessions.map(s=>{
-      const r = s.map(m=>{
-        const side = String(m.p1_id)===String(sid)?'p1':'p2';
-        const win  = (m.winner===1||m.winner==='1') ? (side==='p1') : (m.winner===2||m.winner==='2') ? (side==='p2') : null;
-        return win===true;
-      });
-      return r.length? (r.filter(Boolean).length/r.length):0;
-    })) : null,
-    worst_wr: sessions.length? Math.min(...sessions.map(s=>{
-      const r = s.map(m=>{
-        const side = String(m.p1_id)===String(sid)?'p1':'p2';
-        const win  = (m.winner===1||m.winner==='1') ? (side==='p1') : (m.winner===2||m.winner==='2') ? (side==='p2') : null;
-        return win===true;
-      });
-      return r.length? (r.filter(Boolean).length/r.length):null;
-    }).filter(x=>x!=null)) : null
+    avg_matches_per_session: sessions.length? (sessions.map(s=>s.length).reduce((a,b)=>a+b,0)/sessions.length) : null
   };
   const dayparts = daypartsBuckets(scope, sid);
 
@@ -552,48 +536,79 @@ function sectionQuality(m){
     </div>`);
 }
 
-/* ===== Dayparts (lisible) ===== */
+/* ===== Dayparts as TABS ===== */
 function sectionSessionsAndTime(m){
-  const dp = m.dayparts || [];
-  const cards = `
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      ${dp.map(p=>{
-        const wr = p.winrate==null ? null : Math.round(p.winrate*1000)/10;
-        const muted = p.matches ? '' : 'opacity-60';
-        return `
-        <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40 ${muted}">
-          <div class="flex items-center justify-between">
-            <div class="font-semibold">${p.key}</div>
-            <div class="text-xs text-slate-400">${p.matches||0} matches</div>
-          </div>
-          <div class="text-slate-400 text-xs">${p.range}</div>
-          <div class="mt-2 text-2xl font-extrabold tracking-tight">${wr==null?'—':wr+'%'}</div>
-          <div class="mt-2">${bar(p.winrate||0,'Win rate')}</div>
-        </div>`;
-      }).join('')}
-    </div>`;
+  const dp = (m.dayparts||[]);
+  const encoded = encodeURIComponent(JSON.stringify(dp));
+  // default selection: the daypart with most matches (or first)
+  const defaultKey = dp.length ? dp.reduce((a,b)=> b.matches>a.matches? b:a).key : 'Morning';
 
   return section('Playtime & sessions',
-    `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <div class="text-slate-400">Sessions (≤5 min gap)</div>
-        <div class="text-lg font-semibold">${m.sessionStats.sessions||0}</div>
-        <div class="mt-2 text-slate-400">Avg matches per session</div>
-        <div class="font-semibold">${num(m.sessionStats.avg_matches_per_session,2)}</div>
+  `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div>
+      <div class="text-slate-400">Sessions (≤5 min gap)</div>
+      <div class="text-lg font-semibold">${m.sessionStats.sessions||0}</div>
+      <div class="mt-2 text-slate-400">Avg matches per session</div>
+      <div class="font-semibold">${num(m.sessionStats.avg_matches_per_session,2)}</div>
+    </div>
+
+    <div class="md:col-span-2">
+      <div class="flex items-center justify-between gap-2">
+        <div class="text-slate-400">Win rate by daypart (local)</div>
+        <div class="dp-tabs flex flex-wrap gap-2">
+          <!-- tabs rendered by JS -->
+        </div>
       </div>
-      <div>
-        <div class="text-slate-400">Best session win rate</div>
-        <div class="text-lg font-semibold">${m.sessionStats.best_wr!=null? Math.round(m.sessionStats.best_wr*100):'—'}%</div>
-        <div class="mt-2 text-slate-400">Worst session win rate</div>
-        <div class="font-semibold">${m.sessionStats.worst_wr!=null? Math.round(m.sessionStats.worst_wr*100):'—'}%</div>
-      </div>
-      <div class="md:col-span-1">
-        <div class="text-slate-400 mb-2">Win rate by daypart (local)</div>
-        ${cards}
-      </div>
-    </div>`);
+      <div class="dp-panel mt-3 p-4 rounded-xl border border-slate-800 bg-slate-900/40"></div>
+      <div class="hidden" data-dp-scope data-dp-data="${encoded}" data-dp-selected="${defaultKey}"></div>
+    </div>
+  </div>`);
 }
 
+/* Mount tabs after render */
+function mountDaypartTabs(scope){
+  (scope||document).querySelectorAll('[data-dp-scope]').forEach(box=>{
+    const data = JSON.parse(decodeURIComponent(box.getAttribute('data-dp-data')||'[]'));
+    if(!data.length) return;
+    let selected = box.getAttribute('data-dp-selected') || data[0].key;
+
+    const wrap = box.parentElement; // container holding tabs + panel
+    const tabsEl  = wrap.querySelector('.dp-tabs');
+    const panelEl = wrap.querySelector('.dp-panel');
+
+    function renderTabs(){
+      tabsEl.innerHTML = data.map(p =>
+        `<button class="px-2 py-1.5 text-sm pill ${p.key===selected?'pill-active':''}" data-dp="${p.key}">
+           ${p.key}<span class="ml-1 text-slate-400 text-xs">${p.range}</span>
+         </button>`).join('');
+    }
+    function renderPanel(){
+      const p = data.find(x=>x.key===selected) || data[0];
+      const wr = p.winrate==null ? '—' : (Math.round(p.winrate*1000)/10)+'%';
+      panelEl.innerHTML = `
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div class="text-xs text-slate-400">${p.range} · ${p.matches||0} matches</div>
+            <div class="text-2xl font-extrabold tracking-tight mt-1">${wr}</div>
+          </div>
+          <div class="min-w-[180px] w-full sm:w-auto">${bar(p.winrate||0,'Win rate')}</div>
+        </div>`;
+    }
+    function bind(){
+      tabsEl.addEventListener('click', e=>{
+        const b = e.target.closest('[data-dp]');
+        if(!b) return;
+        selected = b.getAttribute('data-dp');
+        box.setAttribute('data-dp-selected', selected);
+        renderTabs(); renderPanel();
+      });
+    }
+
+    renderTabs(); renderPanel(); bind();
+  });
+}
+
+/* -------------------- Opponents & maps -------------------- */
 function sectionMaps(maps, filter){
   if (filter != null) return '';
   if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
@@ -646,6 +661,7 @@ function renderAll(contentEl, metrics){
     ${sectionOpponents(metrics.opponents)}
   `;
   mountReveal(contentEl);
+  mountDaypartTabs(contentEl);
 }
 
 /* -------------------- Legacy worker summary -------------------- */
@@ -934,9 +950,10 @@ async function init(){
     const content = document.getElementById('content');
     content.innerHTML = ''; content.appendChild(wrap); content.appendChild(rows);
     mountReveal(content);
+    mountDaypartTabs(content);
   };
 
-  // Recompute on resize to keep responsive dayparts tidy
+  // Recompute on resize (keeps tabs neatly laid out)
   let _rszTimer=null;
   window.addEventListener('resize', ()=>{
     clearTimeout(_rszTimer);
