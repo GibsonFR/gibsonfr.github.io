@@ -22,6 +22,9 @@
       opacity:0; transition:opacity .15s ease, transform .15s ease; z-index:20
     }
     .tip:hover:after { opacity:1; transform:translateX(-50%) translateY(6px) }
+    .kpi {display:flex;align-items:center;gap:.5rem}
+    .kpi small{color:#9ca3af}
+    .delta{font-size:.75rem;margin-left:.35rem}
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100">
@@ -37,6 +40,9 @@
 
     <!-- FILTERS -->
     <div id="scopeBar" class="mt-4 hidden"></div>
+
+    <!-- BENCHMARKS -->
+    <div id="benchBar" class="mt-3 hidden"></div>
 
     <!-- PREMIUM / AUTH GATE -->
     <div id="gateBanner" class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 hidden"></div>
@@ -63,10 +69,9 @@
             Compare (mirror)
           </button>
           <label class="ml-2 text-xs text-slate-400 flex items-center gap-2" title="Apply the current map filter to the comparison">
-            <input id="cmpUseFilter" type="checkbox" class="accent-amber-500">
+            <input id="cmpUseFilter" type="checkbox" class="accent-amber-500" checked>
             Apply current filter
           </label>
-          <span id="cmpStatus" class="text-sm text-slate-400"></span>
         </form>
       </div>
     </div>
@@ -84,7 +89,6 @@ const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 const url = new URL(location.href);
 const steamId = url.searchParams.get('steam_id');
 
-/* Known map names */
 const MAP_NAMES = {35:'Mini Monke',36:'Small Beach',38:'Small Containers',39:'Tiny Town 2',40:'Tiny Town'};
 const prettyMap = id => MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : `Map ${id}`;
 
@@ -102,7 +106,7 @@ function avg(a){ a=(a||[]).filter(Number.isFinite); return a.length? sum(a)/a.le
 function std(a){ a=(a||[]).filter(Number.isFinite); if(!a.length) return null; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); }
 function lastN(a,n){ return (a||[]).slice(Math.max(0,a.length-n)); }
 
-/* SVG sparklines */
+/* visual */
 function spark(values, w=240, h=48){
   values=(values||[]).filter(Number.isFinite); if(!values.length) return `<svg width="${w}" height="${h}"></svg>`;
   const min=Math.min(...values), max=Math.max(...values);
@@ -111,8 +115,6 @@ function spark(values, w=240, h=48){
   const d = 'M '+pts.map(p=>p.join(' ')).join(' L ');
   return `<svg width="${w}" height="${h}" class="text-amber-300"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
 }
-
-/* Bars with animation */
 function bar(v01, title=''){
   const v = Math.max(0, Math.min(1, Number(v01)||0));
   const w = (v*100).toFixed(1)+'%';
@@ -120,8 +122,6 @@ function bar(v01, title=''){
     <div class="bar h-2 rounded bg-gradient-to-r from-amber-400 to-amber-200" style="width:${w}"></div>
   </div>`;
 }
-
-/* reveal on scroll */
 const io = new IntersectionObserver(entries=>{
   entries.forEach(e=>{
     if(e.isIntersecting){
@@ -157,15 +157,6 @@ async function isPremiumSteam(sid){
     const { data } = await supa.from('profiles').select('steam_id').eq('steam_id', sid).gt('premium_until', nowIso).maybeSingle();
     return !!data;
   }catch{ return false; }
-}
-async function fetchPremiumSet(steamIds){
-  const set = new Set(); if(!steamIds?.length) return set;
-  try{
-    const nowIso = new Date().toISOString();
-    const { data } = await supa.from('profiles').select('steam_id').in('steam_id', steamIds).gt('premium_until', nowIso);
-    (data||[]).forEach(r=> r.steam_id && set.add(String(r.steam_id)));
-    return set;
-  }catch{ return set; }
 }
 
 /* -------------------- Auth + Gate -------------------- */
@@ -217,7 +208,7 @@ async function updateGateUI(){
   return { user, premium:true };
 }
 
-/* -------------------- Data -------------------- */
+/* -------------------- Data fetch -------------------- */
 async function fetchPlayer(){ const { data } = await supa.from('players').select('*').eq('steam_id', steamId).maybeSingle(); return data||null; }
 
 async function fetchMatchesForPlayer(sid, limit=800){
@@ -238,20 +229,18 @@ async function fetchAnalysesForMatchIds(ids){
   const map = new Map(); (data||[]).forEach(r=> map.set(r.match_id, r)); return map;
 }
 
-/* -------------------- Aggregation (supports All or single map) -------------------- */
-function aggregateMetrics(sid, matches, analyses, mapId=null){
+/* -------------------- Aggregation (player scope) -------------------- */
+function aggregateMetricsForPlayer(sid, matches, analyses, mapId=null){
   const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
-
   const eloSeries = [];
   const results = [];
-  const qual=[], speeds=[], distH=[], distT=[], tagShare=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
+  const qual=[], speeds=[], distH=[], distT=[], tagShareCalc=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
   const byMap = new Map(), byOpp = new Map();
 
   for (const m of scope){
     const side = (String(m.p1_id)===String(sid)) ? 'p1' : 'p2';
     const oppId = (side==='p1') ? m.p2_id : m.p1_id;
     const oppName = (side==='p1') ? (m.p2_name||m.p2_id) : (m.p1_name||m.p1_id);
-
     const win = (m.winner===1 || m.winner==='1') ? (side==='p1') : (m.winner===2 || m.winner==='2') ? (side==='p2') : null;
     if (win!=null) results.push(!!win);
 
@@ -260,34 +249,42 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
 
     const a = analyses.get(m.id);
     if (a){
+      const s = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
       const q = (side==='p1') ? a.p1_quality : a.p2_quality;
       if (isFinite(q)) qual.push(Number(q));
-      const s = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
+
+      // robust tagging share computed from seconds:
+      const ts = Number(s.seconds_as_tagger), hs = Number(s.seconds_as_hider);
+      if (isFinite(ts) && isFinite(hs) && (ts+hs)>0) tagShareCalc.push(ts/(ts+hs));
+      else if (isFinite(s.time_as_tagger_share)) tagShareCalc.push(Number(s.time_as_tagger_share));
+
+      if (isFinite(ts)) tagSecs.push(ts);
+      if (isFinite(hs)) hidSecs.push(hs);
+
       if (isFinite(s.avg_speed_ms)) speeds.push(Number(s.avg_speed_ms));
       if (isFinite(s.avg_distance_as_hider))  distH.push(Number(s.avg_distance_as_hider));
       if (isFinite(s.avg_distance_as_tagger)) distT.push(Number(s.avg_distance_as_tagger));
-      if (isFinite(s.time_as_tagger_share))    tagShare.push(Number(s.time_as_tagger_share));
-      if (isFinite(s.seconds_as_tagger))       tagSecs.push(Number(s.seconds_as_tagger));
-      if (isFinite(s.seconds_as_hider))        hidSecs.push(Number(s.seconds_as_hider));
       if (isFinite(s.retag_median_seconds))    retMed.push(Number(s.retag_median_seconds));
       if (isFinite(s.retag_avg_seconds))       retAvg.push(Number(s.retag_avg_seconds));
       if (isFinite(s.accuracy))                acc.push(Number(s.accuracy));
     }
 
-    // per map (for "Per-map breakdown" when scope=All)
+    // per map (for table All)
     const keyM = String(m.map_id);
     if (!byMap.has(keyM)) byMap.set(keyM, { map_id:m.map_id, matches:0, wins:0, q:[], sp:[], ts:[], rm:[], dh:[], dt:[] });
     const bm = byMap.get(keyM);
     bm.matches++; if (win) bm.wins++;
     if (a){
-      const s = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
-      const q = (side==='p1') ? a.p1_quality : a.p2_quality;
-      if (isFinite(q)) bm.q.push(Number(q));
-      if (isFinite(s.avg_speed_ms)) bm.sp.push(Number(s.avg_speed_ms));
-      if (isFinite(s.time_as_tagger_share)) bm.ts.push(Number(s.time_as_tagger_share));
-      if (isFinite(s.retag_median_seconds)) bm.rm.push(Number(s.retag_median_seconds));
-      if (isFinite(s.avg_distance_as_hider)) bm.dh.push(Number(s.avg_distance_as_hider));
-      if (isFinite(s.avg_distance_as_tagger)) bm.dt.push(Number(s.avg_distance_as_tagger));
+      const s2 = (side==='p1') ? (a.p1_stats||{}) : (a.p2_stats||{});
+      const q2 = (side==='p1') ? a.p1_quality : a.p2_quality;
+      if (isFinite(q2)) bm.q.push(Number(q2));
+      if (isFinite(s2.avg_speed_ms)) bm.sp.push(Number(s2.avg_speed_ms));
+      const ts2 = Number(s2.seconds_as_tagger), hs2 = Number(s2.seconds_as_hider);
+      if (isFinite(ts2) && isFinite(hs2) && (ts2+hs2)>0) bm.ts.push(ts2/(ts2+hs2));
+      else if (isFinite(s2.time_as_tagger_share)) bm.ts.push(Number(s2.time_as_tagger_share));
+      if (isFinite(s2.retag_median_seconds)) bm.rm.push(Number(s2.retag_median_seconds));
+      if (isFinite(s2.avg_distance_as_hider)) bm.dh.push(Number(s2.avg_distance_as_hider));
+      if (isFinite(s2.avg_distance_as_tagger)) bm.dt.push(Number(s2.avg_distance_as_tagger));
     }
 
     // per opponent
@@ -295,31 +292,24 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
     if (!byOpp.has(ok)) byOpp.set(ok, { id:oppId, name:oppName, matches:0, wins:0, q:[] });
     const bo = byOpp.get(ok);
     bo.matches++; if (win) bo.wins++;
-    if (a){
-      const q2 = (side==='p1') ? a.p1_quality : a.p2_quality;
-      if (isFinite(q2)) bo.q.push(Number(q2));
-    }
+    const q3 = a ? ((side==='p1') ? a.p1_quality : a.p2_quality) : null;
+    if (isFinite(q3)) bo.q.push(Number(q3));
   }
 
-  const count = scope.length;
-  const wins = results.filter(Boolean).length;
-  const winrate = count ? wins / count : null;
-
+  const count = scope.length, wins = results.filter(Boolean).length, winrate = count ? wins/count : null;
   const quality = {
     average: avg(qual), median: median(qual),
     lower_quartile: quantile(qual,.25), upper_quartile: quantile(qual,.75),
     best_match: qual.length? Math.max(...qual):null, worst_match: qual.length? Math.min(...qual):null,
     spread_std: std(qual), spread_iqr: (quantile(qual,.75)!=null && quantile(qual,.25)!=null) ? (quantile(qual,.75)-quantile(qual,.25)) : null
   };
-
   const tagging = {
-    share_as_tagger: avg(tagShare), // 0..1
+    share_as_tagger: avg(tagShareCalc),
     time_as_tagger_average: avg(tagSecs),
     time_as_tagger_median: median(tagSecs),
     time_as_hider_average: avg(hidSecs),
     time_as_hider_median: median(hidSecs)
   };
-
   const speed = { average_mps: avg(speeds), p90_mps: p90(speeds), p10_mps: p10(speeds) };
   const distance = { average_hider_m: avg(distH), average_tagger_m: avg(distT) };
   const retag = { median_seconds: median(retMed), average_seconds: avg(retAvg), p90_seconds: p90(retMed) };
@@ -352,7 +342,116 @@ function aggregateMetrics(sid, matches, analyses, mapId=null){
   };
 }
 
-/* -------------------- UI builders -------------------- */
+/* -------------------- Benchmarks (dataset aggregation) -------------------- */
+/* We compute dataset metrics over *both* sides (p1 & p2) to approximate per-player expectations. */
+function aggregateMetricsForDataset(matches, analyses, mapId=null){
+  const scope = mapId ? matches.filter(m=> String(m.map_id)===String(mapId)) : matches.slice();
+  const qual=[], speeds=[], distH=[], distT=[], tagShareCalc=[], tagSecs=[], hidSecs=[], retMed=[], retAvg=[], acc=[];
+  const results=[];
+
+  for (const m of scope){
+    const a = analyses.get(m.id); if (!a) continue;
+
+    // include both sides
+    const sides = [
+      { s:(a.p1_stats||{}), q:a.p1_quality },
+      { s:(a.p2_stats||{}), q:a.p2_quality }
+    ];
+    for (const side of sides){
+      const s = side.s;
+      const q = side.q;
+      if (isFinite(q)) qual.push(Number(q));
+      const ts = Number(s.seconds_as_tagger), hs = Number(s.seconds_as_hider);
+      if (isFinite(ts) && isFinite(hs) && (ts+hs)>0) tagShareCalc.push(ts/(ts+hs));
+      else if (isFinite(s.time_as_tagger_share)) tagShareCalc.push(Number(s.time_as_tagger_share));
+      if (isFinite(ts)) tagSecs.push(ts);
+      if (isFinite(hs)) hidSecs.push(hs);
+      if (isFinite(s.avg_speed_ms)) speeds.push(Number(s.avg_speed_ms));
+      if (isFinite(s.avg_distance_as_hider))  distH.push(Number(s.avg_distance_as_hider));
+      if (isFinite(s.avg_distance_as_tagger)) distT.push(Number(s.avg_distance_as_tagger));
+      if (isFinite(s.retag_median_seconds))    retMed.push(Number(s.retag_median_seconds));
+      if (isFinite(s.retag_avg_seconds))       retAvg.push(Number(s.retag_avg_seconds));
+      if (isFinite(s.accuracy))                acc.push(Number(s.accuracy));
+    }
+
+    // global win rate centers around 50%; keep for reference only
+    if (m.winner===1 || m.winner===2) results.push(true);
+  }
+
+  return {
+    winrate: results.length? 0.5 : null, // neutral baseline
+    quality: { average: avg(qual), median: median(qual) },
+    tagging: {
+      share_as_tagger: avg(tagShareCalc),
+      time_as_tagger_average: avg(tagSecs),
+      time_as_hider_average: avg(hidSecs),
+    },
+    speed: { average_mps: avg(speeds), p90_mps: p90(speeds) },
+    distance: { average_hider_m: avg(distH), average_tagger_m: avg(distT) },
+    retag: { median_seconds: median(retMed), average_seconds: avg(retAvg), p90_seconds: p90(retMed) },
+    accuracy: { average: avg(acc) }
+  };
+}
+
+function eloOfMatchForSide(m, side){
+  return (side==='p1') ? (m.p1_elo_after ?? m.p1_elo_before) : (m.p2_elo_after ?? m.p2_elo_before);
+}
+
+/* Fetch a recent sample for a given Elo band and build dataset metrics */
+async function fetchBenchmark(bandMin, bandMax, limit=2000){
+  // Fetch recent matches where any side's Elo (before/after) falls within band.
+  const orCond =
+    `and(p1_elo_before.gte.${bandMin},p1_elo_before.lt.${bandMax})` + ',' +
+    `and(p2_elo_before.gte.${bandMin},p2_elo_before.lt.${bandMax})` + ',' +
+    `and(p1_elo_after.gte.${bandMin},p1_elo_after.lt.${bandMax})` + ',' +
+    `and(p2_elo_after.gte.${bandMin},p2_elo_after.lt.${bandMax})`;
+  const { data: m, error } = await supa.from('matches')
+    .select('id, map_id, winner, played_at, p1_id, p2_id, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
+    .or(orCond)
+    .order('played_at', { ascending: false })
+    .limit(limit);
+  if (error) { console.warn('benchmark matches error', error); return { matches:[], analyses:new Map(), metrics:null }; }
+  const ids = (m||[]).map(x=>x.id);
+  const analyses = await fetchAnalysesForMatchIds(ids);
+  const metrics = aggregateMetricsForDataset(m||[], analyses, currentFilter);
+  return { matches:m||[], analyses, metrics };
+}
+
+/* Global (all players) sample */
+async function fetchBenchmarkGlobal(limit=2000){
+  const { data: m, error } = await supa.from('matches')
+    .select('id, map_id, winner, played_at, p1_id, p2_id, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
+    .order('played_at', { ascending: false })
+    .limit(limit);
+  if (error) { console.warn('global matches error', error); return { matches:[], analyses:new Map(), metrics:null }; }
+  const ids = (m||[]).map(x=>x.id);
+  const analyses = await fetchAnalysesForMatchIds(ids);
+  const metrics = aggregateMetricsForDataset(m||[], analyses, currentFilter);
+  return { matches:m||[], analyses, metrics };
+}
+
+/* Small helpers */
+function deltaBadge(a, b, suffix=''){
+  if(!isFinite(a)||!isFinite(b)) return '';
+  const d = Math.round((a-b)*100)/100;
+  if (d===0) return `<span class="delta text-slate-400">±0${suffix}</span>`;
+  const up=d>0; return `<span class="delta ${up?'text-emerald-400':'text-rose-400'}">${up?'▲':'▼'} ${Math.abs(d)}${suffix}</span>`;
+}
+function kpi(label, you, band, global, fmt=(x)=>x, suffix=''){
+  const y = fmt(you), b = fmt(band), g = fmt(global);
+  return `<div class="kpi">
+    <span class="tip text-slate-300" data-tip="${esc(label)}">${label}</span>
+    <small>• You:</small> <b>${y}</b>
+    <small>• Band:</small> <span>${b}</span>${deltaBadge(you, band, suffix)}
+    <small>• Global:</small> <span>${g}</span>${deltaBadge(you, global, suffix)}
+  </div>`;
+}
+
+/* UI sections */
+function section(title, body){
+  return `<div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
+    <h3 class="text-xl font-semibold mb-3">${title}</h3>${body}</div>`;
+}
 function chip(label, value, tip, suffix=''){
   const show = (value==null||value==='—') ? '—' : '';
   const dv = (value==null||value==='—') ? '' : `data-count-to="${value}" data-suffix="${suffix}"`;
@@ -360,22 +459,6 @@ function chip(label, value, tip, suffix=''){
     <span class="tip text-slate-400" data-tip="${esc(tip)}">${label}</span>
     <span class="ml-1 text-slate-100 font-semibold" ${dv}>${show||value}${suffix}</span>
   </div>`;
-}
-function section(title, body){
-  return `<div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
-    <h3 class="text-xl font-semibold mb-3">${title}</h3>${body}</div>`;
-}
-function row(label, valueHtml){
-  return `<tr>
-    <td class="py-2 pl-3 text-slate-300 whitespace-nowrap">${label}</td>
-    <td class="py-2 pr-3 text-right font-semibold whitespace-nowrap">${valueHtml}</td>
-  </tr>`;
-}
-function badgeDelta(a,b,suffix=''){
-  if(!isFinite(a)||!isFinite(b)) return '';
-  const d = Math.round((a-b)*100)/100;
-  if (d===0) return `<span class="ml-2 text-xs text-slate-400">±0${suffix}</span>`;
-  const up=d>0; return `<span class="ml-2 text-xs ${up?'text-emerald-400':'text-rose-400'}">${up?'▲':'▼'} ${Math.abs(d)}${suffix}</span>`;
 }
 
 /* Header */
@@ -397,7 +480,7 @@ function headerCard(p, isPrem){
   </div>`;
 }
 
-/* Overview chips */
+/* Overview chips (no abbreviations) */
 function overviewChips(m){
   return [
     chip('Matches played', m.scopeCount||0, 'Number of matches included in the current scope (All or the selected map).'),
@@ -409,24 +492,13 @@ function overviewChips(m){
     chip('Quality standard deviation', (m.quality.spread_std!=null? Number(m.quality.spread_std).toFixed(2):'—'), 'Standard deviation of quality scores. Lower means more consistent results.'),
     chip('Best match quality', m.quality.best_match!=null? Number(m.quality.best_match).toFixed(1) : '—', 'Highest quality score observed in this scope.'),
     chip('Worst match quality', m.quality.worst_match!=null? Number(m.quality.worst_match).toFixed(1) : '—', 'Lowest quality score observed in this scope.'),
-    chip('Tag time share', m.tagging.share_as_tagger!=null? Math.round(m.tagging.share_as_tagger*1000)/10 : '—', 'Share of total time spent as the tagger (0–100%).', '%'),
-    chip('Average time as tagger', m.tagging.time_as_tagger_average!=null? Number(m.tagging.time_as_tagger_average).toFixed(1) : '—', 'Mean number of seconds spent as the tagger per match.', 's'),
-    chip('Average time as hider', m.tagging.time_as_hider_average!=null? Number(m.tagging.time_as_hider_average).toFixed(1) : '—', 'Mean number of seconds spent as the hider per match.', 's'),
-    chip('Average speed', m.speed.average_mps!=null? Number(m.speed.average_mps).toFixed(2) : '—', 'Average movement speed across matches, in meters per second.', ' m/s'),
-    chip('90th percentile speed', m.speed.p90_mps!=null? Number(m.speed.p90_mps).toFixed(2) : '—', 'Speed that only the fastest 10% of moments exceed.', ' m/s'),
-    chip('Average hider distance', m.distance.average_hider_m!=null? Number(m.distance.average_hider_m).toFixed(2) : '—', 'Average distance traveled while hiding, per match.', ' m'),
-    chip('Average tagger distance', m.distance.average_tagger_m!=null? Number(m.distance.average_tagger_m).toFixed(2) : '—', 'Average distance traveled while tagging, per match.', ' m'),
-    chip('Retag median', m.retag.median_seconds!=null? Number(m.retag.median_seconds).toFixed(1) : '—', 'Typical time between consecutive tags (median).', 's'),
-    chip('Retag average', m.retag.average_seconds!=null? Number(m.retag.average_seconds).toFixed(1) : '—', 'Average time between consecutive tags.', 's'),
-    chip('Retag 90th percentile', m.retag.p90_seconds!=null? Number(m.retag.p90_seconds).toFixed(1) : '—', 'Slow retag time; 90% of retags are faster than this.', 's'),
-    chip('Accuracy (average)', m.accuracy.average!=null? Math.round(m.accuracy.average*1000)/10 : '—', 'Proportion of hits vs attempts (if available in analyses).', '%')
   ].join('');
 }
 
 /* Sections */
 function sectionForm(m){
   const dots = m.form.map(w => `<span class="w-3 h-3 rounded-full ${w?'bg-emerald-400':'bg-rose-400'} inline-block"></span>`).join('<span class="w-1 inline-block"></span>');
-  return section('Form & rating',
+  return section('Form and rating trend',
     `<div class="flex items-center justify-between gap-4 flex-wrap">
       <div class="text-slate-300 tip" data-tip="Longest consecutive sequence of wins within the scope.">Best win streak: <b>${m.bestStreak||0}</b></div>
       <div class="flex items-center gap-1" title="Most recent results (green = win, red = loss).">${dots||'<span class="text-slate-500 text-sm">No recent games</span>'}</div>
@@ -434,90 +506,89 @@ function sectionForm(m){
     </div>`);
 }
 
-function sectionTagging(m){
+function sectionTagging(m, benchB, benchG){
   return section('Tagging profile',
-    `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Share of total time played as the tagger.">${pct(m.tagging.share_as_tagger)}</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Share of total time played as the tagger (0–100%).">Tag time share</div>
         ${bar(m.tagging.share_as_tagger||0,'Tag time share')}
+        <div class="text-slate-100 font-semibold mt-1">${pct(m.tagging.share_as_tagger)}</div>
+        <div class="mt-2 text-sm">${kpi('Share of time as tagger', m.tagging.share_as_tagger*100, (benchB?.tagging?.share_as_tagger??null)*100, (benchG?.tagging?.share_as_tagger??null)*100, x=> isFinite(x)? (Math.round(x*10)/10)+'%':'—','%')}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the tagger each match.">Average time as tagger</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the tagger per match.">Average time as tagger</div>
         <div class="text-slate-100 font-semibold">${fmtS(m.tagging.time_as_tagger_average)} <span class="text-slate-400">· median ${fmtS(m.tagging.time_as_tagger_median)}</span></div>
+        <div class="mt-2 text-sm">${kpi('Average time as tagger (seconds)', m.tagging.time_as_tagger_average, benchB?.tagging?.time_as_tagger_average, benchG?.tagging?.time_as_tagger_average, x=> fmtS(x).replace('s',''), 's')}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the hider each match.">Average time as hider</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the hider per match.">Average time as hider</div>
         <div class="text-slate-100 font-semibold">${fmtS(m.tagging.time_as_hider_average)} <span class="text-slate-400">· median ${fmtS(m.tagging.time_as_hider_median)}</span></div>
+        <div class="mt-2 text-sm">${kpi('Average time as hider (seconds)', m.tagging.time_as_hider_average, benchB?.tagging?.time_as_hider_average, benchG?.tagging?.time_as_hider_average, x=> fmtS(x).replace('s',''), 's')}</div>
       </div>
     </div>`);
 }
 
-function sectionSpeedDistance(m){
-  return section('Speed & distance',
-    `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+function sectionSpeedDistance(m, benchB, benchG){
+  return section('Speed and distance',
+    `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average movement speed across all moments in the scope, and the 90th percentile (peak bursts).">Average speed / P90</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average movement speed and 90th percentile (peak bursts).">Average speed and P90</div>
         <div class="text-slate-100 font-semibold">${num(m.speed.average_mps,2)} m/s · ${num(m.speed.p90_mps,2)} m/s</div>
+        <div class="mt-2 text-sm">${kpi('Average speed (m/s)', m.speed.average_mps, benchB?.speed?.average_mps, benchG?.speed?.average_mps, x=> num(x,2))}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while playing as the hider.">Average hider distance</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while hiding.">Average hider distance</div>
         <div class="text-slate-100 font-semibold">${num(m.distance.average_hider_m,2)} m</div>
+        <div class="mt-2 text-sm">${kpi('Average hider distance (m)', m.distance.average_hider_m, benchB?.distance?.average_hider_m, benchG?.distance?.average_hider_m, x=> num(x,2))}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while playing as the tagger.">Average tagger distance</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while tagging.">Average tagger distance</div>
         <div class="text-slate-100 font-semibold">${num(m.distance.average_tagger_m,2)} m</div>
+        <div class="mt-2 text-sm">${kpi('Average tagger distance (m)', m.distance.average_tagger_m, benchB?.distance?.average_tagger_m, benchG?.distance?.average_tagger_m, x=> num(x,2))}</div>
       </div>
     </div>`);
 }
 
-function sectionRetagAccuracy(m){
-  return section('Retagging & accuracy',
-    `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+function sectionRetagAccuracy(m, benchB, benchG){
+  return section('Retagging and accuracy',
+    `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags. Median is robust to outliers.">Retag (median)</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags.">Retag (median)</div>
         <div class="text-slate-100 font-semibold">${fmtS(m.retag.median_seconds)}</div>
+        <div class="mt-2 text-sm">${kpi('Retag median (seconds)', m.retag.median_seconds, benchB?.retag?.median_seconds, benchG?.retag?.median_seconds, x=> num(x,1))}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average and 90th percentile of retag time (lower is better).">Retag (average / P90)</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average and 90th percentile of retag time; lower is better.">Retag (average and P90)</div>
         <div class="text-slate-100 font-semibold">${fmtS(m.retag.average_seconds)} / ${fmtS(m.retag.p90_seconds)}</div>
+        <div class="mt-2 text-sm">${kpi('Retag average (seconds)', m.retag.average_seconds, benchB?.retag?.average_seconds, benchG?.retag?.average_seconds, x=> num(x,1))}</div>
       </div>
       <div>
         <div class="text-slate-300 tip mb-1" data-tip="Share of successful attempts; higher means better precision.">Accuracy (average)</div>
         <div class="text-slate-100 font-semibold">${m.accuracy.average!=null? pct(m.accuracy.average):'—'}</div>
+        <div class="mt-2 text-sm">${kpi('Accuracy (percent)', (m.accuracy.average??null)*100, (benchB?.accuracy?.average??null)*100, (benchG?.accuracy?.average??null)*100, x=> isFinite(x)? (Math.round(x*10)/10)+'%':'—', '%')}</div>
       </div>
     </div>`);
 }
 
-function sectionQuality(m){
-  return section('Quality & consistency',
+function sectionQuality(m, benchB, benchG){
+  return section('Quality and consistency',
     `<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
       <div>
         <div class="text-slate-300 tip mb-1" data-tip="Average game quality score.">Average quality</div>
         <div class="text-slate-100 font-semibold">${num(m.quality.average,1)}</div>
+        <div class="mt-2 text-sm">${kpi('Average quality (score)', m.quality.average, benchB?.quality?.average, benchG?.quality?.average, x=> num(x,1))}</div>
       </div>
       <div>
         <div class="text-slate-300 tip mb-1" data-tip="Median game quality score.">Median quality</div>
         <div class="text-slate-100 font-semibold">${num(m.quality.median,1)}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3 − Q1). Lower = more consistent results.">Quality IQR</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3 − Q1). Lower means more consistent outcomes.">Quality interquartile range</div>
         <div class="text-slate-100 font-semibold">${num(m.quality.spread_iqr,1)}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores.">Quality standard deviation</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores. Lower means more consistent outcomes.">Quality standard deviation</div>
         <div class="text-slate-100 font-semibold">${num(m.quality.spread_std,2)}</div>
-      </div>
-      <div class="md:col-span-2">
-        <div class="text-slate-300 tip mb-1" data-tip="Distribution band (25%–75%) and extremes.">${num(m.quality.lower_quartile,1)} to ${num(m.quality.upper_quartile,1)} (IQR)</div>
-        ${bar(m.quality.average!=null && m.quality.upper_quartile!=null && m.quality.lower_quartile!=null ? ( (m.quality.average - m.quality.lower_quartile) / Math.max(0.001,(m.quality.upper_quartile - m.quality.lower_quartile)) ): 0, 'Average inside the IQR band')}
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Best single-match quality in scope.">Best match quality</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.best_match,1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Worst single-match quality in scope.">Worst match quality</div>
-        <div class="text-slate-100 font-semibold">${num(m.quality.worst_match,1)}</div>
       </div>
     </div>`);
 }
@@ -526,25 +597,15 @@ function sectionMaps(maps){
   if(!maps?.length) return section('Per-map breakdown','<div class="text-slate-400 text-sm">No data.</div>');
   const rows = maps.map(mp=>{
     const wr = mp.winrate!=null? Math.round(mp.winrate*1000)/10 : null;
-    const cells = [
-      `<span class="text-slate-100">${prettyMap(mp.map_id)}</span><span class="text-slate-400"> · ${mp.matches} matches</span>`,
-      `${wr==null?'—':wr+'%'} ${bar((wr||0)/100,'Win rate')}`,
-      `Avg quality ${num(mp.average_quality,1)}`,
-      `Avg speed ${num(mp.average_speed_mps,2)} m/s`,
-      `Tag share ${mp.share_as_tagger!=null? Math.round(mp.share_as_tagger*1000)/10+'%':'—'}`,
-      `Retag median ${fmtS(mp.retag_median_seconds)}`,
-      `Dist (hider) ${num(mp.average_hider_distance_m,2)} m`,
-      `Dist (tagger) ${num(mp.average_tagger_distance_m,2)} m`
-    ];
     return `<tr class="align-top">
-      <td class="py-3 pl-3">${cells[0]}</td>
-      <td class="py-3 px-3">${cells[1]}</td>
-      <td class="py-3 px-3">${cells[2]}</td>
-      <td class="py-3 px-3">${cells[3]}</td>
-      <td class="py-3 px-3">${cells[4]}</td>
-      <td class="py-3 px-3">${cells[5]}</td>
-      <td class="py-3 px-3">${cells[6]}</td>
-      <td class="py-3 pr-3">${cells[7]}</td>
+      <td class="py-3 pl-3"><span class="text-slate-100">${prettyMap(mp.map_id)}</span><span class="text-slate-400"> · ${mp.matches} matches</span></td>
+      <td class="py-3 px-3">${wr==null?'—':wr+'%'} ${bar((wr||0)/100,'Win rate')}</td>
+      <td class="py-3 px-3">Average quality ${num(mp.average_quality,1)}</td>
+      <td class="py-3 px-3">Average speed ${num(mp.average_speed_mps,2)} m/s</td>
+      <td class="py-3 px-3">Tag share ${mp.share_as_tagger!=null? Math.round(mp.share_as_tagger*1000)/10+'%':'—'}</td>
+      <td class="py-3 px-3">Retag median ${fmtS(mp.retag_median_seconds)}</td>
+      <td class="py-3 px-3">Hider distance ${num(mp.average_hider_distance_m,2)} m</td>
+      <td class="py-3 pr-3">Tagger distance ${num(mp.average_tagger_distance_m,2)} m</td>
     </tr>`;
   }).join('');
   return section('Per-map breakdown',
@@ -567,96 +628,103 @@ function sectionMaps(maps){
     </div>`);
 }
 
-function sectionOpponents(opps){
-  if(!opps?.length) return section('Most faced opponents','<div class="text-slate-400 text-sm">No data.</div>');
-  const rows = opps.slice(0,20).map(o=>{
-    const wr = o.winrate!=null? Math.round(o.winrate*1000)/10 : null;
-    return row(
-      `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(o.id)}">${esc(o.name||o.id)}</a> <span class="text-slate-400">· ${o.matches} matches</span>`,
-      `${wr==null?'—':wr+'%'} · avg quality ${num(o.average_quality,1)}`
-    );
-  }).join('');
-  return section('Most faced opponents',
-    `<div class="overflow-x-auto rounded border border-slate-800">
-      <table class="min-w-full text-sm"><tbody class="divide-y divide-slate-800">${rows}</tbody></table>
-    </div>`);
-}
-
-/* Compare (mirror) */
+/* Mirror header */
 function mirrorHeader(leftHtml, rightHtml){
   return `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
     <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-right reveal">${leftHtml}</div>
     <div class="p-3 rounded-xl border border-slate-800 bg-slate-900/40 reveal">${rightHtml}</div>
   </div>`;
 }
-function renderMirror(container, A, B, nameA, nameB, premSet, idA, idB){
-  const leftName  = labelWithPremium(idA, nameA, premSet.has(String(idA)));
-  const rightName = labelWithPremium(idB, nameB, premSet.has(String(idB)));
-
-  const top = mirrorHeader(
-    `<div class="text-lg font-semibold">${leftName}</div>
-     <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b>${badgeDelta(A.winrate!=null?Math.round(A.winrate*1000)/10:null, B.winrate!=null?Math.round(B.winrate*1000)/10:null,'%')}</div>
-     <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b>${badgeDelta(A.quality.average, B.quality.average)}</div>
-     <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b>${badgeDelta(A.speed.average_mps, B.speed.average_mps)}</div>`,
-    `<div class="text-lg font-semibold">${rightName}</div>
-     <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b>${badgeDelta(B.winrate!=null?Math.round(B.winrate*1000)/10:null, A.winrate!=null?Math.round(A.winrate*1000)/10:null,'%')}</div>
-     <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b>${badgeDelta(B.quality.average, A.quality.average)}</div>
-     <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b>${badgeDelta(B.speed.average_mps, A.speed.average_mps)}</div>`
-  );
-
-  container.innerHTML = top;
-  mountReveal(container);
-}
 
 /* -------------------- Render pipeline -------------------- */
-function renderAll(contentEl, metrics){
+function renderAll(contentEl, m, benchB, benchG){
   contentEl.innerHTML = `
     <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      ${overviewChips(metrics)}
+      ${overviewChips(m)}
     </div>
-    ${sectionForm(metrics)}
-    ${sectionTagging(metrics)}
-    ${sectionSpeedDistance(metrics)}
-    ${sectionRetagAccuracy(metrics)}
-    ${sectionQuality(metrics)}
-    ${sectionMaps(metrics.maps)}
-    ${sectionOpponents(metrics.opponents)}
+    ${sectionForm(m)}
+    ${sectionTagging(m, benchB, benchG)}
+    ${sectionSpeedDistance(m, benchB, benchG)}
+    ${sectionRetagAccuracy(m, benchB, benchG)}
+    ${sectionQuality(m, benchB, benchG)}
+    ${sectionMaps(m.maps)}
+    ${section('Most faced opponents', '<div class="text-slate-400 text-sm">Coming soon: per-opponent deltas and focus.</div>')}
   `;
   mountReveal(contentEl);
 }
 
-/* -------------------- INIT -------------------- */
-let matchesCache=[], analysesCache=new Map(), currentFilter=null; // null = All
+/* --------------- Filters & Benchmarks UI --------------- */
+let matchesCache=[], analysesCache=new Map(), currentFilter=null;
+let benchMode='auto'; // 'auto' | 'global' | 'band:1000' etc
+let benchCache={}; // key -> {metrics}
 
+function bandLabel(min){ return `${min}–${min+99}`; }
+function bandOfElo(e){ return Math.floor(Number(e||0)/100)*100; }
+function pickPlayerBandFromMatches(matches, sid){
+  const elos=[];
+  for (const m of matches){
+    const side = (String(m.p1_id)===String(sid)) ? 'p1' : (String(m.p2_id)===String(sid)) ? 'p2' : null;
+    if (!side) continue;
+    const elo = eloOfMatchForSide(m, side);
+    if (isFinite(elo)) elos.push(Number(elo));
+  }
+  const med = median(elos)||1200; return bandOfElo(med);
+}
+
+async function ensureBench(min, max, key){
+  if (benchCache[key]) return benchCache[key];
+  const res = (key==='global') ? await fetchBenchmarkGlobal(2000) : await fetchBenchmark(min, max, 2000);
+  benchCache[key] = res.metrics;
+  return benchCache[key];
+}
+
+function renderBenchBar(bandAuto){
+  const el = document.getElementById('benchBar');
+  const bands = [800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800];
+  const pill = (id,label,active)=>`<button data-bench="${id}" class="px-3 py-1.5 rounded-full text-sm border ${active?'bg-amber-500/20 text-amber-300 border-amber-400/30':'bg-slate-800/60 text-slate-200 border-slate-700 hover:bg-slate-800'}">${label}</button>`;
+  el.innerHTML = `
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-slate-300 text-sm mr-1">Benchmarks:</span>
+      ${pill('auto', `Auto (${bandLabel(bandAuto)})`, benchMode==='auto')}
+      ${pill('global', 'Global (all players)', benchMode==='global')}
+      ${bands.map(b=> pill(`band:${b}`, `Elo ${bandLabel(b)}`, benchMode===`band:${b}`)).join('')}
+      <label class="ml-2 text-xs text-slate-400 flex items-center gap-2" title="Apply the current map filter to benchmarks">
+        <input id="benchUseFilter" type="checkbox" class="accent-amber-500" checked> Apply current map filter
+      </label>
+    </div>`;
+  el.classList.remove('hidden');
+  el.querySelectorAll('button[data-bench]').forEach(b=>{
+    b.onclick = ()=>{
+      benchMode = b.dataset.bench;
+      renderBenchBar(bandAuto); // refresh active state
+      recomputeAndRender();     // rebuild with chosen bench
+    };
+  });
+}
+
+/* -------------------- Init & actions -------------------- */
+let playerRow=null, isPremSelf=false;
 async function init(){
   const head = document.getElementById('head');
   const status = document.getElementById('status');
   const scopeBar = document.getElementById('scopeBar');
   const content = document.getElementById('content');
 
-  const player = await fetchPlayer();
-  if(!player){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
-  const isPremSelf = await isPremiumSteam(steamId);
-  head.innerHTML = headerCard(player, isPremSelf); mountReveal(head);
+  playerRow = await fetchPlayer();
+  if(!playerRow){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
+  isPremSelf = await isPremiumSteam(steamId);
+  head.innerHTML = headerCard(playerRow, isPremSelf); mountReveal(head);
 
   let gate = await updateGateUI();
   supa.auth.onAuthStateChange(async () => { gate = await updateGateUI(); });
 
-  async function build(scopeMapId=null){
-    status.textContent = 'Loading matches…';
-    if (!matchesCache.length) matchesCache = await fetchMatchesForPlayer(steamId, 800);
-    status.textContent = `Loading analyses… (${matchesCache.length})`;
-    if (analysesCache.size===0){
-      const ids = matchesCache.map(m=>m.id);
-      analysesCache = await fetchAnalysesForMatchIds(ids);
-    }
-    status.textContent = 'Computing…';
-    const metrics = aggregateMetrics(steamId, matchesCache, analysesCache, scopeMapId);
-    status.textContent = '';
-    return metrics;
-  }
+  // Preload matches + analyses to know maps
+  status.textContent = 'Loading matches…';
+  matchesCache = await fetchMatchesForPlayer(steamId, 800);
+  status.textContent = `Loading analyses… (${matchesCache.length})`;
+  analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
 
-  // Build filters (All + maps present)
+  // Scope pills
   function renderScopeBar(){
     const presentMaps = [...new Set(matchesCache.map(m=>m.map_id))].sort((a,b)=>a-b);
     const pill = (id,label,active)=>`<button data-map="${id??''}" class="px-3 py-1.5 rounded-full text-sm border ${active?'bg-amber-500/20 text-amber-300 border-amber-400/30':'bg-slate-800/60 text-slate-200 border-slate-700 hover:bg-slate-800'}">${label}</button>`;
@@ -668,23 +736,18 @@ async function init(){
     scopeBar.classList.remove('hidden');
 
     scopeBar.querySelectorAll('button[data-map]').forEach(b=>{
-      b.onclick = async ()=>{
-        const v = b.dataset.map;
-        currentFilter = v==='' ? null : v;
-        const m = await build(currentFilter);
-        renderAll(content, m);
-      };
+      b.onclick = ()=>{ currentFilter = (b.dataset.map==='' ? null : b.dataset.map); recomputeAndRender(); };
     });
   }
+  renderScopeBar();
 
-  // Initial render (premium only)
-  if (gate.premium){
-    // Prime caches to know maps then render scope bar
-    matchesCache = await fetchMatchesForPlayer(steamId, 800);
-    analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
-    renderScopeBar();
-    const metrics = aggregateMetrics(steamId, matchesCache, analysesCache, currentFilter);
-    renderAll(content, metrics);
+  // Benchmarks bar (auto band from player)
+  const autoBand = pickPlayerBandFromMatches(matchesCache, steamId);
+  renderBenchBar(autoBand);
+
+  // Initial render
+  if (gate.premium) {
+    await recomputeAndRender();
   } else {
     content.innerHTML = `<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>`;
   }
@@ -692,61 +755,126 @@ async function init(){
   // Recompute button
   document.getElementById('refreshBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
-    // Force refetch
+    // Force refresh caches
     matchesCache = await fetchMatchesForPlayer(steamId, 800);
     analysesCache = await fetchAnalysesForMatchIds(matchesCache.map(m=>m.id));
-    renderScopeBar();
-    const m = aggregateMetrics(steamId, matchesCache, analysesCache, currentFilter);
-    renderAll(content, m);
+    const autoBand2 = pickPlayerBandFromMatches(matchesCache, steamId);
+    renderBenchBar(autoBand2);
+    await recomputeAndRender();
   };
 
-  // Compare (mirror), applies current filter if checkbox on
-  function resolvePlayer(text){
+  // Compare (mirror) — robust resolver
+  async function resolvePlayer(text){
     if(!text) return null;
-    if(/^\d{5,}$/.test(text)) return text; // SteamID64
-    return supa.rpc('search_players',{ q:text, p_limit:1 })
-      .then(({data})=> (data&&data.length)? data[0].steam_id : null);
+    if(/^\d{5,}$/.test(text)) return text; // SteamID64 typed
+    // Try RPC, else fallback to players ilike
+    try{
+      const { data } = await supa.rpc('search_players',{ q:text, p_limit:1 });
+      if (data && data.length) return data[0].steam_id;
+    }catch{}
+    const { data: d2 } = await supa.from('players').select('steam_id,username').ilike('username', `%${text}%`).limit(1);
+    return (d2&&d2.length)? d2[0].steam_id : null;
   }
   document.getElementById('cmpBtn').onclick = async ()=>{
     if (!gate.user || !gate.premium) return;
-    const cmpStatus = document.getElementById('cmpStatus');
+    const cmpStatus = document.getElementById('status');
     const query = document.getElementById('cmpInput').value.trim();
     const applyFilter = document.getElementById('cmpUseFilter').checked;
     const other = await resolvePlayer(query);
-    if(!other){ cmpStatus.textContent='Player not found.'; return; }
+    if(!other){ cmpStatus.textContent='Player not found for comparison.'; return; }
 
-    // Build A metrics from cache (already loaded)
-    const A = aggregateMetrics(steamId, matchesCache, analysesCache, applyFilter? currentFilter : null);
+    // A = current player
+    const A = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, applyFilter? currentFilter : null);
 
-    // Build B metrics (fetch fresh)
+    // B = other player fresh fetch
     cmpStatus.textContent='Loading opponent…';
     const mB = await fetchMatchesForPlayer(other, 800);
     const aB = await fetchAnalysesForMatchIds(mB.map(m=>m.id));
-    const B = aggregateMetrics(other, mB, aB, applyFilter? currentFilter : null);
+    const B = aggregateMetricsForPlayer(other, mB, aB, applyFilter? currentFilter : null);
     cmpStatus.textContent='';
 
-    const premSet = await fetchPremiumSet([steamId, other]);
+    const premSet = new Set();
+    if (await isPremiumSteam(steamId)) premSet.add(String(steamId));
+    if (await isPremiumSteam(other))    premSet.add(String(other));
     const { data: pb } = await supa.from('players').select('username').eq('steam_id', other).maybeSingle();
     const nameB = (pb?.username || other);
-    const nameA = (player.username || steamId);
+    const nameA = (playerRow.username || steamId);
 
-    const wrap = document.createElement('div'); wrap.className = 'grid grid-cols-1 gap-4';
-    const mirrorBox = document.createElement('div'); wrap.appendChild(mirrorBox);
-    renderMirror(mirrorBox, A, B, nameA, nameB, premSet, steamId, other);
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+    const mirrorBox = document.createElement('div'); content.appendChild(mirrorBox);
+    mirrorBox.innerHTML = mirrorHeader(
+      `<div class="text-lg font-semibold">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
+       <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b></div>
+       <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b></div>
+       <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b></div>`,
+      `<div class="text-lg font-semibold">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
+       <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b></div>
+       <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b></div>
+       <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b></div>`
+    );
+    mountReveal(mirrorBox);
 
-    // detailed columns with same filter
+    // Detailed side-by-side (reuse renderAll twice)
     const cols = document.createElement('div'); cols.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
     const left  = document.createElement('div');
     const right = document.createElement('div');
-    renderAll(left,  A);
-    renderAll(right, B);
-    cols.appendChild(left); cols.appendChild(right);
 
-    const content = document.getElementById('content');
-    content.innerHTML = ''; content.appendChild(wrap); content.appendChild(cols);
+    // Build benchmarks (same as current settings)
+    const { benchBand, benchGlobal } = await getCurrentBenchmetrics();
+    renderAll(left,  A, benchBand, benchGlobal);
+    renderAll(right, B, benchBand, benchGlobal);
+
+    cols.appendChild(left); cols.appendChild(right);
+    content.appendChild(cols);
     mountReveal(content);
   };
 }
+
+/* Compute & render once with current filter + benchmark mode */
+async function getCurrentBenchmetrics(){
+  // Decide band:
+  let bandMin=null, bandMax=null, benchKey='global';
+  if (benchMode==='auto'){
+    const autoBand = pickPlayerBandFromMatches(matchesCache, steamId);
+    bandMin = autoBand; bandMax = autoBand+100; benchKey = `band:${bandMin}`;
+  } else if (benchMode==='global'){
+    // leave null
+  } else if (benchMode.startsWith('band:')){
+    bandMin = Number(benchMode.split(':')[1]); bandMax = bandMin+100; benchKey = benchMode;
+  }
+  const useFilter = document.getElementById('benchUseFilter')?.checked;
+
+  // Ensure caches
+  const benchBand = (bandMin!=null) ? await ensureBench(bandMin, bandMax, benchKey) : null;
+  const benchGlobal = await ensureBench(0, 10000, 'global');
+
+  // If map filter is ON, recompute with currentFilter
+  function filterBenchToMap(metrics){
+    if (!metrics) return metrics;
+    // we cannot re-slice here without raw matches; but our fetchBenchmark already applied currentFilter at compute time
+    return metrics;
+  }
+  return {
+    benchBand: useFilter ? filterBenchToMap(benchBand) : benchBand,
+    benchGlobal: useFilter ? filterBenchToMap(benchGlobal) : benchGlobal
+  };
+}
+
+async function recomputeAndRender(){
+  const content = document.getElementById('content');
+  const status = document.getElementById('status');
+  status.textContent = 'Computing…';
+
+  const metrics = aggregateMetricsForPlayer(steamId, matchesCache, analysesCache, currentFilter);
+  const { benchBand, benchGlobal } = await getCurrentBenchmetrics();
+
+  renderAll(content, metrics, benchBand, benchGlobal);
+  status.textContent = '';
+  mountReveal(content);
+}
+
+/* Run */
 init();
 </script>
 
