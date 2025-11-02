@@ -33,37 +33,120 @@ const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
-function fmtTime(iso){ try{return new Date(iso).toLocaleString();}catch{return iso;} }
-function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let cache = [];
+let currentSort = { key: 'rank', dir: 'desc' }; // default: Rank (tiers ↓, div I→IV)
 
-async function loadBoard(){
-  const { data, error } = await supa.from('view_leaderboard').select('*').order('pos',{ascending:true});
-  if(error){ console.error(error); return; }
-  const rows = data||[];
-  const table=[`<table class="w-full text-sm"><thead class="bg-slate-900"><tr>
-    <th class="p-2 text-left">#</th>
-    <th class="p-2 text-left">Player</th>
-    <th class="p-2">Rank</th>
-    <th class="p-2">RP</th>
-    <th class="p-2">Elo</th>
-    <th class="p-2">Games</th>
-    <th class="p-2">Win%</th>
-    <th class="p-2">Last active</th>
-  </tr></thead><tbody>`];
-  for(const r of rows){
-    table.push(`<tr class="border-t border-slate-800 hover:bg-slate-900">
+function fmtTime(iso){ try{return new Date(iso).toLocaleString();}catch{return iso||'';} }
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function tierOrder(rank){
+  const r=(rank||'').toLowerCase();
+  if(r.startsWith('chall')) return 9;
+  if(r.startsWith('gm') || r.startsWith('grand')) return 8;
+  if(r.startsWith('master')) return 7;
+  if(r.startsWith('diamond')) return 6;
+  if(r.startsWith('platinum')) return 5;
+  if(r.startsWith('gold')) return 4;
+  if(r.startsWith('silver')) return 3;
+  if(r.startsWith('bronze')) return 2;
+  if(r.startsWith('clown')) return 1;
+  return 0; // unranked/unknown
+}
+function divFromRank(rank){
+  const last = (rank||'').trim().split(/\s+/).pop().toUpperCase();
+  const map = {I:1, II:2, III:3, IV:4};
+  return map[last] || 4; // default IV
+}
+
+function header(label, key){
+  const arrow = currentSort.key===key ? (currentSort.dir==='asc'?' ▲':' ▼') : '';
+  return `<th class="p-2 text-left select-none cursor-pointer" data-sort="${key}">${label}${arrow}</th>`;
+}
+
+function applySort(rows){
+  const dir = currentSort.dir;
+  const k = currentSort.key;
+  const cmp = (a,b)=>{
+    const s = (v)=> (v===null||v===undefined)? -Infinity : v;
+    if(k==='rank'){
+      // tiers DESC, division ASC, puis RP DESC, Elo DESC
+      const t1=tierOrder(a.rank), t2=tierOrder(b.rank);
+      if(t1!==t2) return t2-t1;
+      const d1=divFromRank(a.rank), d2=divFromRank(b.rank);
+      if(d1!==d2) return d1-d2;
+      if((a.rp??0)!==(b.rp??0)) return (b.rp??0)-(a.rp??0);
+      return (b.elo??0)-(a.elo??0);
+    }
+    if(k==='player'){
+      return (a.username||'').localeCompare(b.username||'', undefined, {sensitivity:'base'});
+    }
+    if(k==='rp')   return s(b.rp)    - s(a.rp);
+    if(k==='elo')  return s(b.elo)   - s(a.elo);
+    if(k==='games')return s(b.games) - s(a.games);
+    if(k==='wr')   return s(b.win_rate) - s(a.win_rate);
+    if(k==='last') return new Date(b.last_active_at||0) - new Date(a.last_active_at||0);
+    if(k==='pos')  return s(a.pos) - s(b.pos);
+    return 0;
+  };
+  rows.sort(cmp);
+  if(dir==='asc'){
+    rows.reverse();
+  }
+  return rows;
+}
+
+function render(){
+  const rows = applySort([...cache]);
+
+  const thead = `<thead class="bg-slate-900">
+    <tr>
+      ${header('#','pos')}
+      ${header('Player','player')}
+      ${header('Rank','rank')}
+      ${header('RP','rp')}
+      ${header('Elo','elo')}
+      ${header('Games','games')}
+      ${header('Win%','wr')}
+      ${header('Last active','last')}
+    </tr>
+  </thead>`;
+
+  const body = rows.map(r=>`
+    <tr class="border-t border-slate-800 hover:bg-slate-900">
       <td class="p-2">${r.pos}</td>
-      <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${escapeHtml(r.username||r.steam_id)}</a></td>
-      <td class="p-2 text-center">${escapeHtml(r.rank||'')}</td>
+      <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${esc(r.username||r.steam_id)}</a></td>
+      <td class="p-2 text-center">${esc(r.rank||'')}</td>
       <td class="p-2 text-center">${r.rp??''}</td>
       <td class="p-2 text-center">${r.elo??''}</td>
       <td class="p-2 text-center">${r.games??0}</td>
       <td class="p-2 text-center">${r.win_rate??0}</td>
       <td class="p-2">${fmtTime(r.last_active_at)}</td>
-    </tr>`);
-  }
-  table.push(`</tbody></table>`);
-  document.getElementById('board').innerHTML = table.join('');
+    </tr>
+  `).join('');
+
+  document.getElementById('board').innerHTML =
+    `<table class="w-full text-sm">${thead}<tbody>${body}</tbody></table>`;
+
+  // bind header clicks
+  document.querySelectorAll('[data-sort]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.getAttribute('data-sort');
+      if(currentSort.key===key){
+        currentSort.dir = currentSort.dir==='asc'?'desc':'asc';
+      }else{
+        currentSort.key = key;
+        currentSort.dir = (key==='player' || key==='pos') ? 'asc' : 'desc';
+      }
+      render();
+    });
+  });
+}
+
+async function loadBoard(){
+  const { data, error } = await supa.from('view_leaderboard').select('*').order('pos',{ascending:true});
+  if(error){ console.error(error); return; }
+  cache = data||[];
+  render();
 }
 
 async function loadRecent(){
@@ -76,8 +159,8 @@ async function loadRecent(){
     const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
     cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
       <div class="text-slate-300 text-sm">${fmtTime(m.played_at)}</div>
-      <div class="font-semibold">${escapeHtml(m.p1_name||'P1')} vs ${escapeHtml(m.p2_name||'P2')}</div>
-      <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${escapeHtml(w)}</span> · Map ${m.map_id??'-'}</div>
+      <div class="font-semibold">${esc(m.p1_name||'P1')} vs ${esc(m.p2_name||'P2')}</div>
+      <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${esc(w)}</span> · Map ${m.map_id??'-'}</div>
     </a>`;
   }
 }
@@ -87,10 +170,11 @@ document.getElementById('go').addEventListener('click',()=>{
   if(!q) return; window.location.href=`player.html?q=${encodeURIComponent(q)}`;
 });
 
+// Realtime: on garde le tri courant
 supa.channel('realtime:players')
-  .on('postgres_changes',{event:'*',schema:'public',table:'players'},loadBoard).subscribe();
+  .on('postgres_changes',{event:'*',schema:'public',table:'players'}, loadBoard).subscribe();
 supa.channel('realtime:matches')
-  .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches'},loadRecent).subscribe();
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches'}, loadRecent).subscribe();
 
 loadBoard(); loadRecent();
 </script>
