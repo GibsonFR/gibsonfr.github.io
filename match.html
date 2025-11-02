@@ -24,26 +24,23 @@
 
       <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
 
-      <!-- Résumé joliment présenté -->
       <div id="analysisResult" class="hidden space-y-6">
         <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- P1 -->
           <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div class="text-slate-400 text-xs mb-1">P1 Quality</div>
+            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
             <div id="p1q" class="text-2xl font-bold">—</div>
             <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
           </div>
-          <!-- P2 -->
+
           <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div class="text-slate-400 text-xs mb-1">P2 Quality</div>
+            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
             <div id="p2q" class="text-2xl font-bold">—</div>
             <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
           </div>
         </div>
 
-        <!-- Galerie d'images -->
         <div>
           <div class="text-slate-400 text-xs mb-2">Visuals</div>
           <div id="gallery" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
@@ -61,8 +58,8 @@ const idParam = new URL(location.href).searchParams.get('id');
 const isNumericId = idParam && /^\d+$/.test(idParam);
 const matchIdValue = isNumericId ? Number(idParam) : idParam;
 
-const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
-const el  = sel => document.querySelector(sel);
+const el = s => document.querySelector(s);
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 async function fetchMatchById() {
   const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
@@ -70,11 +67,10 @@ async function fetchMatchById() {
 }
 
 function card(label, value, suffix='') {
-  return `
-    <div class="p-2 rounded bg-slate-800 border border-slate-700">
-      <div class="text-slate-400">${label}</div>
-      <div class="text-slate-100 font-semibold">${value}${suffix}</div>
-    </div>`;
+  return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
+    <div class="text-slate-400">${label}</div>
+    <div class="text-slate-100 font-semibold">${value}${suffix}</div>
+  </div>`;
 }
 
 function renderPlayerCards(rootSel, s) {
@@ -124,6 +120,11 @@ async function loadAnalysis(matchId) {
   el('#analysisStatus').textContent = '';
   el('#analysisResult').classList.remove('hidden');
 
+  // Titres avec pseudos si dispo
+  const s = data.summary || {};
+  el('#p1title').textContent = `${s.p1_name || 'P1'} — Quality`;
+  el('#p2title').textContent = `${s.p2_name || 'P2'} — Quality`;
+
   el('#analAt').textContent = new Date(data.analyzed_at).toLocaleString();
   el('#ver').textContent = data.version || '—';
   el('#p1q').textContent = data.p1_quality ?? '—';
@@ -131,7 +132,6 @@ async function loadAnalysis(matchId) {
   renderPlayerCards('#p1cards', data.p1_stats || {});
   renderPlayerCards('#p2cards', data.p2_stats || {});
 
-  // images
   const imgs = data.images || {};
   const keys = Object.keys(imgs);
   el('#gallery').innerHTML = keys.length
@@ -161,12 +161,10 @@ async function queueAnalysis(matchId, replayUrl) {
 
 function subscribeRealtime(matchId) {
   supa.channel('match_analyses_live')
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'match_analyses',
-      filter: `match_id=eq.${matchId}`
-    }, () => loadAnalysis(matchId))
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
+      () => loadAnalysis(matchId))
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'match_analyses', filter:`match_id=eq.${matchId}` },
+      () => loadAnalysis(matchId))
     .subscribe();
 }
 
