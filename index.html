@@ -2,405 +2,151 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>CG Ranked — Live</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Tailwind (CDN) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Icons -->
-  <link rel="shortcut icon" href="favicon.ico" />
-  <!-- Chart.js for Elo curve -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- Supabase JS v2 -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <title>CG Ranked Live</title>
   <style>
-    body { background:#0f172a; color:#e5e7eb; }
-    .card { background:#111827; border:1px solid #1f2937; border-radius:12px; }
-    a { color:#93c5fd; }
-    .nav a.active { color:#fff; font-weight:600; }
-    .row:hover { background:rgba(255,255,255,0.03); }
-    .badge { background:#1f2937; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .btn { background:#1f2937; padding:8px 12px; border-radius:10px; border:1px solid #374151; }
-    .btn:hover { background:#111827; }
-    .split { display:grid; gap:16px; grid-template-columns: 1fr 360px; }
-    @media (max-width: 1024px){ .split { grid-template-columns: 1fr; } }
-    .link { text-decoration: none; }
-    .link:hover { text-decoration: underline; }
-    .tab { padding:6px 10px; border-radius:8px; border:1px solid transparent; }
-    .tab.active { border-color:#374151; background:#0b1220; }
+    html,body{margin:0;padding:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#0b1220;color:#eef}
+    header{position:sticky;top:0;background:#0f172a;border-bottom:1px solid #223;display:flex;gap:16px;align-items:center;padding:12px 16px}
+    .brand{font-weight:700;letter-spacing:.5px}
+    .container{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:#0f172a;border:1px solid #223;border-radius:12px;padding:16px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;border-bottom:1px solid #1d283a;font-variant-numeric:tabular-nums}
+    th{text-align:left;color:#9fb3c8;font-weight:600}
+    tr:hover td{background:#0d1426}
+    a{color:#80b3ff;text-decoration:none}
+    .muted{color:#a7b4c8}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a3b57;background:#0c1324}
   </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
-<body class="min-h-screen">
-  <header class="sticky top-0 z-10 backdrop-blur bg-[#0f172a]/70 border-b border-slate-800">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
-      <div class="text-xl font-semibold">CG Ranked</div>
-      <nav class="nav flex items-center gap-4 text-slate-300">
-        <a href="#/leaderboard" id="nav-leaderboard" class="hover:text-white">Leaderboard</a>
-        <a href="#/matches" id="nav-matches" class="hover:text-white">Matches</a>
-      </nav>
-      <div class="ml-auto flex items-center gap-2">
-        <input id="playerSearch" class="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 w-64"
-               placeholder="SteamID64 or vanity…" />
-        <button class="btn" onclick="openPlayerFromSearch()">Open Player</button>
-      </div>
-    </div>
+<body>
+  <header>
+    <div class="brand">CG Ranked Live</div>
+    <div class="muted">Live leaderboard & player pages (auto-refresh)</div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-6" id="app"></main>
-
-  <script>
-  // —— Config ——
-  const SUPABASE_URL = "https://qnxjrkedbplfrlkjqifh.supabase.co";          // TODO: replace
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFueGpya2VkYnBsZnJsa2pxaWZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMzU2ODMsImV4cCI6MjA3NzYxMTY4M30.WhFaUXjM7i0c4b-R5MHrs67R_xdTBp7d82OI62x4G9M";                  // TODO: replace
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-  // —— Simple Hash Router ——
-  const routes = {
-    "#/leaderboard": renderLeaderboard,
-    "#/player": renderPlayerRoute,      // #/player/<steam_id>
-    "#/matches": renderMatches,         // simple recent matches listing (optional)
-    "#/match": renderMatchRoute         // #/match/<id>
-  };
-
-  function setActive(navId){
-    document.querySelectorAll('.nav a').forEach(a=>a.classList.remove('active'));
-    const el = document.getElementById(navId);
-    if (el) el.classList.add('active');
-  }
-
-  window.addEventListener('hashchange', onRoute);
-  window.addEventListener('load', onRoute);
-
-  function onRoute(){
-    const hash = location.hash || "#/leaderboard";
-    if (hash.startsWith("#/player/")){
-      setActive(null);
-      const steam_id = hash.split("/")[2];
-      renderPlayer(steam_id);
-      return;
-    }
-    if (hash.startsWith("#/match/")){
-      setActive(null);
-      const id = parseInt(hash.split("/")[2]);
-      renderMatch(id);
-      return;
-    }
-    if (routes[hash]){
-      if (hash==="#/leaderboard") setActive("nav-leaderboard");
-      if (hash==="#/matches") setActive("nav-matches");
-      routes[hash]();
-    } else {
-      location.hash = "#/leaderboard";
-    }
-  }
-
-  // —— Helpers UI ——
-  function fmtDate(s){
-    try{
-      const d = new Date(s);
-      return d.toLocaleString();
-    }catch{ return s || ""; }
-  }
-  function linkPlayer(id, name){
-    const n = name || id;
-    return `<a class="link" href="#/player/${id}">${escapeHtml(n)}</a>`;
-  }
-  function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-  function badge(txt){ return `<span class="badge">${escapeHtml(txt||"-")}</span>`; }
-
-  async function openPlayerFromSearch(){
-    const v = document.getElementById('playerSearch').value.trim();
-    if (!v) return;
-    // si c'est une vanity / url on laisse pour plus tard; ici on attend un steam64 déjà en base
-    location.hash = `#/player/${encodeURIComponent(v)}`;
-  }
-
-  // —— Leaderboard ——
-  async function renderLeaderboard(){
-    const root = document.getElementById('app');
-    root.innerHTML = `
-      <div class="split">
-        <section class="card p-4">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold">🏆 Leaderboard</h2>
-            <div class="text-sm text-slate-400">Sorted by RP then Elo. Updates in real time.</div>
-          </div>
-          <div id="lb-table" class="overflow-x-auto"></div>
-        </section>
-        <aside class="card p-4">
-          <h3 class="font-semibold mb-2">🎮 Lobby (optional)</h3>
-          <div id="lobby-box" class="text-slate-400">No data</div>
-        </aside>
+  <main class="container">
+    <section class="card">
+      <h2>Leaderboard</h2>
+      <div id="leaderboard-status" class="muted">Loading…</div>
+      <div style="overflow:auto">
+        <table id="leaderboard">
+          <thead>
+            <tr>
+              <th>#</th><th>Player</th><th>Rank</th><th>Elo</th><th>RP</th><th>Games</th><th>Win%</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
-    `;
+    </section>
 
-    await drawLeaderboardTable();
-
-    // Realtime live updates (players / ratings / matches)
-    sb.channel('realtime-leaderboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, drawLeaderboardTable)
-      .on('postgres_changes', { event: 'insert', schema: 'public', table: 'ratings' }, drawLeaderboardTable)
-      .on('postgres_changes', { event: 'insert', schema: 'public', table: 'matches' }, drawLeaderboardTable)
-      .subscribe();
-  }
-
-  async function drawLeaderboardTable(){
-    const box = document.getElementById('lb-table');
-    if (!box) return;
-
-    const { data, error } = await sb
-      .from('players')
-      .select('*')
-      .order('rp', { ascending: false, nullsFirst: false })
-      .order('elo', { ascending: false })
-      .limit(500);
-
-    if (error){ box.innerHTML = `<div class="text-red-400">${escapeHtml(error.message)}</div>`; return; }
-
-    const rows = data || [];
-    let html = `
-      <table class="w-full text-sm">
-        <thead class="text-slate-400">
-          <tr>
-            <th class="text-left p-2">#</th>
-            <th class="text-left p-2">Player</th>
-            <th class="text-left p-2">Rank</th>
-            <th class="text-right p-2">RP</th>
-            <th class="text-right p-2">Elo</th>
-            <th class="text-right p-2">Games</th>
-            <th class="text-right p-2">Win%</th>
-            <th class="text-right p-2">Last active</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-    rows.forEach((r, i) => {
-      const winp = r.games_played ? Math.round((r.wins / r.games_played) * 100) : 0;
-      html += `
-        <tr class="row border-t border-slate-800">
-          <td class="p-2">${i+1}</td>
-          <td class="p-2">${linkPlayer(r.steam_id, r.username)}</td>
-          <td class="p-2">${escapeHtml(r.rank || "-")}</td>
-          <td class="p-2 text-right mono">${r.rp ?? 0}</td>
-          <td class="p-2 text-right mono">${r.elo}</td>
-          <td class="p-2 text-right mono">${r.games_played}</td>
-          <td class="p-2 text-right mono">${winp}%</td>
-          <td class="p-2 text-right text-slate-400">${escapeHtml(fmtDate(r.last_active_at))}</td>
-        </tr>
-      `;
-    });
-    html += `</tbody></table>`;
-    box.innerHTML = html;
-  }
-
-  // —— Player page ——
-  function renderPlayerRoute(){ /* not used (we parse in onRoute) */ }
-
-  async function renderPlayer(steam_id){
-    const root = document.getElementById('app');
-    root.innerHTML = `
-      <div class="mb-4 flex items-center gap-3">
-        <a class="btn" href="#/leaderboard">← Back</a>
-        <h2 class="text-lg font-semibold">Player</h2>
-        <span class="text-slate-400">#${escapeHtml(steam_id)}</span>
-        <a class="btn ml-auto" target="_blank" href="https://steamcommunity.com/profiles/${encodeURIComponent(steam_id)}">Steam Profile</a>
+    <section class="card">
+      <h2>Recent Matches</h2>
+      <div id="matches-status" class="muted">Loading…</div>
+      <div style="overflow:auto">
+        <table id="matches">
+          <thead>
+            <tr>
+              <th>When</th><th>P1</th><th>P2</th><th>Score</th><th>Winner</th><th>Map</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
+    </section>
+  </main>
 
-      <div class="grid gap-4 lg:grid-cols-3">
-        <section class="card p-4 lg:col-span-2">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="font-semibold">Match History</h3>
-          </div>
-          <div id="match-list" class="overflow-x-auto"></div>
-        </section>
-        <aside class="card p-4">
-          <div class="mb-4">
-            <h3 class="font-semibold mb-1">Overview</h3>
-            <div id="player-info" class="text-slate-300">Loading…</div>
-          </div>
-          <div>
-            <h3 class="font-semibold mb-1">Elo over time</h3>
-            <canvas id="eloChart" height="200"></canvas>
-          </div>
-        </aside>
-      </div>
-    `;
+<script>
+const SUPABASE_URL  = "https://qnxjrkedbplfrlkjqifh.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFueGpya2VkYnBsZnJsa2pxaWZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMzU2ODMsImV4cCI6MjA3NzYxMTY4M30.WhFaUXjM7i0c4b-R5MHrs67R_xdTBp7d82OI62x4G9M";
 
-    // Player info
-    const { data: players, error: e1 } = await sb
-      .from('players')
-      .select('*')
-      .eq('steam_id', steam_id)
-      .limit(1);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-    const p = players && players[0];
-    document.getElementById('player-info').innerHTML = p ? `
-      <div class="text-xl font-semibold">${escapeHtml(p.username)}</div>
-      <div class="mt-1 text-sm text-slate-400">${escapeHtml(p.rank || "-")}</div>
-      <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
-        <div class="card p-2"><div class="text-slate-400">Elo</div><div class="mono text-lg">${p.elo}</div></div>
-        <div class="card p-2"><div class="text-slate-400">RP</div><div class="mono text-lg">${p.rp ?? 0}</div></div>
-        <div class="card p-2"><div class="text-slate-400">Games</div><div class="mono text-lg">${p.games_played}</div></div>
-        <div class="card p-2"><div class="text-slate-400">Wins</div><div class="mono text-lg">${p.wins}</div></div>
-      </div>
-    ` : `<div class="text-red-400">Player not found.</div>`;
-
-    // Elo curve from ratings
-    const { data: ratingRows } = await sb
-      .from('ratings')
-      .select('at, elo_after, match_id')
-      .eq('player_id', steam_id)
-      .order('at', { ascending: true })
-      .limit(1000);
-
-    drawEloChart(ratingRows || []);
-
-    // Match history (p1 or p2)
-    const { data: matches } = await sb
-      .from('matches')
-      .select('*')
-      .or(`p1_id.eq.${steam_id},p2_id.eq.${steam_id}`)
-      .order('played_at', { ascending: false })
-      .limit(200);
-
-    renderMatchList('match-list', matches || [], steam_id);
-
-    // Live updates while on the page
-    sb.channel(`player-${steam_id}`)
-      .on('postgres_changes', { event: 'insert', schema: 'public', table: 'matches', filter: `p1_id=eq.${steam_id}` }, () => renderPlayer(steam_id))
-      .on('postgres_changes', { event: 'insert', schema: 'public', table: 'matches', filter: `p2_id=eq.${steam_id}` }, () => renderPlayer(steam_id))
-      .on('postgres_changes', { event: 'insert', schema: 'public', table: 'ratings', filter: `player_id=eq.${steam_id}` }, () => renderPlayer(steam_id))
-      .subscribe();
+function el(tag, attrs={}, ...children){
+  const e = document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)){ if(k==='class') e.className=v; else e.setAttribute(k,v);}
+  for(const c of children){
+    if(c==null) continue;
+    e.appendChild(c.nodeType?c:document.createTextNode(c));
   }
+  return e;
+}
 
-  function renderMatchList(elId, rows, perspectiveId=null){
-    const box = document.getElementById(elId);
-    if (!rows.length){ box.innerHTML = `<div class="text-slate-400">No matches yet.</div>`; return; }
+function fmtPct(wins, games){ if(!games) return '0%'; return Math.round(wins*100/games)+'%'; }
 
-    let html = `
-      <table class="w-full text-sm">
-        <thead class="text-slate-400">
-          <tr>
-            <th class="text-left p-2">When</th>
-            <th class="text-left p-2">Players</th>
-            <th class="text-right p-2">Score</th>
-            <th class="text-right p-2">Map</th>
-            <th class="text-right p-2">Replay</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-    for (const m of rows){
-      const p1 = linkPlayer(m.p1_id, m.p1_id);
-      const p2 = linkPlayer(m.p2_id, m.p2_id);
-      const score = `${m.p1_score ?? 0} – ${m.p2_score ?? 0}`;
-      const youWon = perspectiveId && m.winner_id === perspectiveId;
-      html += `
-        <tr class="row border-t border-slate-800">
-          <td class="p-2">${escapeHtml(fmtDate(m.played_at))}</td>
-          <td class="p-2"><a class="link" href="#/match/${m.id}">${p1} vs ${p2}</a></td>
-          <td class="p-2 text-right mono ${youWon?'text-green-400':''}">${score}</td>
-          <td class="p-2 text-right mono">${m.map_id ?? '-'}</td>
-          <td class="p-2 text-right">${m.replay_url ? `<a class="link" href="${escapeHtml(m.replay_url)}" target="_blank">Download</a>` : '-'}</td>
-        </tr>
-      `;
-    }
-    html += `</tbody></table>`;
-    box.innerHTML = html;
-  }
+async function loadLeaderboard(){
+  const s = document.getElementById('leaderboard-status');
+  const tb = document.querySelector('#leaderboard tbody');
+  s.textContent = 'Loading…';
+  tb.innerHTML = '';
 
-  function drawEloChart(points){
-    const el = document.getElementById('eloChart');
-    if (!el) return;
-    const labels = points.map(r => new Date(r.at));
-    const values = points.map(r => r.elo_after);
-    const data = {
-      labels,
-      datasets: [{
-        label: 'Elo',
-        data: values,
-        tension: 0.25
-      }]
-    };
-    new Chart(el, {
-      type: 'line',
-      data,
-      options: {
-        responsive: true,
-        plugins: { legend: { display:false } },
-        scales: {
-          x: { ticks: { color:'#94a3b8' }, grid: { color:'#1f2937' } },
-          y: { ticks: { color:'#94a3b8' }, grid: { color:'#1f2937' } }
-        }
-      }
-    });
-  }
+  const { data, error } = await sb
+    .from('players')
+    .select('*')
+    .order('elo', { ascending:false })
+    .limit(100);
 
-  // —— Matches page (global recent) ——
-  async function renderMatches(){
-    const root = document.getElementById('app');
-    root.innerHTML = `
-      <section class="card p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold">Recent Matches</h2>
-          <div class="text-sm text-slate-400">Live updates.</div>
-        </div>
-        <div id="matches-box"></div>
-      </section>
-    `;
-    await drawMatchesList();
+  if(error){ s.textContent = 'Error: '+error.message; return; }
+  if(!data || !data.length){ s.textContent='No data yet.'; return; }
+  s.textContent = '';
 
-    sb.channel('realtime-matches')
-      .on('postgres_changes', { event: 'insert', schema: 'public', table: 'matches' }, drawMatchesList)
-      .subscribe();
-  }
+  data.forEach((row, idx)=>{
+    const link = el('a', { href: './player.html?sid='+encodeURIComponent(row.steam_id) }, row.username || row.steam_id);
+    const tr = el('tr',{},
+      el('td',{}, String(idx+1)),
+      el('td',{}, link),
+      el('td',{}, row.rank || ''),
+      el('td',{}, row.elo==null?'':String(row.elo)),
+      el('td',{}, row.rp==null?'':String(row.rp)),
+      el('td',{}, row.games_played==null?'':String(row.games_played)),
+      el('td',{}, fmtPct(row.wins||0, row.games_played||0))
+    );
+    tb.appendChild(tr);
+  });
+}
 
-  async function drawMatchesList(){
-    const box = document.getElementById('matches-box');
-    if (!box) return;
-    const { data, error } = await sb
-      .from('matches')
-      .select('*')
-      .order('played_at', { ascending: false })
-      .limit(200);
-    if (error){ box.innerHTML = `<div class="text-red-400">${escapeHtml(error.message)}</div>`; return; }
-    renderMatchList('matches-box', data || []);
-  }
+async function loadMatches(){
+  const s = document.getElementById('matches-status');
+  const tb = document.querySelector('#matches tbody');
+  s.textContent = 'Loading…';
+  tb.innerHTML = '';
 
-  // —— Match page (placeholder for future) ——
-  function renderMatchRoute(){ /* not used */ }
-  async function renderMatch(id){
-    const root = document.getElementById('app');
-    const { data, error } = await sb.from('matches').select('*').eq('id', id).limit(1);
-    const m = data && data[0];
-    root.innerHTML = !m ? `
-      <div class="card p-6">Match not found.</div>
-    ` : `
-      <div class="mb-4"><a class="btn" href="#/matches">← Back</a></div>
-      <section class="card p-4">
-        <h2 class="text-lg font-semibold mb-3">Match #${id}</h2>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <div>
-            <div class="text-slate-400 text-sm mb-1">Players</div>
-            <div>${linkPlayer(m.p1_id, m.p1_id)} vs ${linkPlayer(m.p2_id, m.p2_id)}</div>
-          </div>
-          <div>
-            <div class="text-slate-400 text-sm mb-1">When</div>
-            <div>${escapeHtml(fmtDate(m.played_at))}</div>
-          </div>
-          <div>
-            <div class="text-slate-400 text-sm mb-1">Score</div>
-            <div class="mono">${m.p1_score ?? 0} – ${m.p2_score ?? 0}</div>
-          </div>
-          <div>
-            <div class="text-slate-400 text-sm mb-1">Map / Duration</div>
-            <div class="mono">Map ${m.map_id ?? '-'} • ${m.duration_seconds ?? 0}s</div>
-          </div>
-        </div>
-        <div class="mt-4">${m.replay_url ? `<a class="btn" href="${escapeHtml(m.replay_url)}" target="_blank">Download replay</a>` : ''}</div>
-      </section>
-    `;
-  }
-  </script>
+  const { data, error } = await sb
+    .from('matches')
+    .select('*')
+    .order('played_at', { ascending:false })
+    .limit(50);
+
+  if(error){ s.textContent = 'Error: '+error.message; return; }
+  if(!data || !data.length){ s.textContent = 'No matches yet.'; return; }
+  s.textContent = '';
+
+  data.forEach(m=>{
+    const tr = el('tr',{},
+      el('td',{}, new Date(m.played_at).toLocaleString()),
+      el('td',{}, m.p1_id),
+      el('td',{}, m.p2_id),
+      el('td',{}, (m.p1_score??'-')+'–'+(m.p2_score??'-')),
+      el('td',{}, m.winner_id || '-'),
+      el('td',{}, String(m.map_id ?? ''))
+    );
+    tb.appendChild(tr);
+  });
+}
+
+async function init(){
+  await Promise.all([loadLeaderboard(), loadMatches()]);
+
+  // Realtime refresh (optional if you've added publication)
+  try {
+    sb.channel('public:players').on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, loadLeaderboard).subscribe();
+    sb.channel('public:matches').on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, loadMatches).subscribe();
+  } catch (_e) {}
+}
+
+init();
+</script>
 </body>
 </html>
