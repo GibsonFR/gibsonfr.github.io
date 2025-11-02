@@ -59,7 +59,7 @@ function chip(label, val){
 function renderHeaderCard(p){
   const name = esc(p.username||p.steam_id);
   const avatarLetter = name.trim().charAt(0).toUpperCase() || '?';
-  const perspectiveHref = `perspective.html?steam_id=${encodeURIComponent(p.steam_id)}&window=200`;
+  const perspectiveHref = `perspective.html?steam_id=${encodeURIComponent(p.steam_id)}`;
 
   return `
   <div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
