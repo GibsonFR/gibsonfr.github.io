@@ -4,23 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Account — Ranked Tag</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Set your public Supabase values (or define them globally) -->
+  <!-- Use the SAME Supabase project as on index.html -->
   <script>
-    window.SUPA_URL  = window.SUPA_URL  || "https://YOUR_SUPABASE_URL.supabase.co";
-    window.SUPA_ANON = window.SUPA_ANON || "YOUR_SUPABASE_ANON_KEY";
+    window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
+    window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 
-    // PayPal keys (optional). For subscriptions you need a live PLAN_ID created in PayPal.
-    window.PAYPAL_CLIENT_ID = window.PAYPAL_CLIENT_ID || "YOUR_PAYPAL_CLIENT_ID";
-    window.PAYPAL_PLAN_ID   = window.PAYPAL_PLAN_ID   || "P-XXXXXXXXXXXX"; // €2/month plan id
-    window.ONE_TIME_PRICE_EUR = window.ONE_TIME_PRICE_EUR || "2.00";        // 30-day pass
+    /* PayPal (set these in production)
+       - PAYPAL_CLIENT_ID: required for buttons
+       - PAYPAL_PLAN_ID:   only if you want the monthly subscription button visible
+    */
+    window.PAYPAL_CLIENT_ID = window.PAYPAL_CLIENT_ID || "";          // e.g. "AbcDEF..."
+    window.PAYPAL_PLAN_ID   = window.PAYPAL_PLAN_ID   || "";          // e.g. "P-XXXXXXXXXXXX"
+    window.ONE_TIME_PRICE_EUR = "2.00";
   </script>
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-4xl mx-auto p-4">
+    <!-- Auth bar -->
     <div id="authbar" class="mb-3"></div>
+
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back to leaderboard</a>
 
     <div class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
@@ -28,68 +34,57 @@
       <div id="accStatus" class="text-slate-300">Loading…</div>
     </div>
 
-    <div class="mt-6">
-      <div class="flex gap-2 border-b border-slate-800">
-        <button data-tab="profile" class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-slate-300">Profile</button>
-        <button data-tab="subscription" class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-slate-300">Subscription</button>
+    <!-- PROFILE -->
+    <section class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <h2 class="text-xl font-semibold mb-3">Profile</h2>
+      <div class="grid sm:grid-cols-2 gap-3 text-sm">
+        <div><div class="text-slate-400">Discord name</div><div id="prof-name" class="text-slate-100">—</div></div>
+        <div><div class="text-slate-400">Email</div><div id="prof-email" class="text-slate-100">—</div></div>
+        <div><div class="text-slate-400">User ID</div><div id="prof-id" class="text-slate-100 break-all">—</div></div>
+        <div><div class="text-slate-400">Premium</div><div id="prof-premium" class="text-slate-100">—</div></div>
       </div>
 
-      <!-- PROFILE -->
-      <section id="tab-profile" class="p-4 border border-slate-800 border-t-0 rounded-b-2xl bg-slate-900/40">
-        <div class="grid sm:grid-cols-2 gap-3 text-sm">
-          <div><div class="text-slate-400">Discord name</div><div id="prof-name" class="text-slate-100">—</div></div>
-          <div><div class="text-slate-400">Email</div><div id="prof-email" class="text-slate-100">—</div></div>
-          <div><div class="text-slate-400">User ID</div><div id="prof-id" class="text-slate-100 break-all">—</div></div>
-          <div><div class="text-slate-400">Premium</div><div id="prof-premium" class="text-slate-100">—</div></div>
+      <div class="mt-4 p-3 rounded-xl border border-slate-800 bg-slate-900/60">
+        <div class="text-slate-400 text-sm mb-1">Linked game profile</div>
+        <div id="linked-player" class="text-slate-100">
+          Looking for your Steam profile…
         </div>
-      </section>
+      </div>
+    </section>
 
-      <!-- SUBSCRIPTION -->
-      <section id="tab-subscription" class="hidden p-4 border border-slate-800 border-t-0 rounded-b-2xl bg-slate-900/40">
-        <h2 class="text-xl font-semibold">Premium</h2>
-        <p class="text-slate-300 mb-3">Unlock Perspective and unlimited daily analyses.</p>
+    <!-- SUBSCRIPTION / PREMIUM -->
+    <section class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <h2 class="text-xl font-semibold mb-2">Premium</h2>
+      <p class="text-slate-300 mb-4">Premium unlocks <b>Perspective</b> and unlimited daily analyses.</p>
 
-        <div id="sub-state" class="mb-4 text-slate-300">Checking your status…</div>
+      <div id="prem-state" class="mb-4 text-slate-300">Checking your status…</div>
 
-        <div class="grid md:grid-cols-2 gap-4">
-          <div class="p-4 rounded-xl border border-slate-800">
-            <h3 class="font-semibold mb-1">€2/month subscription</h3>
-            <p class="text-slate-400 mb-3 text-sm">Recurring monthly via PayPal. Cancel anytime from your PayPal account.</p>
-            <div id="paypal-subscribe"></div>
-          </div>
-
-          <div class="p-4 rounded-xl border border-slate-800">
-            <h3 class="font-semibold mb-1">30-day pass (€2 one-time)</h3>
-            <p class="text-slate-400 mb-3 text-sm">One-time purchase: grants 30 days of Premium immediately.</p>
-            <div id="paypal-onetime"></div>
-          </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <!-- Monthly subscription -->
+        <div class="p-4 rounded-xl border border-slate-800">
+          <h3 class="font-semibold mb-1">€2/month subscription</h3>
+          <p class="text-slate-400 mb-3 text-sm">Recurring via PayPal. Cancel anytime from your PayPal account.</p>
+          <div id="paypal-subscribe" class="min-h-[45px]"></div>
+          <div id="sub-note" class="text-xs text-slate-400 mt-2"></div>
         </div>
 
-        <div id="sub-msg" class="mt-3 text-sm text-slate-400"></div>
-      </section>
-    </div>
+        <!-- One-time pass -->
+        <div class="p-4 rounded-xl border border-slate-800">
+          <h3 class="font-semibold mb-1">30-day pass (€2 one-time)</h3>
+          <p class="text-slate-400 mb-3 text-sm">One-time purchase: grants 30 days of Premium immediately.</p>
+          <div id="paypal-onetime" class="min-h-[45px]"></div>
+        </div>
+      </div>
+
+      <div id="prem-msg" class="mt-3 text-sm text-slate-400"></div>
+    </section>
   </div>
 
-  <!-- Tiny tabs JS -->
-  <script>
-    document.addEventListener('click', (e) => {
-      const btn = e.target.closest('.tab-btn'); if(!btn) return;
-      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('border-indigo-500','text-indigo-300'));
-      btn.classList.add('border-indigo-500','text-indigo-300');
-      const name = btn.dataset.tab;
-      document.querySelectorAll('[id^=tab-]').forEach(s=>s.classList.add('hidden'));
-      document.getElementById('tab-' + name).classList.remove('hidden');
-    });
-    window.addEventListener('load', () => {
-      const first = document.querySelector('.tab-btn[data-tab="profile"]');
-      if(first) first.click();
-    });
-  </script>
-
-  <!-- Auth bar + profile load -->
+  <!-- Core logic -->
   <script>
     const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON);
 
+    // Auth bar (login/logout)
     async function renderAuthBar(){
       const slot = document.getElementById('authbar');
       const { data:{ user } } = await supa.auth.getUser();
@@ -107,11 +102,37 @@
         return null;
       }
       slot.innerHTML = `<div class="flex items-center justify-end gap-2">
-        <a href="index.html" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm hover:bg-slate-700">Leaderboard</a>
         <button id="signout" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm hover:bg-slate-700">Sign out</button>
       </div>`;
       document.getElementById('signout').onclick = async ()=>{ await supa.auth.signOut(); location.reload(); };
       return user;
+    }
+
+    function getDiscordId(user){
+      // Try common places for provider user id
+      const ids = user?.identities || [];
+      const disc = ids.find(i => i?.provider === 'discord');
+      const fromIdent = disc?.identity_data?.user_id || disc?.identity_data?.sub || disc?.identity_data?.id;
+      const fromMeta  = user?.user_metadata?.provider_id || user?.user_metadata?.sub || null;
+      return String(fromIdent || fromMeta || '').trim() || null;
+    }
+
+    async function loadLinkedPlayer(user){
+      const el = document.getElementById('linked-player');
+      try{
+        const discordId = getDiscordId(user);
+        if(!discordId){ el.textContent = 'No Discord ID found.'; return; }
+        // links_state.json must be at site root, format: { "<discordId>": "<steamId64>", ... }
+        const res = await fetch('links_state.json', { cache:'no-store' });
+        if(!res.ok){ el.textContent = 'Could not load link state.'; return; }
+        const map = await res.json();
+        const steamId = map[discordId];
+        if(!steamId){ el.textContent = 'No linked Steam ID found for your Discord account.'; return; }
+        el.innerHTML = `Linked to SteamID <b>${steamId}</b> · <a class="text-indigo-300 hover:underline" href="player.html?steam_id=${encodeURIComponent(steamId)}">Open your player page</a>`;
+      }catch(e){
+        el.textContent = 'Error while resolving linked profile.';
+        console.error(e);
+      }
     }
 
     async function loadProfile(){
@@ -124,36 +145,38 @@
       const name  = p?.username || meta.full_name || meta.name || '—';
       const email = user.email || meta.email || '—';
       const until = p?.premium_until ? new Date(p.premium_until) : null;
-      const prem  = until && until > new Date() ? `Active (until ${until.toISOString().slice(0,10)})` : 'Not active';
+      const premiumTxt = (until && until > new Date())
+        ? `Active (until ${until.toISOString().slice(0,10)})`
+        : 'Not active';
 
+      document.getElementById('accStatus').innerHTML = `Logged in as <b>${name}</b>`;
       document.getElementById('prof-name').textContent    = name;
       document.getElementById('prof-email').textContent   = email;
       document.getElementById('prof-id').textContent      = user.id;
-      document.getElementById('prof-premium').textContent = prem;
+      document.getElementById('prof-premium').textContent = premiumTxt;
 
-      document.getElementById('accStatus').innerHTML = `Logged in as <b>${name}</b>`;
-      document.getElementById('sub-state').textContent = prem;
+      document.getElementById('prem-state').textContent = premiumTxt;
+
+      loadLinkedPlayer(user);
     }
 
     document.addEventListener('DOMContentLoaded', loadProfile);
   </script>
 
-  <!-- PayPal SDKs are loaded only if a client id is set -->
+  <!-- PayPal mounting (Subscription + One-time) -->
   <script>
     function ensurePayPal(params, cb){
-      if(!window.PAYPAL_CLIENT_ID){ return; }
-      const qs = new URLSearchParams(params).toString();
+      if(!window.PAYPAL_CLIENT_ID) return; // no button if not configured
       const s = document.createElement('script');
-      s.src = 'https://www.paypal.com/sdk/js?' + qs;
+      s.src = 'https://www.paypal.com/sdk/js?' + new URLSearchParams(params).toString();
       s.onload = cb;
       document.head.appendChild(s);
     }
-
-    async function callEdge(url, payload){
+    async function callEdge(fn, payload){
       const { data:{ session } } = await supa.auth.getSession();
-      const res = await fetch(window.SUPA_URL + '/functions/v1/' + url, {
+      const res = await fetch(`${window.SUPA_URL}/functions/v1/${fn}`, {
         method: 'POST',
-        headers: { 'Authorization':'Bearer '+(session?.access_token||''), 'Content-Type':'application/json' },
+        headers: { 'Authorization': `Bearer ${session?.access_token||''}`, 'Content-Type':'application/json' },
         body: JSON.stringify(payload||{})
       });
       const j = await res.json().catch(()=>({}));
@@ -162,27 +185,32 @@
     }
 
     function mountPayPal(){
-      // Subscription button
-      if(window.PAYPAL_PLAN_ID && window.paypal && paypal.Buttons){
+      if(!window.paypal) return;
+
+      // Subscription (requires PAYPAL_PLAN_ID)
+      const subHost = document.getElementById('paypal-subscribe');
+      const subNote = document.getElementById('sub-note');
+      if(window.PAYPAL_PLAN_ID && subHost){
         paypal.Buttons({
           style: { label: 'subscribe' },
-          createSubscription: function(data, actions) {
-            return actions.subscription.create({ plan_id: window.PAYPAL_PLAN_ID });
-          },
-          onApprove: async function(data, actions) {
+          createSubscription: (data, actions) =>
+            actions.subscription.create({ plan_id: window.PAYPAL_PLAN_ID }),
+          onApprove: async (data, actions) => {
             try{
               await callEdge('activate-paypal-sub', { subscriptionId: data.subscriptionID });
-              document.getElementById('sub-msg').textContent = 'Subscription activated. Thank you!';
+              document.getElementById('prem-msg').textContent = 'Subscription activated. Thank you!';
               loadProfile();
             }catch(e){
-              document.getElementById('sub-msg').textContent = 'Activation error: ' + (e.message||e);
+              document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
             }
           }
         }).render('#paypal-subscribe');
+      } else if (subHost){
+        subNote.textContent = 'Set PAYPAL_PLAN_ID to enable the monthly subscription button.';
       }
 
-      // One-time 30-day pass
-      if(window.paypal && paypal.Buttons){
+      // One-time pass (30 days)
+      if(document.getElementById('paypal-onetime')){
         paypal.Buttons({
           style: { label: 'pay' },
           createOrder: (data, actions) => actions.order.create({
@@ -193,10 +221,10 @@
             const order = await actions.order.capture();
             try{
               await callEdge('capture-paypal-order', { orderId: order.id });
-              document.getElementById('sub-msg').textContent = '30-day pass activated. Enjoy!';
+              document.getElementById('prem-msg').textContent = '30-day pass activated. Enjoy!';
               loadProfile();
             }catch(e){
-              document.getElementById('sub-msg').textContent = 'Activation error: ' + (e.message||e);
+              document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
             }
           }
         }).render('#paypal-onetime');
@@ -204,7 +232,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      if(!window.PAYPAL_CLIENT_ID) return;
+      if(!window.PAYPAL_CLIENT_ID) return; // hide if not configured
+      // For subscriptions, PayPal needs vault + intent=subscription
       ensurePayPal({
         'client-id': window.PAYPAL_CLIENT_ID,
         'vault': 'true',
