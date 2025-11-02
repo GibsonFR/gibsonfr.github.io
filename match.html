@@ -8,12 +8,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
-  <div class="max-w-3xl mx-auto p-4">
+  <div class="max-w-5xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
     <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
 
-    <!-- Analysis block (ajouté, non intrusif) -->
     <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800 hidden">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold">Game Analysis</h2>
@@ -25,24 +24,29 @@
 
       <div id="analysisStatus" class="mt-3 text-sm text-slate-300"></div>
 
-      <div id="analysisResult" class="mt-4 hidden">
-        <h3 class="font-semibold mb-2">Result</h3>
+      <div id="analysisResult" class="mt-4 hidden space-y-4">
+        <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="p-3 rounded bg-slate-900 border border-slate-800">
+          <div class="p-4 rounded bg-slate-900 border border-slate-800">
             <div class="text-slate-400 text-xs mb-1">P1 Quality</div>
-            <div id="p1q" class="text-xl font-bold">—</div>
+            <div id="p1q" class="text-2xl font-bold">—</div>
             <pre id="p1stats" class="mt-2 text-xs whitespace-pre-wrap"></pre>
           </div>
-          <div class="p-3 rounded bg-slate-900 border border-slate-800">
+          <div class="p-4 rounded bg-slate-900 border border-slate-800">
             <div class="text-slate-400 text-xs mb-1">P2 Quality</div>
-            <div id="p2q" class="text-xl font-bold">—</div>
+            <div id="p2q" class="text-2xl font-bold">—</div>
             <pre id="p2stats" class="mt-2 text-xs whitespace-pre-wrap"></pre>
           </div>
         </div>
-        <div class="mt-4 p-3 rounded bg-slate-900 border border-slate-800">
-          <div class="text-slate-400 text-xs mb-1">Summary</div>
+
+        <div class="p-4 rounded bg-slate-900 border border-slate-800">
+          <div class="text-slate-400 text-xs mb-2">Summary</div>
           <pre id="summary" class="text-xs whitespace-pre-wrap"></pre>
         </div>
+
+        <!-- Galerie d'images -->
+        <div id="gallery" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
       </div>
     </div>
   </div>
@@ -54,19 +58,14 @@ const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
 const idParam = new URL(location.href).searchParams.get('id');
 const isNumericId = idParam && /^\d+$/.test(idParam);
-const matchIdValue = isNumericId ? Number(idParam) : idParam; // bigint ou uuid
+const matchIdValue = isNumericId ? Number(idParam) : idParam;
 
 const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 const el = sel => document.querySelector(sel);
 
 async function fetchMatchById() {
-  // Requête robuste: maybeSingle() (évite throw), puis fallback numérique/texte si besoin
-  let q = supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
-  let { data: m, error } = await q;
-  if (m) return { m, error: null };
-
-  // Rien trouvé: message clair
-  return { m: null, error: error || new Error('not_found') };
+  let { data, error } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
+  return data || null;
 }
 
 function renderMatch(m) {
@@ -100,13 +99,28 @@ async function loadAnalysis(matchId) {
     el('#analysisResult').classList.add('hidden');
     return;
   }
-  // Affiche résultats
-  el('#analysisStatus').textContent = `Analyzed at ${new Date(data.analyzed_at).toLocaleString()} (version ${data.version})`;
+  el('#analysisStatus').textContent = '';
+  el('#analAt').textContent = new Date(data.analyzed_at).toLocaleString();
+  el('#ver').textContent = data.version || '—';
   el('#p1q').textContent = (data.p1_quality ?? '—');
   el('#p2q').textContent = (data.p2_quality ?? '—');
   el('#p1stats').textContent = JSON.stringify(data.p1_stats || {}, null, 2);
   el('#p2stats').textContent = JSON.stringify(data.p2_stats || {}, null, 2);
-  el('#summary').textContent = JSON.stringify(data.summary || {}, null, 2);
+  el('#summary').textContent = JSON.stringify((data.summary || {}), null, 2);
+
+  const imgs = data.images || {};
+  const keys = Object.keys(imgs);
+  if (keys.length) {
+    el('#gallery').innerHTML = keys.map(k => `
+      <div class="rounded overflow-hidden border border-slate-800 bg-slate-900">
+        <div class="p-2 text-xs text-slate-300 border-b border-slate-800">${k}</div>
+        <img src="${imgs[k]}" alt="${k}" class="w-full block">
+      </div>
+    `).join('');
+  } else {
+    el('#gallery').innerHTML = `<div class="text-sm text-slate-400">No images produced.</div>`;
+  }
+
   el('#analysisResult').classList.remove('hidden');
 }
 
@@ -127,33 +141,25 @@ async function queueAnalysis(matchId, replayUrl) {
 }
 
 function subscribeRealtime(matchId) {
-  // Quand une analyse arrive, on rafraîchit le rendu
   supa.channel('match_analyses_live')
     .on('postgres_changes', {
       event: 'INSERT',
       schema: 'public',
       table: 'match_analyses',
       filter: `match_id=eq.${matchId}`
-    }, (payload) => {
-      el('#analysisStatus').textContent = 'Analysis completed.';
-      loadAnalysis(matchId);
-    })
+    }, () => loadAnalysis(matchId))
     .subscribe();
 }
 
 (async function init(){
   if (!idParam) { showNotFound(); return; }
-
-  const { m } = await fetchMatchById();
+  const m = await fetchMatchById();
   if (!m) { showNotFound(); return; }
-
   renderMatch(m);
 
-  // Active le bloc d’analyse
   el('#analysisBlock').classList.remove('hidden');
   el('#analyzeBtn').onclick = () => queueAnalysis(matchIdValue, m.replay_url);
 
-  // Charge état actuel + souscription temps-réel
   await loadAnalysis(matchIdValue);
   subscribeRealtime(matchIdValue);
 })();
