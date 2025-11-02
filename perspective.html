@@ -22,8 +22,9 @@
       opacity:0; transition:opacity .15s ease, transform .15s ease; z-index:20
     }
     .tip:hover:after { opacity:1; transform:translateX(-50%) translateY(6px) }
-    .kpi {display:flex;align-items:center;gap:.5rem}
+    .kpi{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
     .kpi small{color:#9ca3af}
+    .metric-value{display:block;font-size:1.125rem;line-height:1.1;margin-top:.25rem}
     .delta{font-size:.75rem;margin-left:.35rem}
   </style>
 </head>
@@ -449,15 +450,15 @@ function kpi(label, you, band, global, fmt=(x)=>x, suffix=''){
 
 /* UI sections */
 function section(title, body){
-  return `<div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
+  return `<div class="mt-6 p-5 md:p-6 rounded-2xl border border-slate-800 bg-slate-900/40 reveal">
     <h3 class="text-xl font-semibold mb-3">${title}</h3>${body}</div>`;
 }
 function chip(label, value, tip, suffix=''){
   const show = (value==null||value==='—') ? '—' : '';
   const dv = (value==null||value==='—') ? '' : `data-count-to="${value}" data-suffix="${suffix}"`;
   return `<div class="px-3 py-2 rounded-xl bg-slate-800/70 border border-slate-700 text-sm reveal">
-    <span class="tip text-slate-400" data-tip="${esc(tip)}">${label}</span>
-    <span class="ml-1 text-slate-100 font-semibold" ${dv}>${show||value}${suffix}</span>
+    <div class="text-slate-400 tip" data-tip="${esc(tip)}">${label}</div>
+    <span class="metric-value text-slate-100 font-semibold" ${dv}>${show||value}${suffix}</span>
   </div>`;
 }
 
@@ -571,6 +572,39 @@ function sectionRetagAccuracy(m, benchB, benchG){
 }
 
 function sectionQuality(m, benchB, benchG){
+function sectionMapFocus(m){
+  const title = (currentFilter==null) ? 'Map analysis — All maps' : `Map analysis — ${prettyMap(currentFilter)}`;
+  return section(title,
+    `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="text-slate-400">Matches</div>
+        <div class="text-3xl font-extrabold mt-1">${m.scopeCount||0}</div>
+      </div>
+      <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="text-slate-400">Win rate</div>
+        <div class="text-3xl font-extrabold mt-1">${m.winrate!=null? Math.round(m.winrate*1000)/10+'%':'—'}</div>
+        <div class="mt-2">${bar((m.winrate||0),'Win rate')}</div>
+      </div>
+      <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="text-slate-400">Average quality</div>
+        <div class="text-3xl font-extrabold mt-1">${num(m.quality.average,1)}</div>
+      </div>
+
+      <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="text-slate-400">Average speed</div>
+        <div class="text-3xl font-extrabold mt-1">${num(m.speed.average_mps,2)} <span class="text-base text-slate-300">m/s</span></div>
+      </div>
+      <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="text-slate-400">Tag time share</div>
+        <div class="text-3xl font-extrabold mt-1">${pct(m.tagging.share_as_tagger)}</div>
+      </div>
+      <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="text-slate-400">Retag (median)</div>
+        <div class="text-3xl font-extrabold mt-1">${fmtS(m.retag.median_seconds)}</div>
+      </div>
+    </div>`);
+}
+
   return section('Quality and consistency',
     `<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
       <div>
@@ -639,7 +673,7 @@ function mirrorHeader(leftHtml, rightHtml){
 /* -------------------- Render pipeline -------------------- */
 function renderAll(contentEl, m, benchB, benchG){
   contentEl.innerHTML = `
-    <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       ${overviewChips(m)}
     </div>
     ${sectionForm(m)}
@@ -647,6 +681,7 @@ function renderAll(contentEl, m, benchB, benchG){
     ${sectionSpeedDistance(m, benchB, benchG)}
     ${sectionRetagAccuracy(m, benchB, benchG)}
     ${sectionQuality(m, benchB, benchG)}
+    ${sectionMapFocus(m)}
     ${sectionMaps(m.maps)}
     ${section('Most faced opponents', '<div class="text-slate-400 text-sm">Coming soon: per-opponent deltas and focus.</div>')}
   `;
@@ -736,7 +771,7 @@ async function init(){
     scopeBar.classList.remove('hidden');
 
     scopeBar.querySelectorAll('button[data-map]').forEach(b=>{
-      b.onclick = ()=>{ currentFilter = (b.dataset.map==='' ? null : b.dataset.map); recomputeAndRender(); };
+      b.onclick = ()=>{ currentFilter = (b.dataset.map==='' ? null : b.dataset.map); renderScopeBar(); recomputeAndRender(); };
     });
   }
   renderScopeBar();
