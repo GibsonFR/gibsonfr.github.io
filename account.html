@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Account</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- ⚠️ Set your Supabase public values -->
+  <script>
+    window.SUPA_URL  = "https://YOUR_SUPABASE_URL.supabase.co";
+    window.SUPA_ANON = "YOUR_SUPABASE_ANON_KEY";
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="max-w-4xl mx-auto p-4">
+    <div id="authbar" class="mb-3"></div>
+    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
+
+    <div class="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <h1 class="text-2xl font-bold mb-2">Account</h1>
+      <div id="accStatus" class="text-slate-300">Loading…</div>
+    </div>
+
+    <div class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <h2 class="text-xl font-semibold mb-2">Premium</h2>
+      <p class="text-slate-300 mb-3">Unlock Perspective and unlimited analyses.</p>
+
+      <!-- PayPal button mounts here (optional) -->
+      <div id="paypal-button-container"></div>
+      <div id="purchaseStatus" class="text-sm text-slate-400 mt-2"></div>
+    </div>
+  </div>
+
+  <script>
+    const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON);
+
+    async function renderAuthBar(){
+      const slot = document.getElementById('authbar');
+      const { data:{ user } } = await supa.auth.getUser();
+      if(!user){
+        slot.innerHTML = `<div class="flex items-center justify-end">
+          <button id="signin" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">
+            Sign in with Discord
+          </button>
+        </div>`;
+        document.getElementById('signin').onclick = ()=> supa.auth.signInWithOAuth({
+          provider: 'discord',
+          options: { redirectTo: location.href }
+        });
+        return;
+      }
+      const { data: p } = await supa.from('profiles').select('username,premium_until').eq('user_id',user.id).maybeSingle();
+      const name = p?.username || user.user_metadata?.full_name || user.user_metadata?.name || 'Account';
+      const until = (p?.premium_until ? new Date(p.premium_until) : null);
+      const premiumTxt = (until && until > new Date()) ? `Active · until <b>${until.toISOString().slice(0,10)}</b>` : 'Not active';
+
+      slot.innerHTML = `<div class="flex items-center justify-end gap-2">
+        <span class="text-sm text-slate-300">${name}</span>
+        <button id="signout" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm hover:bg-slate-700">Sign out</button>
+      </div>`;
+      document.getElementById('signout').onclick = async ()=>{ await supa.auth.signOut(); location.reload(); };
+
+      document.getElementById('accStatus').innerHTML =
+        \`Logged in as <b>${name}</b><div class="mt-1 text-slate-400">Premium: ${premiumTxt}</div>\`;
+    }
+    document.addEventListener('DOMContentLoaded', renderAuthBar);
+  </script>
+
+  <!-- PayPal (optional): set YOUR_PAYPAL_CLIENT_ID.
+       L’Edge Function Supabase “capture-paypal-order” doit être déployée côté projet. -->
+  <script>
+    window.PAYPAL_CLIENT_ID = 'YOUR_PAYPAL_CLIENT_ID'; // leave empty to hide the button
+    function ensurePayPal(cb){
+      if(!window.PAYPAL_CLIENT_ID){ return; }
+      if(window.paypal){ cb(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(window.PAYPAL_CLIENT_ID) + '&currency=EUR';
+      s.onload = cb;
+      document.head.appendChild(s);
+    }
+    async function callEdgeCapture(orderId){
+      const { data:{ session } } = await supa.auth.getSession();
+      const url = window.SUPA_URL + '/functions/v1/capture-paypal-order';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + (session?.access_token || ''), 'Content-Type':'application/json' },
+        body: JSON.stringify({ orderId })
+      });
+      if(!res.ok) throw new Error('capture failed: '+res.status);
+      return await res.json();
+    }
+    function mountPayPal(){
+      const el = document.getElementById('paypal-button-container');
+      if(!el || !window.PAYPAL_CLIENT_ID) return;
+      paypal.Buttons({
+        createOrder: (data, actions) => actions.order.create({
+          intent:'CAPTURE',
+          purchase_units:[{ amount:{ currency_code:'EUR', value:'2.00' } }]
+        }),
+        onApprove: async (data, actions) => {
+          const order = await actions.order.capture();
+          try{
+            await callEdgeCapture(order.id);
+            document.getElementById('purchaseStatus').textContent = 'Premium activated. Thanks!';
+            // Re-render auth bar to reflect Premium badge if you add one later
+          } catch(e){
+            document.getElementById('purchaseStatus').textContent = 'Error: ' + (e.message||e);
+          }
+        }
+      }).render('#paypal-button-container');
+    }
+    document.addEventListener('DOMContentLoaded', ()=> ensurePayPal(mountPayPal));
+  </script>
+</body>
+</html>
