@@ -8,11 +8,17 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
-<div class=\"max-w-6xl mx-auto p-4\"><div id=\"authbar\" class=\"mb-3\"></div></div>
+  <div class="max-w-6xl mx-auto p-4">
+    <div id="authbar" class="mb-3"></div>
+  </div>
+
   <div class="max-w-6xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
     <div id="matchCard" class="mt-4 p-4 rounded border border-slate-800"></div>
+
+    <!-- Access / gating banner -->
+    <div id="gateBanner" class="mt-4 p-4 rounded-xl border border-slate-800 bg-slate-900/60 hidden"></div>
 
     <div id="analysisBlock" class="mt-6 p-4 rounded border border-slate-800 hidden">
       <div class="flex items-center justify-between mb-3">
@@ -63,7 +69,7 @@ const isNumericId = idParam && /^\d+$/.test(idParam);
 const matchIdValue = isNumericId ? Number(idParam) : idParam;
 
 const el = s => document.querySelector(s);
-const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function card(label, value, suffix='') {
   return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
@@ -94,14 +100,14 @@ function renderPlayerCards(rootSel, s, sampleSel){
   el(sampleSel).textContent = [lowTag, lowHid].filter(Boolean).join(' ');
 
   root.innerHTML = [
-    // Qualités par rôle
+    // Qualities per role
     card("Quality (tagger)", s.quality_tagger ?? '—'),
     card("Quality (hider)",  s.quality_hider  ?? '—'),
-    // Temps par rôle
+    // Time per role
     card("Time as tagger", pct(s.time_as_tagger_share)),
     card("Seconds — tagger", s.seconds_as_tagger ?? '—', " s"),
     card("Seconds — hider",  s.seconds_as_hider  ?? '—', " s"),
-    // Distances / vitesse
+    // Distances / speed
     card("Avg dist (hider)", s.avg_distance_as_hider ?? '—', " m"),
     card("Avg dist (tagger)", s.avg_distance_as_tagger ?? '—', " m"),
     card("Avg speed", s.avg_speed_ms ?? '—', " m/s"),
@@ -138,6 +144,142 @@ function showNotFound() {
   el('#analysisBlock').classList.add('hidden');
 }
 
+/* -------------------- PREMIUM & LIMIT LOGIC -------------------- */
+
+async function getUser() {
+  const { data:{ user } } = await supa.auth.getUser();
+  return user || null;
+}
+
+async function isPremium(user){
+  try{
+    const { data, error } = await supa
+      .from('profiles')
+      .select('premium_until')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (error) return false;
+    return !!(data?.premium_until && new Date(data.premium_until) > new Date());
+  } catch { return false; }
+}
+
+// Count analyses today from DB (preferred). Fallback to localStorage if RLS blocks.
+async function countAnalysesToday(user){
+  const start = new Date();
+  start.setHours(0,0,0,0);
+  const startIso = start.toISOString();
+
+  try {
+    const { count, error } = await supa
+      .from('analysis_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('requested_by', user.id)
+      .gte('created_at', startIso); // assumes created_at exists
+    if (!error && typeof count === 'number') return count;
+  } catch {}
+
+  // fallback column name
+  try {
+    const { count, error } = await supa
+      .from('analysis_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('requested_by', user.id)
+      .gte('inserted_at', startIso);
+    if (!error && typeof count === 'number') return count;
+  } catch {}
+
+  // Final fallback: localStorage
+  const key = `analysis_used_${user.id}_${startIso.slice(0,10)}`;
+  const v = Number(localStorage.getItem(key)||'0');
+  return isNaN(v) ? 0 : v;
+}
+
+function bumpLocalAnalysisCounter(user){
+  const start = new Date(); start.setHours(0,0,0,0);
+  const key = `analysis_used_${user.id}_${start.toISOString().slice(0,10)}`;
+  const v = Number(localStorage.getItem(key)||'0');
+  localStorage.setItem(key, String((isNaN(v)?0:v)+1));
+}
+
+const FREE_DAILY_LIMIT = 3;
+
+async function updateGateUI(){
+  const gate = el('#gateBanner');
+  const btn  = el('#analyzeBtn');
+
+  // Auth state
+  const user = await getUser();
+  if (!user) {
+    gate.classList.remove('hidden');
+    gate.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="text-amber-300">🔒</div>
+        <div>
+          <div class="font-semibold mb-1">Sign in required</div>
+          <div class="text-slate-300 text-sm">Please sign in with Discord to analyze matches. Free members can analyze up to <b>${FREE_DAILY_LIMIT}/day</b>. Premium unlocks unlimited analyses + Perspective.</div>
+          <div class="mt-2">
+            <button id="signinBtn" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Sign in with Discord</button>
+          </div>
+        </div>
+      </div>`;
+    if (btn) btn.disabled = true;
+    const signinBtn = document.getElementById('signinBtn');
+    if (signinBtn) {
+      signinBtn.onclick = ()=> supa.auth.signInWithOAuth({
+        provider: 'discord',
+        options: { redirectTo: location.href }
+      });
+    }
+    return { user:null, premium:false, used:0 };
+  }
+
+  // Premium?
+  const premium = await isPremium(user);
+
+  // Usage today
+  const used = await countAnalysesToday(user);
+
+  if (premium) {
+    gate.classList.add('hidden');
+    if (btn) btn.disabled = false;
+  } else {
+    gate.classList.remove('hidden');
+    if (used >= FREE_DAILY_LIMIT) {
+      gate.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="text-amber-300">⏳</div>
+          <div>
+            <div class="font-semibold mb-1">Daily limit reached</div>
+            <div class="text-slate-300 text-sm">
+              You've used your <b>${FREE_DAILY_LIMIT}</b> free analyses today.
+              Go <a class="text-amber-300 underline hover:no-underline" href="account.html">Premium</a> to unlock unlimited analyses and <b>Perspective</b>.
+            </div>
+            <div class="mt-2">
+              <a href="account.html" class="px-3 py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-sm">Go Premium (€2)</a>
+            </div>
+          </div>
+        </div>`;
+      if (btn) btn.disabled = true;
+    } else {
+      gate.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="text-emerald-300">✅</div>
+          <div>
+            <div class="font-semibold mb-1">Free plan</div>
+            <div class="text-slate-300 text-sm">
+              You have <b>${FREE_DAILY_LIMIT - used}</b> analysis${FREE_DAILY_LIMIT-used===1?'':'es'} left today.
+              Premium unlocks unlimited analyses + <b>Perspective</b>.
+            </div>
+          </div>
+        </div>`;
+      if (btn) btn.disabled = false;
+    }
+  }
+  return { user, premium, used };
+}
+
+/* -------------------- ANALYSIS LOAD / QUEUE -------------------- */
+
 async function loadAnalysis(matchId) {
   const { data } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
   if (!data) {
@@ -161,21 +303,36 @@ async function loadAnalysis(matchId) {
   renderPlayerCards('#p2cards', data.p2_stats || {}, '#p2sample');
 }
 
-async function queueAnalysis(matchId, replayUrl) {
-  el('#analyzeBtn').disabled = true;
-  el('#analysisStatus').textContent = 'Queuing analysis…';
-  const { error } = await supa.from('analysis_requests').insert({
+// Insert request after passing the gate
+async function queueAnalysis(matchId, replayUrl, state){
+  const btn = el('#analyzeBtn');
+  const status = el('#analysisStatus');
+  if(btn) btn.disabled = true;
+  status.textContent = 'Queuing analysis…';
+
+  // server insert with user id (so counting works)
+  const row = {
     match_id: matchId,
     replay_url: replayUrl || null,
-    requested_by: 'web'
-  });
+    requested_by: state.user.id,               // <— identify requester
+    requested_by_name: state.user.user_metadata?.name || null,
+    created_at: new Date().toISOString()       // if column exists, fine; else ignored
+  };
+  const { error } = await supa.from('analysis_requests').insert(row);
+
   if (error) {
-    el('#analysisStatus').textContent = `Error: ${error.message}`;
-    el('#analyzeBtn').disabled = false;
+    status.textContent = `Error: ${error.message}`;
+    if(btn) btn.disabled = false;
     return;
   }
-  el('#analysisStatus').textContent = 'Queued. Waiting for worker…';
+
+  // local fallback counter in case RLS prevents server count
+  if (!state.premium) bumpLocalAnalysisCounter(state.user);
+
+  status.textContent = 'Queued. Waiting for worker…';
 }
+
+/* -------------------- REALTIME -------------------- */
 
 function subscribeRealtime(matchId) {
   supa.channel('match_analyses_live')
@@ -186,6 +343,8 @@ function subscribeRealtime(matchId) {
     .subscribe();
 }
 
+/* -------------------- INIT -------------------- */
+
 (async function init(){
   if (!idParam) { showNotFound(); return; }
   const m = await fetchMatchById();
@@ -193,10 +352,24 @@ function subscribeRealtime(matchId) {
   renderMatch(m);
 
   el('#analysisBlock').classList.remove('hidden');
-  el('#analyzeBtn').onclick = () => queueAnalysis(matchIdValue, m.replay_url);
+
+  // Gate UI + click handler
+  let gateState = await updateGateUI();
+  el('#analyzeBtn').onclick = async () => {
+    // re-check gate on click (fresh state)
+    gateState = await updateGateUI();
+    if (!gateState.user) return;                            // not signed in
+    if (!gateState.premium && gateState.used >= FREE_DAILY_LIMIT) return; // limit hit
+    await queueAnalysis(matchIdValue, m.replay_url, gateState);
+  };
 
   await loadAnalysis(matchIdValue);
   subscribeRealtime(matchIdValue);
+
+  // Also listen to auth changes to refresh gate instantly
+  supa.auth.onAuthStateChange(async () => {
+    await updateGateUI();
+  });
 })();
 </script>
 
@@ -204,49 +377,3 @@ function subscribeRealtime(matchId) {
 <script src="payments.js"></script>
 </body>
 </html>
-
-<script>
-(function(){
-  if (!window.supabase || !window.SUPA_URL || !window.SUPA_ANON) return;
-  const supa = window.supa || supabase.createClient(SUPA_URL, SUPA_ANON);
-  window.supa = supa;
-
-  async function queueAnalysisLimited(matchId, replayUrl) {
-    const btn = document.querySelector('#analyzeBtn');
-    const status = document.querySelector('#analysisStatus') || document.querySelector('#status') || document.createElement('div');
-    if(!status.id) { status.id = 'analysisStatus'; document.body.appendChild(status); }
-    if(btn) btn.disabled = true;
-    status.textContent = 'Requesting…';
-
-    const { data:{ user } } = await supa.auth.getUser();
-    if(!user){ status.textContent = 'Sign in with Discord to analyze.'; if(btn) btn.disabled=false; return; }
-
-    const { error } = await supa.rpc('request_analysis', { p_match_id: matchId, p_replay_url: replayUrl || null });
-    if (error) {
-      if (String(error.message).includes('free_daily_limit_reached')) {
-        status.innerHTML = 'Daily free limit reached (1/day). <a href=\"#\" id=\"goPro\" style=\"color:#fbbf24;text-decoration:underline;\">Go Premium (€2)</a>';
-        const a=document.getElementById('goPro'); if(a) a.onclick=(e)=>{e.preventDefault(); window.startCheckout();};
-      } else if (String(error.message).includes('not_authenticated')) {
-        status.textContent = 'Sign in with Discord to analyze.';
-      } else {
-        status.textContent = 'Error: ' + error.message;
-      }
-      if(btn) btn.disabled = false;
-      return;
-    }
-    status.textContent = 'Queued. Waiting for worker…';
-  }
-
-  // Try to auto-bind if elements present
-  function bind(){
-    const btn = document.querySelector('#analyzeBtn');
-    const matchIdEl = document.querySelector('[data-match-id]');
-    const replayUrlEl = document.querySelector('[data-replay-url]');
-    if(btn && matchIdEl){
-      btn.addEventListener('click', () => queueAnalysisLimited(Number(matchIdEl.dataset.matchId), replayUrlEl?.dataset?.replayUrl || null));
-    }
-  }
-  document.addEventListener('DOMContentLoaded', bind);
-  window.queueAnalysisLimited = queueAnalysisLimited;
-})();
-</script>
