@@ -23,6 +23,7 @@
       <h2 class="text-xl font-semibold mb-2">Elo Timeline</h2>
       <div class="rounded border border-slate-800 p-3">
         <canvas id="eloChart" height="160"></canvas>
+        <div id="eloHint" class="text-xs text-slate-400 mt-2">Tip: click any point to open that match.</div>
       </div>
     </section>
 
@@ -69,7 +70,7 @@ function chip(label, val){
   </div>`;
 }
 
-// Check premium by steam_id
+// Premium helpers
 async function isPremiumSteam(steamId){
   try{
     const nowIso = new Date().toISOString();
@@ -84,7 +85,6 @@ async function isPremiumSteam(steamId){
   }catch(e){ console.warn('[premium header] failed', e); return false; }
 }
 
-// Batch: get premium set for a list of steamIds (used for matches names)
 async function fetchPremiumSet(steamIds){
   const set = new Set();
   if(!steamIds || !steamIds.length) return set;
@@ -138,52 +138,87 @@ function renderHeaderCard(p, premium){
   </div>`;
 }
 
+// Simple EMA for optional trend line
 function ema(values, alpha){ const out=[]; let prev=null; for(const v of values){ if(v==null){out.push(prev);continue;} prev=prev==null?v:alpha*v+(1-alpha)*prev; out.push(prev);} return out; }
 
-function drawElo(labels, values){
+// Draw Elo chart and make points clickable
+function drawElo(labels, values, onPointClick){
   const ctx = document.getElementById('eloChart').getContext('2d');
   const trend = ema(values, 0.2);
-  new Chart(ctx,{
+  const chart = new Chart(ctx,{
     type:'line',
     data:{ labels, datasets:[
-      { label:'Elo', data: values, tension:0.25, pointRadius:0, borderWidth:2, borderColor:'#60a5fa' },
+      { label:'Elo', data: values, tension:0.25, pointRadius:2, borderWidth:2, borderColor:'#60a5fa' },
       { label:'Trend', data: trend, tension:0.25, pointRadius:0, borderWidth:2, borderColor:'#f59e0b' }
     ]},
     options:{
       plugins:{ legend:{ labels:{ color:'#cbd5e1' } }, tooltip:{ callbacks:{ title:()=>'' }}},
-      scales:{ x:{ display:false, grid:{ display:false } }, y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' } } }
+      scales:{ x:{ display:false, grid:{ display:false } }, y:{ ticks:{ color:'#94a3b8' }, grid:{ color:'rgba(148,163,184,0.15)' } } },
+      hover: { mode: 'nearest', intersect: false }
     }
   });
+
+  const canvas = document.getElementById('eloChart');
+  canvas.onclick = (evt)=>{
+    const pts = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: false }, true);
+    if (!pts || !pts.length) return;
+    const idx = pts[0].index;
+    if (typeof onPointClick === 'function') onPointClick(idx);
+  };
 }
 
+// Main load
 async function load(){
+  // Resolve player
   steamId = await resolveQuery();
   if(!steamId){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
 
   const { data: player } = await supa.from('players').select('*').eq('steam_id',steamId).single();
   if(!player){ document.getElementById('header').innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
 
-  // premium for header
+  // Premium badge in header
   const selfPremium = await isPremiumSteam(steamId);
   document.getElementById('header').innerHTML = renderHeaderCard(player, selfPremium);
   document.getElementById('copyBtn').onclick = async()=>{ await navigator.clipboard.writeText(steamId); };
 
-  // Timeline (ratings or fallback from matches)
-  let { data: rt } = await supa.from('ratings').select('at, elo_before, elo_after').eq('player_id', steamId).order('at', { ascending: true });
-  if(!rt || rt.length < 2){
-    const { data: mm } = await supa.from('matches')
-      .select('played_at,p1_id,p2_id,p1_elo_before,p1_elo_after,p2_elo_before,p2_elo_after')
-      .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`).order('played_at',{ascending:true}).limit(2000);
-    rt = (mm||[]).map(m=>{
-      const meIsP1 = m.p1_id===steamId;
-      return { at:m.played_at, elo_before: meIsP1?m.p1_elo_before:m.p2_elo_before, elo_after: meIsP1?m.p1_elo_after:m.p2_elo_after };
-    });
-  }
-  const labels = rt.map((_,i)=> i+1);
-  const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
-  drawElo(labels, values);
+  // ---- Elo Timeline built from matches (ensures click → match id)
+  const { data: allMatchesAsc } = await supa.from('matches')
+    .select('id, played_at, p1_id, p2_id, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after')
+    .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`)
+    .order('played_at', { ascending: true })
+    .limit(2000);
 
-  // Recent matches + qualities
+  let timelineLabels = [];
+  let timelineValues = [];
+  let timelineMatchIds = [];
+
+  if (allMatchesAsc && allMatchesAsc.length) {
+    let idx = 0;
+    for (const m of allMatchesAsc) {
+      const meIsP1 = m.p1_id === steamId;
+      const eloAfter = meIsP1 ? (m.p1_elo_after ?? m.p1_elo_before) : (m.p2_elo_after ?? m.p2_elo_before);
+      timelineLabels.push(++idx);                 // simple index on X
+      timelineValues.push(eloAfter ?? null);      // Elo
+      timelineMatchIds.push(m.id);                // keep match id for click
+    }
+    drawElo(timelineLabels, timelineValues, (pointIdx)=>{
+      const id = timelineMatchIds[pointIdx];
+      if (id) window.location.href = `match.html?id=${id}`;
+    });
+  } else {
+    // Fallback: ratings-based curve (no clickable points)
+    let { data: rt } = await supa.from('ratings').select('at, elo_before, elo_after').eq('player_id', steamId).order('at', { ascending: true });
+    if (!rt || !rt.length) {
+      document.getElementById('eloHint').textContent = 'No data available.';
+    } else {
+      const labels = rt.map((_,i)=> i+1);
+      const values = rt.map(x=> (x.elo_after ?? x.elo_before ?? null));
+      drawElo(labels, values, null);
+      document.getElementById('eloHint').textContent = 'No match IDs found for these points.';
+    }
+  }
+
+  // ---- Recent matches (50 last)
   const { data: matches } = await supa.from('matches')
     .select('id,played_at,p1_id,p2_id,p1_name,p2_name,winner,map_id,p1_elo_after,p2_elo_after,p1_elo_before,p2_elo_before')
     .or(`p1_id.eq.${steamId},p2_id.eq.${steamId}`).order('played_at',{ascending:false}).limit(50);
@@ -227,7 +262,8 @@ async function load(){
     const winP2 = winnerSide==='p2' ? `<span class="ml-2 text-emerald-400 text-xs">Win</span>` : ``;
 
     const p1Name = nameWithPremium(m.p1_id, m.p1_name || m.p1_id || 'P1');
-    const p2Name = nameWithPremium(m.p2_id, m.p2_name || m.p2_id || 'P2');
+    const p2Name = nameWithPremium(m.p2_id, m.p2_id || m.p2_id || 'P2');
+    const p2Display = m.p2_name || m.p2_id || 'P2';
 
     cont.innerHTML += `
       <a href="match.html?id=${m.id}" class="block rounded border border-slate-800 hover:border-indigo-500 bg-slate-900/40">
@@ -243,7 +279,7 @@ async function load(){
             ${winP1}
           </div>
           <div class="min-w-0 truncate">
-            <span class="font-semibold">${p2Name}</span>
+            <span class="font-semibold">${nameWithPremium(m.p2_id, p2Display)}</span>
             <span class="text-slate-400">(${p2Elo})</span>
             <span class="ml-2 text-slate-400">· Quality <span class="text-slate-100">${q2}</span></span>
             ${winP2}
