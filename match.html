@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
+<div class=\"max-w-6xl mx-auto p-4\"><div id=\"authbar\" class=\"mb-3\"></div></div>
   <div class="max-w-6xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
@@ -198,5 +199,54 @@ function subscribeRealtime(matchId) {
   subscribeRealtime(matchIdValue);
 })();
 </script>
+
+<script src="auth.js"></script>
+<script src="payments.js"></script>
 </body>
 </html>
+
+<script>
+(function(){
+  if (!window.supabase || !window.SUPA_URL || !window.SUPA_ANON) return;
+  const supa = window.supa || supabase.createClient(SUPA_URL, SUPA_ANON);
+  window.supa = supa;
+
+  async function queueAnalysisLimited(matchId, replayUrl) {
+    const btn = document.querySelector('#analyzeBtn');
+    const status = document.querySelector('#analysisStatus') || document.querySelector('#status') || document.createElement('div');
+    if(!status.id) { status.id = 'analysisStatus'; document.body.appendChild(status); }
+    if(btn) btn.disabled = true;
+    status.textContent = 'Requesting…';
+
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user){ status.textContent = 'Sign in with Discord to analyze.'; if(btn) btn.disabled=false; return; }
+
+    const { error } = await supa.rpc('request_analysis', { p_match_id: matchId, p_replay_url: replayUrl || null });
+    if (error) {
+      if (String(error.message).includes('free_daily_limit_reached')) {
+        status.innerHTML = 'Daily free limit reached (1/day). <a href=\"#\" id=\"goPro\" style=\"color:#fbbf24;text-decoration:underline;\">Go Premium (€2)</a>';
+        const a=document.getElementById('goPro'); if(a) a.onclick=(e)=>{e.preventDefault(); window.startCheckout();};
+      } else if (String(error.message).includes('not_authenticated')) {
+        status.textContent = 'Sign in with Discord to analyze.';
+      } else {
+        status.textContent = 'Error: ' + error.message;
+      }
+      if(btn) btn.disabled = false;
+      return;
+    }
+    status.textContent = 'Queued. Waiting for worker…';
+  }
+
+  // Try to auto-bind if elements present
+  function bind(){
+    const btn = document.querySelector('#analyzeBtn');
+    const matchIdEl = document.querySelector('[data-match-id]');
+    const replayUrlEl = document.querySelector('[data-replay-url]');
+    if(btn && matchIdEl){
+      btn.addEventListener('click', () => queueAnalysisLimited(Number(matchIdEl.dataset.matchId), replayUrlEl?.dataset?.replayUrl || null));
+    }
+  }
+  document.addEventListener('DOMContentLoaded', bind);
+  window.queueAnalysisLimited = queueAnalysisLimited;
+})();
+</script>

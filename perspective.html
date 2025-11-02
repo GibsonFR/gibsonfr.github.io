@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
+<div class=\"max-w-6xl mx-auto p-4\"><div id=\"authbar\" class=\"mb-3\"></div></div>
   <div class="max-w-6xl mx-auto p-4">
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
 
@@ -248,5 +249,44 @@ async function init(){
 }
 init();
 </script>
+
+<script src="auth.js"></script>
+<script src="payments.js"></script>
 </body>
 </html>
+
+<script>
+(function(){
+  if (!window.supabase || !window.SUPA_URL || !window.SUPA_ANON) return;
+  const supa = window.supa || supabase.createClient(SUPA_URL, SUPA_ANON);
+  window.supa = supa;
+
+  function getParam(name){ const u=new URL(location.href); return u.searchParams.get(name); }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const buildBtn = document.querySelector('#buildBtn');
+    const status = document.querySelector('#status') || document.createElement('div');
+    if(!status.id){ status.id='status'; document.body.appendChild(status); }
+    const steamId = window.steamId || getParam('steam_id') || window.currentSteamId || null;
+    if(!buildBtn) return;
+
+    buildBtn.addEventListener('click', async () => {
+      const { data:{ user } } = await supa.auth.getUser();
+      if(!user){ status.textContent = 'Sign in with Discord to use Perspective.'; return; }
+      if(!steamId){ status.textContent = 'Missing steam_id.'; return; }
+      status.textContent = 'Queuing…';
+      const { error } = await supa.rpc('request_perspective', { p_player_id: String(steamId), p_window: 0 });
+      if (error) {
+        if (String(error.message).includes('premium_required')) {
+          status.innerHTML = 'Perspective is <b>Premium</b>. <a href=\"#\" id=\"goPro\" style=\"color:#fbbf24;text-decoration:underline;\">Go Premium (€2)</a>';
+          const a=document.getElementById('goPro'); if(a) a.onclick=(e)=>{e.preventDefault(); window.startCheckout();};
+        } else if (String(error.message).includes('not_authenticated')) {
+          status.textContent = 'Sign in with Discord to use Perspective.';
+        } else status.textContent = 'Error: ' + error.message;
+        return;
+      }
+      status.textContent = 'Queued. Waiting for worker…';
+    });
+  });
+})();
+</script>
