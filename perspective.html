@@ -30,6 +30,14 @@
     .card{border:1px solid rgb(30 41 59);background:rgba(15,23,42,.4);border-radius:1rem;padding:1rem;overflow:hidden}
     .pill{border-radius:9999px;border:1px solid rgb(51 65 85);background:rgba(30,41,59,.6);color:#e5e7eb}
     .pill-active{background:rgba(245,158,11,.2);color:#fbbf24;border-color:rgba(245,158,11,.3)}
+    /* Compare header metrics */
+    .kv{display:grid;grid-template-columns:1fr auto;gap:.25rem .75rem}
+    .kv .k{color:#cbd5e1;font-size:.825rem}
+    .kv .v{font-weight:700;white-space:nowrap}
+    @media (max-width: 768px){
+      .kv{grid-template-columns:1fr;gap:.15rem}
+      .kv .v{white-space:normal}
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100">
@@ -536,11 +544,10 @@ function sectionQuality(m){
     </div>`);
 }
 
-/* ===== Dayparts as TABS ===== */
+/* ===== Dayparts as TABS (déjà intégrés) ===== */
 function sectionSessionsAndTime(m){
   const dp = (m.dayparts||[]);
   const encoded = encodeURIComponent(JSON.stringify(dp));
-  // default selection: the daypart with most matches (or first)
   const defaultKey = dp.length ? dp.reduce((a,b)=> b.matches>a.matches? b:a).key : 'Morning';
 
   return section('Playtime & sessions',
@@ -555,24 +562,20 @@ function sectionSessionsAndTime(m){
     <div class="md:col-span-2">
       <div class="flex items-center justify-between gap-2">
         <div class="text-slate-400">Win rate by daypart (local)</div>
-        <div class="dp-tabs flex flex-wrap gap-2">
-          <!-- tabs rendered by JS -->
-        </div>
+        <div class="dp-tabs flex flex-wrap gap-2"></div>
       </div>
       <div class="dp-panel mt-3 p-4 rounded-xl border border-slate-800 bg-slate-900/40"></div>
       <div class="hidden" data-dp-scope data-dp-data="${encoded}" data-dp-selected="${defaultKey}"></div>
     </div>
   </div>`);
 }
-
-/* Mount tabs after render */
 function mountDaypartTabs(scope){
   (scope||document).querySelectorAll('[data-dp-scope]').forEach(box=>{
     const data = JSON.parse(decodeURIComponent(box.getAttribute('data-dp-data')||'[]'));
     if(!data.length) return;
     let selected = box.getAttribute('data-dp-selected') || data[0].key;
 
-    const wrap = box.parentElement; // container holding tabs + panel
+    const wrap = box.parentElement;
     const tabsEl  = wrap.querySelector('.dp-tabs');
     const panelEl = wrap.querySelector('.dp-panel');
 
@@ -594,17 +597,15 @@ function mountDaypartTabs(scope){
           <div class="min-w-[180px] w-full sm:w-auto">${bar(p.winrate||0,'Win rate')}</div>
         </div>`;
     }
-    function bind(){
-      tabsEl.addEventListener('click', e=>{
-        const b = e.target.closest('[data-dp]');
-        if(!b) return;
-        selected = b.getAttribute('data-dp');
-        box.setAttribute('data-dp-selected', selected);
-        renderTabs(); renderPanel();
-      });
-    }
+    tabsEl.addEventListener('click', e=>{
+      const b = e.target.closest('[data-dp]');
+      if(!b) return;
+      selected = b.getAttribute('data-dp');
+      box.setAttribute('data-dp-selected', selected);
+      renderTabs(); renderPanel();
+    });
 
-    renderTabs(); renderPanel(); bind();
+    renderTabs(); renderPanel();
   });
 }
 
@@ -629,23 +630,37 @@ function sectionMaps(maps, filter){
     </div>`).join('');
   return section('Per-map breakdown', `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`);
 }
+
+/* >>> Clean table for opponents (labels explicites) */
 function sectionOpponents(opps){
   if(!opps?.length) return section('Most faced opponents','<div class="text-slate-400 text-sm">No data.</div>');
-  const rows = opps.slice(0,20).map(o=>{
-    const wr = o.winrate!=null? Math.round(o.winrate*1000)/10 : null;
-    return `<tr>
+  const head = `
+    <thead class="bg-slate-900/60 text-slate-300">
+      <tr>
+        <th class="py-2 pl-3 text-left font-medium">Opponent</th>
+        <th class="py-2 text-right font-medium">Win rate</th>
+        <th class="py-2 pr-3 text-right font-medium">Avg quality</th>
+      </tr>
+    </thead>`;
+  const rows = opps.slice(0,50).map(o=>{
+    const name = o.name || o.id || 'Unknown';
+    const wr = o.winrate!=null? (Math.round(o.winrate*1000)/10)+'%' : '—';
+    const q  = num(o.average_quality,1);
+    return `<tr class="border-t border-slate-800">
       <td class="py-2 pl-3">
-        <a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(o.id)}">${esc(o.name||o.id)}</a>
-        <span class="text-slate-400"> · ${o.matches} matches</span>
+        <a class="text-indigo-400 hover:underline break-words" href="player.html?steam_id=${encodeURIComponent(o.id)}">${esc(name)}</a>
+        <span class="text-slate-500 ml-1">${o.matches||0} matches</span>
       </td>
-      <td class="py-2 pr-3 text-right">${wr==null?'—':wr+'%'} · avg quality ${num(o.average_quality,1)}</td>
+      <td class="py-2 text-right">${wr}</td>
+      <td class="py-2 pr-3 text-right">${q}</td>
     </tr>`;
   }).join('');
   return section('Most faced opponents',
     `<div class="overflow-x-auto rounded border border-slate-800">
-      <table class="min-w-full text-sm"><tbody class="divide-y divide-slate-800">${rows}</tbody></table>
+      <table class="min-w-full text-sm">${head}<tbody>${rows}</tbody></table>
     </div>`);
 }
+
 function renderAll(contentEl, metrics){
   contentEl.innerHTML = `
     <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -881,7 +896,7 @@ async function init(){
     }
   };
 
-  // Compare (mirror)
+  // Compare (mirror) — header encarts refaits en grille .kv
   async function resolvePlayerSmart(text){
     if(!text) return null;
     if(/^\d{5,}$/.test(text)) return text;
@@ -919,17 +934,21 @@ async function init(){
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="mirror-row">
-        <div class="card text-right reveal">
-          <div class="text-lg font-semibold">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
-          <div class="text-slate-300">Win rate <b>${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</b></div>
-          <div class="text-slate-300 mt-1">Average quality <b>${num(A.quality.average,1)}</b></div>
-          <div class="text-slate-300 mt-1">Average speed <b>${num(A.speed.average_mps,2)} m/s</b></div>
+        <div class="card reveal">
+          <div class="text-lg font-semibold truncate" title="${esc(nameA)}">${labelWithPremium(steamId, nameA, premSet.has(String(steamId)))}</div>
+          <div class="mt-2 kv">
+            <div class="k">Win rate</div><div class="v">${A.winrate!=null? Math.round(A.winrate*1000)/10+'%':'—'}</div>
+            <div class="k">Average quality</div><div class="v">${num(A.quality.average,1)}</div>
+            <div class="k">Average speed</div><div class="v">${num(A.speed.average_mps,2)} m/s</div>
+          </div>
         </div>
         <div class="card reveal">
-          <div class="text-lg font-semibold">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
-          <div class="text-slate-300">Win rate <b>${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</b></div>
-          <div class="text-slate-300 mt-1">Average quality <b>${num(B.quality.average,1)}</b></div>
-          <div class="text-slate-300 mt-1">Average speed <b>${num(B.speed.average_mps,2)} m/s</b></div>
+          <div class="text-lg font-semibold truncate" title="${esc(nameB)}">${labelWithPremium(other, nameB, premSet.has(String(other)))}</div>
+          <div class="mt-2 kv">
+            <div class="k">Win rate</div><div class="v">${B.winrate!=null? Math.round(B.winrate*1000)/10+'%':'—'}</div>
+            <div class="k">Average quality</div><div class="v">${num(B.quality.average,1)}</div>
+            <div class="k">Average speed</div><div class="v">${num(B.speed.average_mps,2)} m/s</div>
+          </div>
         </div>
       </div>`;
     const rows = document.createElement('div');
