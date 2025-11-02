@@ -4,152 +4,108 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>CG Ranked — Player</title>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root {
-  --bg: #0b0f14; --panel:#121823; --muted:#8aa0b2; --text:#e9f0f6; --border:#1a2533;
-  --row:#0e141d; --rowHover:#0f1823; --brand:#56c271;
-}
-* { box-sizing: border-box; }
-html,body { margin:0; background:var(--bg); color:var(--text); font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
-a { color:#9ad0ff; text-decoration:none; }
-a:hover { text-decoration:underline; }
-header.nav { position:sticky; top:0; background:#0f151d; border-bottom:1px solid var(--border); padding:14px 20px; display:flex; gap:18px; align-items:center; }
-.brand { display:flex; align-items:center; gap:10px; font-weight:700; }
-.brand .logo { width:28px; height:28px; border-radius:6px; background:linear-gradient(135deg, var(--brand), #9be29e); }
-.container { max-width:1100px; margin:0 auto; padding:22px 18px; }
-.panel { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; }
-.grid { display:grid; grid-template-columns: 1fr; gap:16px; }
-.header { display:flex; align-items:center; gap:14px; }
-.avatar { width:54px; height:54px; border-radius:50%; background:#1a2330; }
-.small { color:var(--muted); font-size:12px; }
-.table-wrap { overflow:auto; border-radius:12px; border:1px solid var(--border); }
-table { width:100%; border-collapse:separate; border-spacing:0; }
-thead th { position:sticky; top:0; background:#0e1620; color:#a8bdcc; font-weight:600; text-align:left; padding:12px; border-bottom:1px solid var(--border); }
-tbody td { padding:12px; border-bottom:1px solid var(--border); }
-tbody tr { background:var(--row); }
-tbody tr:hover { background:var(--rowHover); }
-.card-row { display:flex; gap:16px; flex-wrap:wrap; }
-.card { background:#0e1620; border:1px solid var(--border); padding:12px 14px; border-radius:12px; min-width:140px; }
+:root{--bg:#0b1420;--panel:#101b2a;--muted:#8aa0b8;--text:#e6f0ff;--accent:#2ea3ff;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui}
+nav{display:flex;gap:24px;align-items:center;padding:16px 24px;border-bottom:1px solid #1c2a3f;background:#0d1623}
+nav .brand{font-weight:700}
+.container{max-width:1100px;margin:24px auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid #1b2940;border-radius:12px;padding:16px}
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+h1{margin:0 0 8px 0;font-size:22px}
+.kpis{display:flex;gap:16px;flex-wrap:wrap}
+.kpi{background:#0c1624;border:1px solid #1b2940;border-radius:12px;padding:12px 16px;min-width:120px}
+.kpi .v{font-size:20px;font-weight:700}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px;border-bottom:1px solid #1b2940;text-align:left}
+th{color:#9fb6cf;font-weight:600}
 </style>
 </head>
 <body>
-<header class="nav">
-  <div class="brand"><div class="logo"></div><a href="./index.html" style="color:inherit;text-decoration:none;"><span>CG Ranked</span></a></div>
-</header>
+<nav>
+  <div class="brand">CG Ranked</div>
+  <a href="/#/">Leaderboard</a>
+</nav>
 
-<div class="container">
-  <div class="panel">
-    <div class="header">
-      <div class="avatar"></div>
-      <div>
-        <div id="pname" style="font-size:20px; font-weight:700;">Player</div>
-        <div id="pid" class="small">–</div>
-      </div>
+<div class="container grid">
+  <section class="panel">
+    <h1 id="title">Player</h1>
+    <div class="kpis">
+      <div class="kpi"><div class="t">Elo</div><div class="v" id="elo">–</div></div>
+      <div class="kpi"><div class="t">RP</div><div class="v" id="rp">–</div></div>
+      <div class="kpi"><div class="t">Games</div><div class="v" id="games">–</div></div>
+      <div class="kpi"><div class="t">Win%</div><div class="v" id="winp">–</div></div>
     </div>
-    <div class="card-row" style="margin-top:12px;">
-      <div class="card"><div class="small">Elo</div><div id="kElo" style="font-size:18px;">–</div></div>
-      <div class="card"><div class="small">RP</div><div id="kRp" style="font-size:18px;">–</div></div>
-      <div class="card"><div class="small">Games</div><div id="kGames" style="font-size:18px;">–</div></div>
-      <div class="card"><div class="small">Win%</div><div id="kWin" style="font-size:18px;">–</div></div>
-    </div>
-    <div style="margin-top:16px;">
-      <canvas id="eloChart" height="120"></canvas>
-    </div>
-  </div>
+    <canvas id="eloChart" height="120"></canvas>
+  </section>
 
-  <div class="panel">
-    <h2 style="margin-top:0;">Match history</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th><th>Opponent</th><th>Result</th><th>Score</th><th>Map</th>
-          </tr>
-        </thead>
-        <tbody id="hist"></tbody>
-      </table>
-    </div>
-  </div>
+  <section class="panel">
+    <h1>Match history</h1>
+    <table id="hist">
+      <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Score</th><th>Map</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
 </div>
 
 <script>
-const SUPABASE_URL  = "https://qnxjrkedbplfrlkjqifh.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFueGpya2VkYnBsZnJsa2pxaWZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMzU2ODMsImV4cCI6MjA3NzYxMTY4M30.WhFaUXjM7i0c4b-R5MHrs67R_xdTBp7d82OI62x4G9M";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const SUPABASE_URL  = "https://REPLACE_WITH_YOURS.supabase.co";
+const SUPABASE_ANON = "REPLACE_WITH_PUBLIC_ANON_KEY";
+const headers = {"apikey": SUPABASE_ANON, "Authorization": "Bearer " + SUPABASE_ANON};
 
 const params = new URLSearchParams(location.search);
-const SID = params.get('sid');
+const sid = params.get("sid");
 
-function el(tag, attrs={}, ...children){
-  const e = document.createElement(tag);
-  for(const [k,v] of Object.entries(attrs)){ if(k==='class') e.className=v; else e.setAttribute(k,v);}
-  for(const c of children){ if(c==null) continue; e.appendChild(c.nodeType?c:document.createTextNode(c)); }
-  return e;
-}
-const fmtDate = (s)=> new Date(s).toLocaleString();
-const shortId = (sid)=> (sid? sid.slice(-6): "-");
+function td(t){const e=document.createElement("td"); e.textContent=t; return e}
+function esc(s){return (s??"").toString()}
 
-let chart;
-function drawChart(labels, values){
-  const ctx = document.getElementById('eloChart').getContext('2d');
-  if(chart) chart.destroy();
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets: [{ label:'Elo', data: values, tension: .25 }] },
-    options: {
-      responsive: true,
-      plugins: { legend: { display:false } },
-      scales: {
-        x: { ticks: { color:'#aac' } },
-        y: { ticks: { color:'#aac' } }
-      }
-    }
-  });
+async function fetchJSON(url){
+  const r = await fetch(url, {headers});
+  if(!r.ok) throw new Error(await r.text());
+  return await r.json();
 }
 
 async function load(){
-  if(!SID) { document.getElementById('pname').textContent = 'Unknown player'; return; }
-  // player card
-  const { data: players } = await sb.from('players').select('*').eq('steam_id', SID).limit(1);
-  const p = players && players[0];
-  document.getElementById('pname').textContent = p?.username || SID;
-  document.getElementById('pid').textContent = SID;
-  document.getElementById('kElo').textContent = p?.elo ?? '–';
-  document.getElementById('kRp').textContent = p?.rp ?? '–';
-  document.getElementById('kGames').textContent = p?.games_played ?? '–';
-  const winPct = (!p?.games_played? 0 : Math.round(100 * (p?.wins||0) / (p?.games_played||1)));
-  document.getElementById('kWin').textContent = winPct + '%';
+  const p = await fetchJSON(`${SUPABASE_URL}/rest/v1/players?select=*&steam_id=eq.${encodeURIComponent(sid)}`);
+  const me = p[0];
+  document.getElementById("title").textContent = (me?.username || sid) + " (" + sid + ")";
+  document.getElementById("elo").textContent = esc(me?.elo ?? "–");
+  document.getElementById("rp").textContent = esc(me?.rp ?? "–");
+  const games = Number(me?.games_played||0), wins = Number(me?.wins||0);
+  document.getElementById("games").textContent = games;
+  document.getElementById("winp").textContent = games ? Math.round(100*wins/games)+"%" : "0%";
 
-  // elo history
-  const { data: ratings } = await sb.from('ratings').select('at, elo_after').eq('player_id', SID).order('at', { ascending:true }).limit(500);
-  const labels = (ratings||[]).map(r=> new Date(r.at).toLocaleString());
-  const values = (ratings||[]).map(r=> r.elo_after);
-  if(values.length) drawChart(labels, values);
+  const ratings = await fetchJSON(`${SUPABASE_URL}/rest/v1/ratings?select=at,elo_after&player_id=eq.${encodeURIComponent(sid)}&order=at.asc`);
+  const labels = ratings.map(r => (r.at||"").replace("T"," ").split(".")[0]);
+  const series = ratings.map(r => r.elo_after||0);
+  const ctx = document.getElementById("eloChart").getContext("2d");
+  new Chart(ctx, {
+    type: 'line',
+    data: {labels, datasets:[{label:"Elo", data:series}]},
+    options: {responsive:true, plugins:{legend:{display:false}}, scales:{x:{display:false}}}
+  });
 
-  // match history
-  const { data: played } = await sb
-    .from('matches')
-    .select('*')
-    .or(`p1_id.eq.${'{SID}'},p2_id.eq.${'{SID}'}`)
-    .order('played_at', { ascending:false })
-    .limit(100);
-
-  const tb = document.getElementById('hist'); tb.innerHTML = "";
-  (played||[]).forEach(m=> {
-    const opp = m.p1_id===SID ? m.p2_id : m.p1_id;
-    const res = m.winner_id===SID ? 'Win' : (m.winner_id? 'Loss' : '—');
-    const score = (SID===m.p1_id) ? `${'{m.p1_score}'}–${'{m.p2_score}'}` : `${'{m.p2_score}'}–${'{m.p1_score}'}`;
-    tb.appendChild(el('tr',{},
-      el('td',{}, fmtDate(m.played_at)),
-      el('td',{}, shortId(opp)),
-      el('td',{}, res),
-      el('td',{}, (m.p1_score??'-')+'–'+(m.p2_score??'-')),
-      el('td',{}, String(m.map_id??'')),
-    ));
+  // build history by joining matches where player is p1 or p2
+  const histBody = document.querySelector("#hist tbody");
+  histBody.innerHTML = "";
+  const m1 = await fetchJSON(`${SUPABASE_URL}/rest/v1/matches?select=*&p1_id=eq.${encodeURIComponent(sid)}&order=played_at.desc&limit=100`);
+  const m2 = await fetchJSON(`${SUPABASE_URL}/rest/v1/matches?select=*&p2_id=eq.${encodeURIComponent(sid)}&order=played_at.desc&limit=100`);
+  const all = [...m1, ...m2].sort((a,b)=> (a.played_at<b.played_at?1:-1));
+  all.forEach(m => {
+    const tr = document.createElement("tr");
+    const youAreP1 = m.p1_id===sid;
+    const opp = youAreP1 ? m.p2_id : m.p1_id;
+    const myScore = youAreP1 ? (m.p1_score||0) : (m.p2_score||0);
+    const opScore = youAreP1 ? (m.p2_score||0) : (m.p1_score||0);
+    const res = myScore>opScore ? "Win" : (myScore<opScore ? "Loss" : "Draw");
+    tr.appendChild(td((m.played_at||"").replace("T"," ").split(".")[0]));
+    tr.appendChild(td(opp));
+    tr.appendChild(td(res));
+    tr.appendChild(td(`${myScore}-${opScore}`));
+    tr.appendChild(td(m.map_id||"-"));
+    histBody.appendChild(tr);
   });
 }
 

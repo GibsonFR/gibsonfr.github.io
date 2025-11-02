@@ -5,225 +5,134 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>CG Ranked — Live Leaderboard</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg: #0b0f14;
-  --panel: #121823;
-  --muted: #8aa0b2;
-  --text: #e9f0f6;
-  --brand: #56c271;
-  --accent: #2b8a3e;
-  --row: #0e141d;
-  --rowHover: #0f1823;
-  --border: #1a2533;
-}
-* { box-sizing: border-box; }
-html,body { margin:0; background:var(--bg); color:var(--text); font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
-a { color:#9ad0ff; text-decoration:none; }
-a:hover { text-decoration:underline; }
-header.nav {
-  position:sticky; top:0; z-index:10;
-  background:linear-gradient(180deg, #0f151d, #0c1219);
-  border-bottom:1px solid var(--border);
-  padding:14px 20px; display:flex; align-items:center; gap:18px;
-}
-.brand { display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.3px; }
-.brand .logo { width:28px; height:28px; border-radius:6px; background:linear-gradient(135deg, var(--brand), #9be29e); }
-.brand span { font-size:18px; }
-.header-tabs a { padding:8px 10px; border-radius:8px; color:var(--muted); }
-.header-tabs a.active, .header-tabs a:hover { background:#12202a; color:#bfe3ff; }
-.container { max-width:1150px; margin:0 auto; padding:22px 18px; }
-h1 { margin:12px 0 6px; font-size:26px; }
-h2 { margin:0 0 12px; font-size:18px; color:#cfe3f3; }
-.panel { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; }
-.grid { display:grid; grid-template-columns: 1.2fr .8fr; gap:16px; }
-.controls { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:12px; }
-.search { flex:1; display:flex; gap:8px; }
-.search input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:#0b1219; color:#fff; }
-.search button { padding:10px 12px; border-radius:10px; border:1px solid #294b35; background:#102218; color:#bdf1c8; cursor:pointer; }
-.table-wrap { overflow:auto; border-radius:12px; border:1px solid var(--border); }
-table { width:100%; border-collapse:separate; border-spacing:0; font-variant-numeric: tabular-nums; }
-thead th { position:sticky; top:0; background: #0e1620; color:#a8bdcc; font-weight:600; text-align:left; padding:12px; border-bottom:1px solid var(--border); }
-tbody td { padding:12px; border-bottom:1px solid var(--border); }
-tbody tr { background:var(--row); }
-tbody tr:hover { background:var(--rowHover); }
-.rank { width:40px; text-align:right; color:#98a9b9; }
-.player-cell { display:flex; align-items:center; gap:10px; }
-.avatar { width:28px; height:28px; border-radius:50%; background:#1a2330; display:inline-block; }
-.badge { padding:3px 8px; border-radius:999px; border:1px solid #294b35; background:#0f1f16; color:#bfeacd; font-size:12px; }
-.kpi { display:flex; gap:10px; flex-wrap:wrap; }
-.kpi .pill { padding:6px 10px; border-radius:10px; background:#0e1620; border:1px solid var(--border); color:#c4d5e3; font-size:13px; }
-.empty { color:var(--muted); padding:10px 0; }
-.footer { color:#87a0b6; font-size:12px; margin-top:14px; }
-.right-panel h3 { margin:0 0 8px; font-size:16px; }
-.small { font-size:12px; color:#8aa0b2; }
+:root{--bg:#0b1420;--panel:#101b2a;--muted:#8aa0b8;--text:#e6f0ff;--accent:#2ea3ff;}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,Segoe UI,Roboto,Arial}
+nav{display:flex;gap:24px;align-items:center;padding:16px 24px;border-bottom:1px solid #1c2a3f;background:#0d1623;position:sticky;top:0}
+nav .brand{font-weight:700}
+.container{max-width:1200px;margin:24px auto;padding:0 16px}
+.panel{background:var(--panel);border:1px solid #1b2940;border-radius:12px;padding:16px}
+.grid{display:grid;grid-template-columns:1fr 420px;gap:16px}
+h1{margin:0 0 12px 0;font-size:20px} .muted{color:var(--muted)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px;border-bottom:1px solid #1b2940;text-align:left}
+th{color:#9fb6cf;font-weight:600}
+a{color:var(--text);text-decoration:none}
+a:hover{color:var(--accent)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#14263d;color:#c7ddff;font-size:12px}
+.search{display:flex;gap:8px}
+input[type="text"]{background:#0c1420;border:1px solid #1b2940;border-radius:8px;color:var(--text);padding:10px 12px;flex:1}
+button{background:var(--accent);border:0;color:#001222;border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
-<header class="nav">
-  <div class="brand"><div class="logo"></div><span>CG Ranked</span></div>
-  <nav class="header-tabs">
-    <a class="active" href="./index.html">Leaderboard</a>
-    <a href="./player.html">Players</a>
-  </nav>
-</header>
-
+<nav>
+  <div class="brand">CG Ranked</div>
+  <a href="#/leaderboard">Leaderboard</a>
+  <a href="#/players">Players</a>
+</nav>
 <div class="container">
-  <h1>Live Leaderboard</h1>
   <div class="grid">
     <section class="panel">
-      <div class="controls">
-        <div class="kpi">
-          <div class="pill" id="kpiPlayers">Players: –</div>
-          <div class="pill" id="kpiGames">Matches: –</div>
-          <div class="pill" id="kpiUpdated">Updated: –</div>
-        </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h1>Live Leaderboard</h1>
         <div class="search">
-          <input id="q" placeholder="Search player by name or SteamID…"/>
-          <button id="btnSearch">Search</button>
+          <input id="q" placeholder="Search player by name or SteamID64...">
+          <button onclick="searchPlayer()">Search</button>
         </div>
       </div>
-      <div class="table-wrap">
-        <table id="tbl">
-          <thead>
-            <tr>
-              <th class="rank">#</th>
-              <th>Player</th>
-              <th>Rank</th>
-              <th>Elo</th>
-              <th>RP</th>
-              <th>Games</th>
-              <th>Win%</th>
-              <th>Last active</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
-      <div class="empty" id="status">Loading…</div>
-      <div class="footer small">Auto-refreshes on new matches.</div>
+      <div class="muted" id="meta"></div>
+      <table id="lb">
+        <thead><tr>
+          <th>#</th><th>Player</th><th>Rank</th><th>Elo</th><th>RP</th><th>Games</th><th>Win%</th><th>Last active</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
     </section>
-
-    <aside class="panel right-panel">
-      <h3>Recent Matches</h3>
-      <div class="small" id="mStatus">Loading…</div>
-      <div class="table-wrap" style="margin-top:8px;">
-        <table id="mtbl">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>P1</th>
-              <th>P2</th>
-              <th>Score</th>
-              <th>Map</th>
-            </tr>
-          </thead>
-          <tbody id="mtbody"></tbody>
-        </table>
-      </div>
+    <aside class="panel">
+      <h1 style="margin-bottom:8px">Recent Matches</h1>
+      <table id="last">
+        <thead><tr><th>When</th><th>P1</th><th>P2</th><th>Score</th><th>Map</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </aside>
   </div>
 </div>
 
 <script>
-const SUPABASE_URL  = "https://qnxjrkedbplfrlkjqifh.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFueGpya2VkYnBsZnJsa2pxaWZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMzU2ODMsImV4cCI6MjA3NzYxMTY4M30.WhFaUXjM7i0c4b-R5MHrs67R_xdTBp7d82OI62x4G9M";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// ====== CONFIG (fill with your public anon key & URL) ======
+const SUPABASE_URL  = "https://REPLACE_WITH_YOURS.supabase.co";
+const SUPABASE_ANON = "REPLACE_WITH_PUBLIC_ANON_KEY";
+// ===========================================================
 
-function el(tag, attrs={}, ...children){
-  const e = document.createElement(tag);
-  for(const [k,v] of Object.entries(attrs)){ if(k==='class') e.className=v; else e.setAttribute(k,v);}
-  for(const c of children){ if(c==null) continue; e.appendChild(c.nodeType?c:document.createTextNode(c)); }
-  return e;
-}
-const fmtPct = (w,g)=> (!g? "0%": Math.round((+g? (100*(+w||0)/(+g||1)):0))+"%");
-const fmtDate = (s)=> new Date(s).toLocaleString();
-const shortId = (sid)=> (sid? sid.slice(-6): "-");
+const headers = {"apikey": SUPABASE_ANON, "Authorization": "Bearer " + SUPABASE_ANON};
 
-async function loadKPIs(){
-  const [p,m] = await Promise.all([
-    sb.from('players').select('steam_id',{ count:'exact', head:true }),
-    sb.from('matches').select('id',{ count:'exact', head:true }),
-  ]);
-  document.getElementById('kpiPlayers').textContent = "Players: " + (p.count ?? "–");
-  document.getElementById('kpiGames').textContent   = "Matches: " + (m.count ?? "–");
-  document.getElementById('kpiUpdated').textContent = "Updated: " + new Date().toLocaleTimeString();
+async function fetchJSON(url) {
+  const r = await fetch(url, {headers});
+  if (!r.ok) throw new Error(await r.text());
+  return await r.json();
 }
 
-async function loadLeaderboard(q=null){
-  const status = document.getElementById('status');
-  const tbody = document.getElementById('tbody');
-  status.textContent = "Loading…"; tbody.innerHTML = "";
+function esc(s){return (s??"").toString()}
+function td(text){const el=document.createElement("td"); el.textContent=text; return el}
+function linkPlayer(id, name){
+  const a=document.createElement("a");
+  a.href=`/player.html?sid=${encodeURIComponent(id)}`;
+  a.textContent=name||id;
+  return a;
+}
 
-  let query = sb.from('players').select('*').order('elo', { ascending:false }).limit(200);
-  if(q && q.trim()) {
-    query = sb.from('players')
-      .select('*')
-      .or(`username.ilike.%${{q}}%,steam_id.ilike.%${{q}}%`)
-      .order('elo', { ascending:false })
-      .limit(200);
+async function load() {
+  const meta = document.getElementById("meta");
+  const tbody = document.querySelector("#lb tbody");
+  const last  = document.querySelector("#last tbody");
+  tbody.innerHTML = ""; last.innerHTML = "";
+  try{
+    const players = await fetchJSON(`${SUPABASE_URL}/rest/v1/players?select=*&order=rp.desc,elo.desc&limit=200`);
+    const matches = await fetchJSON(`${SUPABASE_URL}/rest/v1/matches?select=*&order=played_at.desc&limit=20`);
+
+    meta.textContent = `Players: ${players.length} | Matches: ${matches.length} | Updated: ${new Date().toLocaleTimeString()}`;
+
+    players.forEach((p,i)=>{
+      const tr=document.createElement("tr");
+      tr.appendChild(td(i+1));
+      const name=document.createElement("td"); name.appendChild(linkPlayer(p.steam_id, p.username)); tr.appendChild(name);
+      tr.appendChild(td(esc(p.rank)||"-"));
+      tr.appendChild(td(esc(p.elo)));
+      tr.appendChild(td(esc(p.rp)||"0"));
+      tr.appendChild(td(esc(p.games_played)||"0"));
+      const wins = Number(p.wins||0), games = Number(p.games_played||0);
+      const winpct = games ? Math.round(100*wins/games) : 0;
+      tr.appendChild(td(winpct+"%"));
+      tr.appendChild(td((p.last_active_at||"").replace("T"," ").split(".")[0]));
+      tbody.appendChild(tr);
+    });
+
+    matches.forEach(m=>{
+      const tr=document.createElement("tr");
+      tr.appendChild(td((m.played_at||"").replace("T"," ").split(".")[0]));
+      tr.appendChild(td(m.p1_id?.slice(-6)||""));
+      tr.appendChild(td(m.p2_id?.slice(-6)||""));
+      tr.appendChild(td(`${m.p1_score||0}-${m.p2_score||0}`));
+      tr.appendChild(td(m.map_id||"-"));
+      last.appendChild(tr);
+    });
+
+  }catch(e){
+    meta.textContent = "Failed to load data: " + e.message;
   }
-  const { data, error } = await query;
-  if(error) { status.textContent = "Error: "+error.message; return; }
-  if(!data || !data.length) { status.textContent = "No players yet."; return; }
-  status.textContent = "";
-
-  data.forEach((row, idx)=>{
-    const link = el('a', { href: './player.html?sid='+encodeURIComponent(row.steam_id) }, row.username || row.steam_id);
-    const tr = el('tr', {},
-      el('td', { class:'rank' }, String(idx+1)),
-      el('td', {},
-        el('div', { class:'player-cell' },
-          el('span', { class:'avatar' },""),
-          el('div',{},
-            el('div', {}, link),
-            el('div', { class:'small', style:'opacity:.85' }, row.steam_id)
-          )
-        )
-      ),
-      el('td', {}, row.rank || ""),
-      el('td', {}, row.elo==null? "": String(row.elo)),
-      el('td', {}, row.rp==null? "": String(row.rp)),
-      el('td', {}, row.games_played==null? "": String(row.games_played)),
-      el('td', {}, fmtPct(row.wins||0, row.games_played||0)),
-      el('td', {}, row.last_active_at? fmtDate(row.last_active_at): "-")
-    );
-    tbody.appendChild(tr);
-  });
 }
 
-async function loadMatches(){
-  const s = document.getElementById('mStatus');
-  const tb = document.getElementById('mtbody');
-  s.textContent = "Loading…"; tb.innerHTML = "";
-  const { data, error } = await sb.from('matches').select('*').order('played_at', { ascending:false }).limit(15);
-  if(error) { s.textContent = "Error: "+error.message; return; }
-  if(!data || !data.length) { s.textContent = "No matches yet."; return; }
-  s.textContent = "";
-  data.forEach(m=>{
-    tb.appendChild(el('tr',{},
-      el('td',{}, fmtDate(m.played_at)),
-      el('td',{}, shortId(m.p1_id)),
-      el('td',{}, shortId(m.p2_id)),
-      el('td',{}, (m.p1_score??'-')+'–'+(m.p2_score??'-')),
-      el('td',{}, String(m.map_id??''))
-    ));
-  });
+function searchPlayer(){
+  const v=document.getElementById("q").value.trim();
+  if(!v) return;
+  // naive: if numeric assume steamid, else username query page uses server-side filter
+  location.href = "/player.html?sid=" + encodeURIComponent(v);
 }
 
-document.getElementById('btnSearch').addEventListener('click', ()=> loadLeaderboard(document.getElementById('q').value));
-document.getElementById('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter') document.getElementById('btnSearch').click(); });
-
-async function init(){
-  await Promise.all([loadKPIs(), loadLeaderboard(), loadMatches()]);
-  try {
-    sb.channel('pub:players').on('postgres_changes', { event:'*', schema:'public', table:'players' }, ()=>{ loadKPIs(); loadLeaderboard(document.getElementById('q').value); }).subscribe();
-    sb.channel('pub:matches').on('postgres_changes', { event:'*', schema:'public', table:'matches' }, ()=>{ loadKPIs(); loadMatches(); }).subscribe();
-  } catch(e) {}
-}
-init();
+load();
+setInterval(load, 15000);
 </script>
 </body>
 </html>
