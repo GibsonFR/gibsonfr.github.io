@@ -54,10 +54,8 @@
     const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
     // ---------- PREMIUM MARKING ----------
-    // Set of premium steam IDs. Filled from DB (profiles) and at least for the signed-in user.
     const premiumSteam = new Set();
 
-    // Crown icon (inline SVG). Tooltip set on the wrapper <span>.
     const crownSVG = `<span title="Premium member" aria-label="Premium member">
       <svg class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
@@ -74,17 +72,23 @@
       return `<a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(row.steam_id)}">${baseName}</a>`;
     }
 
-    // Fetch all premium steam IDs directly from Supabase (requires RLS policy to allow select)
+    // Fetch all premium steam IDs directly from Supabase.
+    // Fallback: if steam_id is null but discord_id exists, map through links_state.json.
     async function fetchPremiumDirect() {
       try {
+        let linkMap = null;
+        try {
+          const res = await fetch('links_state.json', { cache:'no-store' });
+          if (res.ok) linkMap = await res.json();
+        } catch {}
+
         const nowIso = new Date().toISOString();
         const step = 1000;
         let from = 0;
         for (;;) {
           const { data, error } = await supa
             .from('profiles')
-            .select('steam_id,premium_until')
-            .not('steam_id', 'is', null)
+            .select('steam_id,discord_id,premium_until')
             .gt('premium_until', nowIso)
             .range(from, from + step - 1);
 
@@ -93,8 +97,14 @@
             break;
           }
           if (!data || data.length === 0) break;
+
           for (const r of data) {
-            if (r.steam_id) premiumSteam.add(String(r.steam_id));
+            let sid = r.steam_id ? String(r.steam_id) : null;
+            if (!sid && linkMap && r.discord_id) {
+              const maybe = linkMap[String(r.discord_id)];
+              if (maybe) sid = String(maybe);
+            }
+            if (sid) premiumSteam.add(sid);
           }
           if (data.length < step) break;
           from += step;
@@ -104,7 +114,6 @@
       }
     }
 
-    // Self-mark (ensures at least the signed-in user is marked premium if applicable)
     function getDiscordId(user){
       const ids = user?.identities || [];
       const disc = ids.find(i => i?.provider === 'discord');
@@ -112,6 +121,8 @@
       const fromMeta  = user?.user_metadata?.provider_id || user?.user_metadata?.sub || null;
       return String(fromIdent || fromMeta || '').trim() || null;
     }
+
+    // Mark at least the signed-in user's steam as premium (so he sees himself marked).
     async function markSelfIfPremium() {
       try {
         const { data:{ user } } = await supa.auth.getUser();

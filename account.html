@@ -9,7 +9,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
-    // Your Supabase project (same as the rest of the site)
     window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
     window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
   </script>
@@ -128,16 +127,32 @@
       const el = document.getElementById('linked-player');
       try{
         const discordId = getDiscordId(user);
-        if(!discordId){ el.textContent = 'No Discord ID found.'; return; }
+        if(!discordId){ el.textContent = 'No Discord ID found.'; return { discordId:null, steamId:null }; }
         const res = await fetch('links_state.json', { cache:'no-store' });
-        if(!res.ok){ el.textContent = 'Could not load link state.'; return; }
+        if(!res.ok){ el.textContent = 'Could not load link state.'; return { discordId, steamId:null }; }
         const map = await res.json();
-        const steamId = map[discordId];
-        if(!steamId){ el.textContent = 'No linked Steam ID found for your Discord account.'; return; }
-        el.innerHTML = `Linked to SteamID <b>${steamId}</b> · <a class="text-indigo-300 hover:underline" href="player.html?steam_id=${encodeURIComponent(steamId)}">Open your player page</a>`;
+        const steamId = map[discordId] ? String(map[discordId]) : null;
+        if(!steamId){ el.textContent = 'No linked Steam ID found for your Discord account.'; }
+        else {
+          el.innerHTML = `Linked to SteamID <b>${steamId}</b> · <a class="text-indigo-300 hover:underline" href="player.html?steam_id=${encodeURIComponent(steamId)}">Open your player page</a>`;
+        }
+        return { discordId, steamId };
       }catch(e){
         el.textContent = 'Error while resolving linked profile.';
         console.error(e);
+        return { discordId:null, steamId:null };
+      }
+    }
+
+    // Persist discord_id / steam_id in profiles so the leaderboard can mark premiums for everyone
+    async function resolveAndSaveIds(user, ids){
+      try{
+        await supa.from('profiles').upsert(
+          { id: user.id, discord_id: ids.discordId || null, steam_id: ids.steamId || null },
+          { onConflict: 'id' }
+        );
+      }catch(e){
+        console.warn('profiles upsert (ids) failed:', e);
       }
     }
 
@@ -146,7 +161,6 @@
       if(!user) return;
 
       const meta = user.user_metadata || {};
-      // ✅ correct: select existing columns on the right key (id = auth.users.id)
       let { data: prof, error } = await supa
         .from('profiles')
         .select('premium_until,is_premium,discord_id,steam_id')
@@ -155,7 +169,6 @@
 
       if (error) console.error('profiles select error', error);
 
-      // If no row yet, create it so future updates work, then re-read
       if (!prof) {
         const { error: upErr } = await supa.from('profiles').upsert({ id: user.id });
         if (upErr) console.warn('profiles upsert error', upErr);
@@ -184,7 +197,8 @@
       document.getElementById('prof-premium').textContent = premiumTxt;
       document.getElementById('prem-state').textContent   = premiumTxt;
 
-      loadLinkedPlayer(user);
+      const ids = await loadLinkedPlayer(user);
+      await resolveAndSaveIds(user, ids); // <-- enregistre discord_id / steam_id
     }
 
     document.addEventListener('DOMContentLoaded', loadProfile);
@@ -192,9 +206,10 @@
 
   <!-- PayPal SDK + Buttons -->
   <script>
-    // If your edge function requires JWT (Verify JWT ON), we include bearer here
+    const supaClient = supabase.createClient(window.SUPA_URL, window.SUPA_ANON);
+
     async function getPayPalPublicConfig(){
-      const { data:{ session } } = await supa.auth.getSession();
+      const { data:{ session } } = await supaClient.auth.getSession();
       const res = await fetch(`${window.SUPA_URL}/functions/v1/paypal-public-config`, {
         method:'GET',
         headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}` }
@@ -224,7 +239,7 @@
     }
 
     async function callCapture(orderId){
-      const { data:{ session } } = await supa.auth.getSession();
+      const { data:{ session } } = await supaClient.auth.getSession();
       const res = await fetch(`${window.SUPA_URL}/functions/v1/capture-paypal-order`, {
         method: 'POST',
         headers: {
@@ -254,9 +269,9 @@
           purchase_units: [{ amount: { currency_code: 'EUR', value: "2.00" } }]
         }),
         onApprove: async (data, actions) => {
-          const order = await actions.order.capture(); // quick UX
+          const order = await actions.order.capture();
           try{
-            await callCapture(order.id);              // validate + set premium on server
+            await callCapture(order.id);
             document.getElementById('prem-msg').textContent = '30-day pass activated. Enjoy!';
             setTimeout(() => location.reload(), 800);
           }catch(e){
@@ -289,7 +304,7 @@
             });
           },
           onApprove: async (data, actions) => {
-            await actions.order.capture(); // donation: client capture is enough for thanks
+            await actions.order.capture();
             document.getElementById('prem-msg').textContent =
               'Thanks a lot for your support! (Donations do not grant extra features.)';
           }
