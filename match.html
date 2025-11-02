@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Match</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="max-w-3xl mx-auto p-4">
+    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
+    <div id="card" class="mt-4 p-4 rounded border border-slate-800"></div>
+  </div>
+
+<script>
+const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
+const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
+const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const url = new URL(window.location.href);
+const id = url.searchParams.get('id');
+
+async function load(){
+  const { data, error } = await supa.from('matches').select('*').eq('id', id).single();
+  if(error || !data){ document.getElementById('card').innerHTML='<div class="text-red-400">Match not found.</div>'; return; }
+  const m=data;
+  const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
+  const replayBtn = m.replay_url ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${m.replay_url}" download>Download replay</a>` : '';
+  const html = `<div class="space-y-2">
+    <div class="text-slate-300 text-sm">${new Date(m.played_at).toLocaleString()}</div>
+    <div class="text-xl font-bold">${escapeHtml(m.p1_name||'P1')} vs ${escapeHtml(m.p2_name||'P2')}</div>
+    <div class="text-slate-400">Winner: <span class="text-slate-100">${escapeHtml(w)}</span> · Map ${m.map_id??'-'}</div>
+    <div class="text-slate-400">Scores: ${m.p1_score??'-'} — ${m.p2_score??'-'}</div>
+    <div class="text-slate-400">P1 Elo: ${m.p1_elo_before??'-'} → ${m.p1_elo_after??'-'}</div>
+    <div class="text-slate-400">P2 Elo: ${m.p2_elo_before??'-'} → ${m.p2_elo_after??'-'}</div>
+    <div class="pt-2">${replayBtn}</div>
+  </div>`;
+  document.getElementById('card').innerHTML = html;
+}
+
+load();
+</script>
+</body>
+</html>

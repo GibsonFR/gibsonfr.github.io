@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ranked Tag — Leaderboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="max-w-6xl mx-auto p-4">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold">🏆 Ranked Tag — Live Leaderboard</h1>
+      <div>
+        <input id="search" class="px-3 py-2 rounded bg-slate-800 border border-slate-700" placeholder="Search username or SteamID">
+        <button id="go" class="ml-2 px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Search</button>
+      </div>
+    </header>
+
+    <section>
+      <h2 class="text-xl font-semibold mb-2">Leaderboard</h2>
+      <div id="board" class="overflow-x-auto border border-slate-800 rounded"></div>
+    </section>
+
+    <section class="mt-8">
+      <h2 class="text-xl font-semibold mb-2">Recent Matches</h2>
+      <div id="recent" class="grid md:grid-cols-2 gap-3"></div>
+    </section>
+  </div>
+
+<script>
+const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
+const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
+const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+
+function fmtTime(iso){ try{return new Date(iso).toLocaleString();}catch{return iso;} }
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+async function loadBoard(){
+  const { data, error } = await supa.from('view_leaderboard').select('*').order('pos',{ascending:true});
+  if(error){ console.error(error); return; }
+  const rows = data||[];
+  const table=[`<table class="w-full text-sm"><thead class="bg-slate-900"><tr>
+    <th class="p-2 text-left">#</th>
+    <th class="p-2 text-left">Player</th>
+    <th class="p-2">Rank</th>
+    <th class="p-2">RP</th>
+    <th class="p-2">Elo</th>
+    <th class="p-2">Games</th>
+    <th class="p-2">Win%</th>
+    <th class="p-2">Last active</th>
+  </tr></thead><tbody>`];
+  for(const r of rows){
+    table.push(`<tr class="border-t border-slate-800 hover:bg-slate-900">
+      <td class="p-2">${r.pos}</td>
+      <td class="p-2"><a class="text-indigo-400 hover:underline" href="player.html?steam_id=${encodeURIComponent(r.steam_id)}">${escapeHtml(r.username||r.steam_id)}</a></td>
+      <td class="p-2 text-center">${escapeHtml(r.rank||'')}</td>
+      <td class="p-2 text-center">${r.rp??''}</td>
+      <td class="p-2 text-center">${r.elo??''}</td>
+      <td class="p-2 text-center">${r.games??0}</td>
+      <td class="p-2 text-center">${r.win_rate??0}</td>
+      <td class="p-2">${fmtTime(r.last_active_at)}</td>
+    </tr>`);
+  }
+  table.push(`</tbody></table>`);
+  document.getElementById('board').innerHTML = table.join('');
+}
+
+async function loadRecent(){
+  const { data, error } = await supa.from('matches')
+    .select('id, played_at, p1_name, p2_name, winner, map_id, replay_url')
+    .order('played_at',{ascending:false}).limit(20);
+  if(error){ console.error(error); return; }
+  const cont=document.getElementById('recent'); cont.innerHTML='';
+  for(const m of (data||[])){
+    const w = m.winner==='1' ? (m.p1_name||'P1') : (m.winner==='2' ? (m.p2_name||'P2') : '—');
+    cont.innerHTML += `<a href="match.html?id=${m.id}" class="block p-3 rounded border border-slate-800 hover:border-indigo-500">
+      <div class="text-slate-300 text-sm">${fmtTime(m.played_at)}</div>
+      <div class="font-semibold">${escapeHtml(m.p1_name||'P1')} vs ${escapeHtml(m.p2_name||'P2')}</div>
+      <div class="text-slate-400 text-sm">Winner: <span class="text-slate-100">${escapeHtml(w)}</span> · Map ${m.map_id??'-'}</div>
+    </a>`;
+  }
+}
+
+document.getElementById('go').addEventListener('click',()=>{
+  const q=document.getElementById('search').value.trim();
+  if(!q) return; window.location.href=`player.html?q=${encodeURIComponent(q)}`;
+});
+
+supa.channel('realtime:players')
+  .on('postgres_changes',{event:'*',schema:'public',table:'players'},loadBoard).subscribe();
+supa.channel('realtime:matches')
+  .on('postgres_changes',{event:'INSERT',schema:'public',table:'matches'},loadRecent).subscribe();
+
+loadBoard(); loadRecent();
+</script>
+</body>
+</html>
