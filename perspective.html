@@ -128,29 +128,31 @@ function renderPerspective(container, p){
 
   const winSel = document.getElementById('winSel');
   winSel.value = String(defWindow);
+  const content = document.getElementById('content');
+  const status  = document.getElementById('status');
 
   async function loadPerspective(pid, windowSize){
     const { data } = await supa.from('player_perspectives')
       .select('*')
       .eq('player_id', pid)
-      .eq('window_size', windowSize)   // FIX
+      .eq('window_size', windowSize)
       .maybeSingle();
     return data || null;
   }
 
-  async function queueBuild(pid, windowSize){
-    const status = document.getElementById('status');
-    status.textContent = 'Queuing…';
-    const { error } = await supa.from('perspective_requests')
-      .insert({ player_id: pid, window_size: windowSize, requested_by: 'web' }); // FIX + show error
-    status.textContent = error ? `Insert failed: ${error.message}` : 'Queued. Waiting for worker…';
+  async function waitPerspective(pid, windowSize, timeoutMs=60000){
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      const p = await loadPerspective(pid, windowSize);
+      if (p) return p;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return null;
   }
-
-  const content = document.getElementById('content');
 
   async function render(){
     const w = Number(winSel.value);
-    let p = await loadPerspective(steamId, w);
+    const p = await loadPerspective(steamId, w);
     if(!p){
       content.innerHTML = `<div class="mt-6 text-slate-400">No perspective yet for this window. Click “Build / Refresh”.</div>`;
     }else{
@@ -161,7 +163,20 @@ function renderPerspective(container, p){
   await render();
 
   document.getElementById('buildBtn').onclick = async()=>{
-    await queueBuild(steamId, Number(winSel.value));
+    const w = Number(winSel.value);
+    status.textContent = 'Queuing…';
+    const { error } = await supa.from('perspective_requests')
+      .insert({ player_id: steamId, window_size: w, requested_by: 'web' });
+    if (error) { status.textContent = `Insert failed: ${error.message}`; return; }
+    status.textContent = 'Queued. Waiting for worker…';
+    // Poll jusqu’à ce que la perspective arrive
+    const p = await waitPerspective(steamId, w);
+    if (p) {
+      status.textContent = 'Ready ✓';
+      renderPerspective(content, p);
+    } else {
+      status.textContent = 'Timeout while waiting for perspective.';
+    }
   };
 
   async function resolveCompare(text){
@@ -188,6 +203,7 @@ function renderPerspective(container, p){
     content.innerHTML = ''; content.appendChild(wrap);
   };
 
+  // Realtime (si activé, on re-render automatiquement)
   supa.channel('persp_live')
     .on('postgres_changes',{ event:'INSERT', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
     .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
