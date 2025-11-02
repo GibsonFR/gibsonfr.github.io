@@ -9,7 +9,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
-    // Same Supabase project as your site
+    // Your Supabase project (same as the rest of the site)
     window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
     window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
   </script>
@@ -146,22 +146,43 @@
       if(!user) return;
 
       const meta = user.user_metadata || {};
-      const { data: p } = await supa.from('profiles').select('username,premium_until').eq('user_id',user.id).maybeSingle();
+      // ✅ correct: select existing columns on the right key (id = auth.users.id)
+      let { data: prof, error } = await supa
+        .from('profiles')
+        .select('premium_until,is_premium,discord_id,steam_id')
+        .eq('id', user.id)
+        .maybeSingle();
 
-      const name  = p?.username || meta.full_name || meta.name || '—';
+      if (error) console.error('profiles select error', error);
+
+      // If no row yet, create it so future updates work, then re-read
+      if (!prof) {
+        const { error: upErr } = await supa.from('profiles').upsert({ id: user.id });
+        if (upErr) console.warn('profiles upsert error', upErr);
+        const res2 = await supa
+          .from('profiles')
+          .select('premium_until,is_premium,discord_id,steam_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        prof = res2.data || null;
+      }
+
+      const nameGuess =
+        meta.full_name || meta.name || meta.preferred_username || meta.user_name || '—';
       const email = user.email || meta.email || '—';
-      const until = p?.premium_until ? new Date(p.premium_until) : null;
-      const premiumTxt = (until && until > new Date())
+
+      const until = prof?.premium_until ? new Date(prof.premium_until) : null;
+      const active = !!(until && until > new Date());
+      const premiumTxt = active
         ? `Active (until ${until.toISOString().slice(0,10)})`
         : 'Not active';
 
-      document.getElementById('accStatus').innerHTML = `Logged in as <b>${name}</b>`;
-      document.getElementById('prof-name').textContent    = name;
+      document.getElementById('accStatus').innerHTML = `Logged in as <b>${nameGuess}</b>`;
+      document.getElementById('prof-name').textContent    = nameGuess;
       document.getElementById('prof-email').textContent   = email;
       document.getElementById('prof-id').textContent      = user.id;
       document.getElementById('prof-premium').textContent = premiumTxt;
-
-      document.getElementById('prem-state').textContent = premiumTxt;
+      document.getElementById('prem-state').textContent   = premiumTxt;
 
       loadLinkedPlayer(user);
     }
