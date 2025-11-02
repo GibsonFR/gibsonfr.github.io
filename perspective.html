@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perspective</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="max-w-6xl mx-auto p-4">
+    <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back</a>
+
+    <header id="head" class="mt-3 mb-4"></header>
+
+    <div class="flex flex-col md:flex-row gap-3 items-stretch">
+      <div class="flex-1 p-3 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="flex flex-wrap gap-3 items-center">
+          <label class="text-slate-300">Window</label>
+          <select id="winSel" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+            <option value="100">Last 100</option>
+            <option value="200" selected>Last 200</option>
+            <option value="500">Last 500</option>
+            <option value="0">All</option>
+          </select>
+          <button id="buildBtn" class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500">Build / Refresh</button>
+          <span id="status" class="text-sm text-slate-400"></span>
+        </div>
+      </div>
+      <div class="flex-1 p-3 rounded-xl border border-slate-800 bg-slate-900/40">
+        <div class="flex flex-wrap gap-2 items-center">
+          <label class="text-slate-300">Compare with</label>
+          <input id="cmpInput" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm flex-1" placeholder="username or steam id…">
+          <button id="cmpBtn" class="px-3 py-2 rounded bg-amber-600 hover:bg-amber-500">Compare</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="content" class="mt-6"></div>
+  </div>
+
+<script>
+const SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
+const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
+const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+
+const url = new URL(location.href);
+const steamId = url.searchParams.get('steam_id');
+const defWindow = Number(url.searchParams.get('window')||200);
+
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct = x => (x==null||isNaN(x) ? '—' : `${Math.round(x*1000)/10}%`);
+const num = (x,d=1)=> (x==null||isNaN(x) ? '—' : (Math.round(x*Math.pow(10,d))/Math.pow(10,d)));
+
+function chips(summary){
+  return `
+  <div class="flex flex-wrap gap-2">
+    <div class="px-2 py-1 rounded bg-slate-800/70 border border-slate-700 text-sm">Matches <span class="ml-1 text-slate-100">${summary.matches||0}</span></div>
+    <div class="px-2 py-1 rounded bg-slate-800/70 border border-slate-700 text-sm">Wins <span class="ml-1 text-slate-100">${summary.wins||0}</span></div>
+    <div class="px-2 py-1 rounded bg-slate-800/70 border border-slate-700 text-sm">Winrate <span class="ml-1 text-slate-100">${pct(summary.winrate)}</span></div>
+    <div class="px-2 py-1 rounded bg-slate-800/70 border border-slate-700 text-sm">Avg Quality <span class="ml-1 text-slate-100">${num(summary.avg_quality,1)}</span></div>
+    <div class="px-2 py-1 rounded bg-slate-800/70 border border-slate-700 text-sm">Median Quality <span class="ml-1 text-slate-100">${num(summary.med_quality,1)}</span></div>
+    <div class="px-2 py-1 rounded bg-slate-800/70 border border-slate-700 text-sm">Avg Duration <span class="ml-1 text-slate-100">${num(summary.avg_duration,1)}s</span></div>
+  </div>`;
+}
+
+function table(title, cols, rows){
+  return `
+  <div class="mt-6">
+    <h3 class="font-semibold mb-2">${title}</h3>
+    <div class="overflow-x-auto rounded border border-slate-800">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-900/60 text-slate-300">
+          <tr>${cols.map(c=>`<th class="px-3 py-2 text-left">${c}</th>`).join('')}</tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800">
+          ${rows.map(r=>`<tr>${r.map(c=>`<td class="px-3 py-2 whitespace-nowrap">${c}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderPerspective(container, p){
+  const s = p.summary||{};
+  let html = `<div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+    <div class="text-lg font-bold mb-2">${esc(p.username||p.player_id)} — Perspective</div>
+    ${chips(s)}
+  </div>`;
+
+  // Maps
+  const mapRows = (p.maps||[]).map(m=>[
+    `Map ${m.map_id}`, m.matches, pct(m.winrate), num(m.avg_quality,1), num(m.avg_duration,1)+'s', new Date(m.last_played).toLocaleDateString()
+  ]);
+  html += table('By Map', ['Map','Matches','Winrate','Avg Quality','Avg Duration','Last played'], mapRows);
+
+  // Elo bands
+  const eloRows = (p.elo_bands||[]).map(b=>[
+    b.label, b.matches, pct(b.winrate), num(b.avg_quality,1)
+  ]);
+  html += table('Vs Opponent Elo bands', ['Band','Matches','Winrate','Avg Quality'], eloRows);
+
+  // Roles
+  const r = p.roles||{};
+  const roleRows = [
+    ['Tagger secs (avg)', num(r.tagger_seconds_avg,1)],
+    ['Hider secs (avg)',  num(r.hider_seconds_avg,1)],
+    ['Tagger quality (avg)', num(r.tagger_quality_avg,1)],
+    ['Hider  quality (avg)', num(r.hider_quality_avg,1)],
+  ];
+  html += table('Roles', ['Metric','Value'], roleRows);
+
+  // Opponents (top 10)
+  const oppRows = (p.opponents||[]).slice(0,10).map(o=>[
+    esc(o.name||o.id), o.matches, pct(o.winrate), num(o.avg_quality,1)
+  ]);
+  html += table('Most faced opponents', ['Opponent','Matches','Winrate','Avg Quality'], oppRows);
+
+  container.innerHTML = html;
+}
+
+(async function init(){
+  const head = document.getElementById('head');
+  const { data: player } = await supa.from('players').select('*').eq('steam_id', steamId).single();
+  if(!player){ head.innerHTML='<div class="text-red-400">Player not found.</div>'; return; }
+
+  head.innerHTML = `
+    <div class="p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
+      <div class="text-2xl font-extrabold">${esc(player.username||player.steam_id)}</div>
+      <div class="text-slate-300 mt-1">Perspective view</div>
+    </div>`;
+
+  const winSel = document.getElementById('winSel');
+  winSel.value = String(defWindow);
+
+  async function loadPerspective(pid, windowSize){
+    const { data } = await supa.from('player_perspectives')
+      .select('*').eq('player_id', pid).eq('window', windowSize).maybeSingle();
+    return data || null;
+  }
+
+  async function queueBuild(pid, windowSize){
+    document.getElementById('status').textContent = 'Queuing…';
+    await supa.from('perspective_requests').insert({ player_id: pid, window: windowSize, requested_by: 'web' });
+    document.getElementById('status').textContent = 'Queued. Waiting for worker…';
+  }
+
+  const content = document.getElementById('content');
+
+  async function render(){
+    const w = Number(winSel.value);
+    let p = await loadPerspective(steamId, w);
+    if(!p){
+      content.innerHTML = `<div class="mt-6 text-slate-400">No perspective yet for this window. Click “Build / Refresh”.</div>`;
+    }else{
+      renderPerspective(content, p);
+    }
+  }
+
+  await render();
+
+  document.getElementById('buildBtn').onclick = async()=>{
+    await queueBuild(steamId, Number(winSel.value));
+  };
+
+  // Compare
+  async function resolveCompare(text){
+    if(!text) return null;
+    // try exact steam id
+    if(/^\d{5,}$/.test(text)) return text;
+    const { data } = await supa.rpc('search_players',{ q: text, p_limit:1 });
+    return (data && data.length) ? data[0].steam_id : null;
+  }
+
+  document.getElementById('cmpBtn').onclick = async()=>{
+    const target = await resolveCompare(document.getElementById('cmpInput').value.trim());
+    if(!target){ alert('Player not found'); return; }
+    const w = Number(winSel.value);
+    const a = await loadPerspective(steamId, w);
+    const b = await loadPerspective(target, w);
+    if(!a || !b){ alert('One of the perspectives is missing. Build them first.'); return; }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const left  = document.createElement('div');
+    const right = document.createElement('div');
+    renderPerspective(left, a);
+    renderPerspective(right, b);
+    wrap.appendChild(left); wrap.appendChild(right);
+    content.innerHTML = ''; content.appendChild(wrap);
+  };
+
+  // live refresh when worker writes the record
+  supa.channel('persp_live')
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
+    .on('postgres_changes',{ event:'UPDATE', schema:'public', table:'player_perspectives', filter:`player_id=eq.${steamId}`}, render)
+    .subscribe();
+})();
+</script>
+</body>
+</html>
