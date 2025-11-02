@@ -6,16 +6,6 @@
   <title>Match</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/OBJLoader.js"></script>
-  <!-- Outline / post-processing -->
-  <script src="https://unpkg.com/three@0.158.0/examples/js/postprocessing/EffectComposer.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/postprocessing/RenderPass.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/postprocessing/OutlinePass.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/postprocessing/ShaderPass.js"></script>
-  <script src="https://unpkg.com/three@0.158.0/examples/js/shaders/FXAAShader.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-6xl mx-auto p-4">
@@ -34,55 +24,26 @@
 
       <div id="analysisStatus" class="text-sm text-slate-300 mb-4"></div>
 
-      <div id="analysisResult" class="hidden space-y-8">
+      <div id="analysisResult" class="hidden space-y-6">
         <div class="text-sm text-slate-400">Analyzed at <span id="analAt">—</span> (<span id="ver">—</span>)</div>
 
-        <!-- Progression -->
-        <div id="progressionBlock" class="p-4 rounded bg-slate-900 border border-slate-800 hidden">
-          <div class="flex items-center justify-between">
-            <h3 class="text-base font-semibold">Progression</h3>
-            <div class="text-xs text-slate-400">Click markers to jump</div>
-          </div>
-          <div id="progressTimeline" class="mt-3 h-6 w-full bg-slate-950 rounded border border-slate-800 overflow-hidden"></div>
-          <canvas id="progressSeries" width="1200" height="120" class="w-full mt-3 block bg-slate-950 rounded border border-slate-800"></canvas>
-          <div id="keyMoments" class="mt-3 grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
-        </div>
-
-        <!-- Scorecards -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 — Quality</div>
+            <div id="p1title" class="text-slate-400 text-xs mb-1">P1 Quality</div>
             <div id="p1q" class="text-2xl font-bold">—</div>
             <div id="p1cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
           </div>
+
           <div class="p-4 rounded bg-slate-900 border border-slate-800">
-            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 — Quality</div>
+            <div id="p2title" class="text-slate-400 text-xs mb-1">P2 Quality</div>
             <div id="p2q" class="text-2xl font-bold">—</div>
             <div id="p2cards" class="mt-3 grid grid-cols-2 gap-2 text-xs"></div>
           </div>
         </div>
 
-        <!-- Replayer -->
-        <div class="p-4 rounded bg-slate-900 border border-slate-800">
-          <div class="flex items-center justify-between">
-            <div class="flex space-x-2">
-              <button id="tab3d" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">3D</button>
-              <button id="tab2d" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">2D</button>
-            </div>
-            <div class="space-x-2">
-              <button id="rpPlay" class="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500">Play</button>
-              <select id="rpSpeed" class="bg-slate-950 border border-slate-700 rounded px-2 py-1">
-                <option value="0.5">×0.5</option><option value="1" selected>×1</option>
-                <option value="1.5">×1.5</option><option value="2">×2</option>
-              </select>
-            </div>
-          </div>
-          <div id="replayer3dBlock" class="mt-3 w-full h-[520px] rounded border border-slate-800 hidden relative">
-            <div id="hud3d" class="absolute left-2 top-2 text-xs bg-black/40 px-2 py-1 rounded">t: —</div>
-          </div>
-          <canvas id="replayer2d" width="1200" height="520" class="w-full mt-3 block bg-slate-950 rounded border border-slate-800 hidden"></canvas>
-          <input id="rpSlider" type="range" min="0" max="1000" value="0" class="w-full mt-3">
-          <div id="rpHint" class="text-xs text-slate-400 mt-1"></div>
+        <div>
+          <div class="text-slate-400 text-xs mb-2">Visuals</div>
+          <div id="gallery" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
         </div>
       </div>
     </div>
@@ -94,19 +55,35 @@ const SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const supa = supabase.createClient(SUPA_URL, SUPA_ANON);
 
 const idParam = new URL(location.href).searchParams.get('id');
-const isNumericId = idParam && /^\\d+$/.test(idParam);
+const isNumericId = idParam && /^\d+$/.test(idParam);
 const matchIdValue = isNumericId ? Number(idParam) : idParam;
 
 const el = s => document.querySelector(s);
-const esc = s => (s||'').replace(/[&<>\"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-
-function pct(x, dp=0){ if(x==null) return '—'; return (x*100).toFixed(dp)+'%'; }
-function m2(x, dp=2){ if(x==null) return '—'; return x.toFixed(dp); }
-function sec2(x, dp=2){ if(x==null) return '—'; return x.toFixed(dp)+' s'; }
+const esc = s => (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 async function fetchMatchById() {
   const { data } = await supa.from('matches').select('*').eq('id', matchIdValue).maybeSingle();
   return data || null;
+}
+
+function card(label, value, suffix='') {
+  return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
+    <div class="text-slate-400">${label}</div>
+    <div class="text-slate-100 font-semibold">${value}${suffix}</div>
+  </div>`;
+}
+
+function renderPlayerCards(rootSel, s) {
+  const root = el(rootSel);
+  const pct = (x)=> (x==null?'—':Math.round(x*1000)/10+'%');
+  root.innerHTML = [
+    card("Possession", pct(s.possession_share)),
+    card("Accuracy",  s.accuracy!=null?Math.round(s.accuracy*1000)/10:'—', "%"),
+    card("Avg dist (hider)", s.avg_distance_as_hider??'—', " m"),
+    card("Avg dist (tagger)", s.avg_distance_as_tagger??'—', " m"),
+    card("Retag avg", s.retag_avg_seconds??'—', " s"),
+    card("Avg speed", s.avg_speed_ms??'—', " m/s"),
+  ].join("");
 }
 
 function renderMatch(m) {
@@ -133,288 +110,6 @@ function showNotFound() {
   el('#analysisBlock').classList.add('hidden');
 }
 
-function renderTimeline(tl){
-  if(!tl || !tl.bins?.length) { el('#progressionBlock').classList.add('hidden'); return; }
-  el('#progressionBlock').classList.remove('hidden');
-
-  const host = el('#progressTimeline'); host.innerHTML = '';
-  host.lastX = 0;
-  const W = host.getBoundingClientRect().width || 800;
-  const T = tl.bins.length * tl.dt;
-
-  function mk(t, cls, title) {
-    const x = Math.round((t/T) * W);
-    const d = document.createElement('div');
-    d.className = `h-6 w-1 ${cls} inline-block`;
-    d.style.marginLeft = Math.max(0,(x - (host.lastX||0))) + 'px';
-    d.title = title;
-    d.onclick = ()=> jumpTo(t);
-    host.appendChild(d);
-    host.lastX = x;
-  }
-
-  tl.bins.forEach((b,i)=>{
-    const t0 = i*tl.dt;
-    for(let k=0;k<b.retag;k++)  mk(t0, 'bg-emerald-500', `Retag @${(t0).toFixed(1)}s`);
-    for(let k=0;k<b.missed;k++) mk(t0, 'bg-rose-500',    `Missed @${(t0).toFixed(1)}s`);
-    for(let k=0;k<b.great;k++)  mk(t0, 'bg-sky-500',     `Great escape @${(t0).toFixed(1)}s`);
-    for(let k=0;k<b.items;k++)  mk(t0, 'bg-amber-400',   `Item @${(t0).toFixed(1)}s`);
-  });
-}
-
-function renderPlayerCards(sel, stats){
-  const rows = [
-    ['possession_share','Tag Possession', pct],
-    ['avg_distance_overall','Avg Dist (all) (m)', m2],
-    ['avg_distance_as_tagger','Avg Dist (tag) (m)', m2],
-    ['avg_distance_as_hider','Avg Dist (hide) (m)', m2],
-    ['retag_median_seconds','Retag Median', sec2],
-    ['retag_initial_seconds','Retag Opening', sec2],
-    ['retag_consistency_cv_score','Retag Consistency', pct]
-  ];
-  const c = el(sel); c.innerHTML='';
-  for(const [k,lab,fmt] of rows){
-    const v = stats[k];
-    c.innerHTML += `<div class="p-2 rounded border border-slate-800 bg-slate-950">
-      <div class="text-slate-400">${lab}</div>
-      <div class="font-semibold">${fmt(v)}</div>
-    </div>`;
-  }
-}
-
-/* ======================
-   Replayer core state
-====================== */
-let RP = { dt:0.05, p1:[], p2:[], owner:[], t:0, playing:false, speed:1, bounds:null, mapBundle:null };
-function setFrames(fr){ 
-  RP.dt=fr.dt||0.05; RP.p1=fr.p1||[]; RP.p2=fr.p2||[]; RP.owner=fr.owner||[]; RP.t=0;
-  const pts = [...RP.p1, ...RP.p2];
-  if(pts.length){
-    let minx=pts[0].x, maxx=pts[0].x, miny=pts[0].y, maxy=pts[0].y;
-    pts.forEach(p=>{ minx=Math.min(minx,p.x); maxx=Math.max(maxx,p.x); miny=Math.min(miny,p.y); maxy=Math.max(maxy,p.y); });
-    RP.bounds = {minx,maxx,miny,maxy};
-  }else{
-    RP.bounds = {minx:-10,maxx:10,miny:-10,maxy:10};
-  }
-}
-
-function taggerAt(time){
-  if(!RP.owner.length) return 0;
-  const idx = Math.max(0, Math.min(Math.floor(time/RP.dt), RP.owner.length-1));
-  return RP.owner[idx]||0;
-}
-
-function jumpTo(t){
-  if(!RP.p1.length) return;
-  RP.t = Math.max(0, Math.min(t, (RP.p1.length-1)*RP.dt));
-  el('#rpSlider').value = Math.round(1000*RP.t/(RP.p1.length*RP.dt));
-  drawFrame2D(); drawFrame3D(); updateHud();
-}
-
-function tick(){
-  if(!RP.playing) return;
-  RP.t += RP.dt * RP.speed;
-  if(RP.t >= (RP.p1.length-1)*RP.dt) RP.playing=false;
-  drawFrame2D(); drawFrame3D(); updateHud();
-  el('#rpSlider').value = Math.round(1000*RP.t/(RP.p1.length*RP.dt));
-  if(RP.playing) requestAnimationFrame(tick);
-}
-
-function updateHud(){
-  const hud = el('#hud3d');
-  if(!hud) return;
-  const idx = Math.max(0, Math.min(Math.floor(RP.t/RP.dt), Math.max(0, RP.p1.length-1)));
-  const tg = taggerAt(RP.t);
-  hud.textContent = `t=${RP.t.toFixed(2)}s · f=${idx}/${Math.max(0,RP.p1.length-1)} · tagger=${tg||0}`;
-}
-
-/* ========== 2D replayer ========== */
-function drawFrame2D(){
-  const c = el('#replayer2d'); if(c.classList.contains('hidden')) return;
-  const g = c.getContext('2d'); g.clearRect(0,0,c.width,c.height);
-  if(!RP.p1.length) return;
-  const idx = Math.max(0, Math.min(Math.floor(RP.t/RP.dt), RP.p1.length-1));
-  const A = RP.p1[idx], B = RP.p2[idx]; if(!A||!B) return;
-  const pad = 30;
-  const dx = RP.bounds.maxx - RP.bounds.minx || 1;
-  const dy = RP.bounds.maxy - RP.bounds.miny || 1;
-  const scale = Math.min((c.width-2*pad)/dx, (c.height-2*pad)/dy);
-  const cx = (x)=> ((x - RP.bounds.minx)*scale)+pad;
-  const cy = (y)=> (c.height - ((y - RP.bounds.miny)*scale+pad));
-
-  const tg = taggerAt(RP.t);
-  const R = 10, L = 28;
-
-  g.lineWidth = 2;
-  // P1
-  g.strokeStyle = '#93c5fd';
-  g.beginPath(); g.arc(cx(A.x), cy(A.y), R, 0, Math.PI*2); g.stroke();
-  if(tg===1){ g.strokeStyle = '#ef4444'; g.lineWidth = 3; g.beginPath(); g.arc(cx(A.x), cy(A.y), R+4, 0, Math.PI*2); g.stroke(); g.lineWidth=2; }
-  // P2
-  g.strokeStyle = '#fca5a5';
-  g.beginPath(); g.arc(cx(B.x), cy(B.y), R, 0, Math.PI*2); g.stroke();
-  if(tg===2){ g.strokeStyle = '#ef4444'; g.lineWidth = 3; g.beginPath(); g.arc(cx(B.x), cy(B.y), R+4, 0, Math.PI*2); g.stroke(); g.lineWidth=2; }
-
-  const vx=(r)=> Math.cos(r*Math.PI/180)*L, vy=(r)=> Math.sin(r*Math.PI/180)*L;
-  g.strokeStyle = '#93c5fd'; g.beginPath(); g.moveTo(cx(A.x),cy(A.y)); g.lineTo(cx(A.x)+vx(A.rot),cy(A.y)-vy(A.rot)); g.stroke();
-  g.strokeStyle = '#fca5a5'; g.beginPath(); g.moveTo(cx(B.x),cy(B.y)); g.lineTo(cx(B.x)+vx(B.rot),cy(B.y)-vy(B.rot)); g.stroke();
-}
-
-/* ========== 3D replayer ========== */
-let THREE_READY = !!window.THREE;
-let renderer, scene, camera, controls, composer, renderPass, outlinePass, fxaaPass, p1Mesh, p2Mesh;
-function init3D(container){
-  if(!THREE_READY) return false;
-  const w = container.clientWidth, h = container.clientHeight;
-  renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(w,h); renderer.setPixelRatio(window.devicePixelRatio||1);
-  container.innerHTML=''; container.appendChild(renderer.domElement);
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b1220);
-  camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 5000);
-  camera.position.set(20, 30, 20);
-  controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.target.set(0,0,0);
-  controls.enableDamping = true;
-
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
-  scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-  dir.position.set(20,40,20); scene.add(dir);
-
-  const grid = new THREE.GridHelper(200, 40, 0x334155, 0x1f2937);
-  scene.add(grid);
-
-  // Players: capsules
-  const cap = new THREE.CapsuleGeometry(0.6, 1.2, 8, 16);
-  p1Mesh = new THREE.Mesh(cap, new THREE.MeshStandardMaterial({color:0x93c5fd, metalness:0.2, roughness:0.6}));
-  p2Mesh = new THREE.Mesh(cap, new THREE.MeshStandardMaterial({color:0xfca5a5, metalness:0.2, roughness:0.6}));
-  p1Mesh.position.y = 1.2; p2Mesh.position.y = 1.2;
-  scene.add(p1Mesh); scene.add(p2Mesh);
-
-  // Postprocess for red outline
-  composer = new THREE.EffectComposer(renderer);
-  renderPass = new THREE.RenderPass(scene, camera);
-  composer.addPass(renderPass);
-  outlinePass = new THREE.OutlinePass(new THREE.Vector2(w,h), scene, camera, []);
-  outlinePass.edgeStrength = 6.0; outlinePass.edgeGlow = 0.0; outlinePass.edgeThickness = 2.0;
-  outlinePass.visibleEdgeColor.set(0xef4444); outlinePass.hiddenEdgeColor.set(0x000000);
-  composer.addPass(outlinePass);
-  fxaaPass = new THREE.ShaderPass(THREE.FXAAShader);
-  fxaaPass.material.uniforms['resolution'].value.set(1/w, 1/h);
-  composer.addPass(fxaaPass);
-
-  function animate(){ controls.update(); composer.render(); requestAnimationFrame(animate); }
-  animate();
-  return true;
-}
-
-async function loadMapBundleIfAny(url){
-  if(!url) return false;
-  try{
-    const res = await fetch(url, {cache:'no-store'}); if(!res.ok) return false;
-    const bundle = await res.json();
-    RP.mapBundle = bundle;
-    const gltfLoader = new THREE.GLTFLoader();
-    const objLoader  = new THREE.OBJLoader();
-    const root = new THREE.Group(); scene.add(root);
-
-    const base = url.replace(/bundle\\.json$/,'');
-    const toURL = (src)=> src.startsWith('http') ? src : (base + src);
-    const toRad = (d)=> (d||0)*Math.PI/180;
-
-    async function addMesh(m){
-      return new Promise((resolve)=>{
-        const src = toURL(m.src||"");
-        const pos=(m.position||[0,0,0]); const rot=(m.rotation||[0,0,0]); const scl=(m.scale||[1,1,1]);
-        const onErr = ()=> resolve(false);
-        if(src.toLowerCase().endsWith('.glb')||src.toLowerCase().endsWith('.gltf')){
-          gltfLoader.load(src, gltf=>{
-            const o = gltf.scene;
-            o.position.set(pos[0],pos[1],pos[2]);
-            o.rotation.set(toRad(rot[0]),toRad(rot[1]),toRad(rot[2]));
-            o.scale.set(scl[0],scl[1],scl[2]);
-            root.add(o); resolve(true);
-          }, undefined, onErr);
-        } else if(src.toLowerCase().endsWith('.obj')){
-          objLoader.load(src, o=>{
-            o.position.set(pos[0],pos[1],pos[2]);
-            o.rotation.set(toRad(rot[0]),toRad(rot[1]),toRad(rot[2]));
-            o.scale.set(scl[0],scl[1],scl[2]);
-            root.add(o); resolve(true);
-          }, undefined, onErr);
-        } else {
-          resolve(false);
-        }
-      });
-    }
-
-    if(Array.isArray(bundle.meshes)){
-      for(const m of bundle.meshes){ await addMesh(m); }
-    }
-    if(RP.bounds){
-      const cx = (RP.bounds.minx + RP.bounds.maxx)/2;
-      const cz = (RP.bounds.miny + RP.bounds.maxy)/2;
-      controls.target.set(cx,0,cz);
-      camera.position.set(cx+20, 30, cz+20);
-    }
-    return true;
-  }catch{ return false; }
-}
-
-function drawFrame3D(){
-  const container = el('#replayer3dBlock');
-  if(container.classList.contains('hidden')) return;
-  if(!p1Mesh || !p2Mesh) return;
-  if(!RP.p1.length) return;
-
-  const idx = Math.max(0, Math.min(Math.floor(RP.t/RP.dt), RP.p1.length-1));
-  const A = RP.p1[idx], B = RP.p2[idx]; if(!A||!B) return;
-  p1Mesh.position.set(A.x, 1.2, A.y);
-  p2Mesh.position.set(B.x, 1.2, B.y);
-  p1Mesh.rotation.y = (A.rot||0) * Math.PI/180;
-  p2Mesh.rotation.y = (B.rot||0) * Math.PI/180;
-
-  // Outline tagger
-  const tg = taggerAt(RP.t);
-  outlinePass.selectedObjects = tg===1 ? [p1Mesh] : tg===2 ? [p2Mesh] : [];
-}
-
-/* Tabs handling & controls */
-function show2D(){ el('#replayer2d').classList.remove('hidden'); el('#replayer3dBlock').classList.add('hidden'); drawFrame2D(); el('#rpHint').textContent='2D fallback (frames.json chargé).'; }
-function show3D(){ el('#replayer3dBlock').classList.remove('hidden'); el('#replayer2d').classList.add('hidden'); drawFrame3D(); el('#rpHint').textContent='3D (map OBJ/GLB + outline rouge sur le tagger).'; }
-
-async function initReplayer(framesUrl, keyMoments, mapId, mapBundleUrl){
-  el('#tab2d').onclick = ()=> show2D();
-  el('#tab3d').onclick = ()=> show3D();
-  el('#rpPlay').onclick = () => { RP.playing = !RP.playing; if(RP.playing) tick(); };
-  el('#rpSpeed').onchange = (e)=> RP.speed = parseFloat(e.target.value);
-  el('#rpSlider').oninput = (e)=> jumpTo((parseInt(e.target.value)/1000) * (RP.p1.length*RP.dt));
-
-  let fr=null;
-  if(framesUrl){
-    try{ const r = await fetch(framesUrl, {cache:'no-store'}); if(r.ok) fr = await r.json(); }catch{}
-  }
-  if(!fr){
-    el('#rpHint').textContent = 'Replay data unavailable (frames.json manquant). Clique "Analyze game" pour régénérer.';
-    el('#replayer2d').classList.add('hidden'); el('#replayer3dBlock').classList.add('hidden'); 
-    return;
-  }
-  setFrames(fr);
-
-  const container = el('#replayer3dBlock');
-  const ok3d = init3D(container);
-  if(ok3d){
-    const guess = mapId ? `${SUPA_URL}/storage/v1/object/public/maps/${mapId}/bundle.json` : null;
-    const chosen = mapBundleUrl || guess;
-    const loaded = await loadMapBundleIfAny(chosen);
-    loaded ? show3D() : show2D();
-  } else {
-    show2D();
-  }
-  drawFrame2D(); drawFrame3D(); updateHud();
-}
-
 async function loadAnalysis(matchId) {
   const { data } = await supa.from('match_analyses').select('*').eq('match_id', matchId).maybeSingle();
   if (!data) {
@@ -425,30 +120,27 @@ async function loadAnalysis(matchId) {
   el('#analysisStatus').textContent = '';
   el('#analysisResult').classList.remove('hidden');
 
+  // Titres avec pseudos si dispo
   const s = data.summary || {};
   el('#p1title').textContent = `${s.p1_name || 'P1'} — Quality`;
   el('#p2title').textContent = `${s.p2_name || 'P2'} — Quality`;
 
   el('#analAt').textContent = new Date(data.analyzed_at).toLocaleString();
   el('#ver').textContent = data.version || '—';
-  el('#p1q').textContent = (data.p1_quality!=null)? (Math.round(data.p1_quality*100)+'%') : '—';
-  el('#p2q').textContent = (data.p2_quality!=null)? (Math.round(data.p2_quality*100)+'%') : '—';
+  el('#p1q').textContent = data.p1_quality ?? '—';
+  el('#p2q').textContent = data.p2_quality ?? '—';
   renderPlayerCards('#p1cards', data.p1_stats || {});
   renderPlayerCards('#p2cards', data.p2_stats || {});
 
-  if (data.timeline) {
-    const tl = data.timeline; tl.key_moments = data.key_moments || [];
-    renderTimeline(tl);
-  } else {
-    el('#progressionBlock').classList.add('hidden');
-  }
-
-  const mapId = s.map_id || null;
-  await initReplayer(data.frames_url || null, data.key_moments || [], mapId, data.map_bundle || null);
-
   const imgs = data.images || {};
   const keys = Object.keys(imgs);
-  el('#gallery')?.classList?.add('hidden'); // hide legacy visuals for clarity
+  el('#gallery').innerHTML = keys.length
+    ? keys.map(k => `
+        <div class="rounded overflow-hidden border border-slate-800 bg-slate-900">
+          <div class="p-2 text-xs text-slate-300 border-b border-slate-800">${k}</div>
+          <img src="${imgs[k]}" alt="${k}" class="w-full block">
+        </div>`).join('')
+    : `<div class="text-sm text-slate-400">No images produced.</div>`;
 }
 
 async function queueAnalysis(matchId, replayUrl) {
