@@ -1,1 +1,139 @@
-/* Custom styles placeholder (currently empty) */
+/* Animations d'apparition des blocs */
+.reveal {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.reveal.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.pulse-once {
+  animation: pulseOnce 0.6s ease-out 1;
+}
+
+@keyframes pulseOnce {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Barres animées (Perspective, stats, etc.) */
+.bar {
+  transition: width 0.6s ease;
+}
+
+/* Tooltips "tip" */
+.tip {
+  position: relative;
+  cursor: help;
+}
+
+.tip:after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: pre-wrap;
+  width: 280px;
+  max-width: 80vw;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 20;
+}
+
+.tip:hover:after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(6px);
+}
+
+/* Layout mirroir pour les comparaisons de Perspective */
+.mirror-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .mirror-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.mirror-row > div {
+  display: flex;
+}
+
+.mirror-row > div > .card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Cartes réutilisables (Perspective, comparaisons, etc.) */
+.card {
+  border: 1px solid rgb(30 41 59);          /* slate-800 */
+  background: rgba(15, 23, 42, 0.4);        /* slate-900/40 */
+  border-radius: 1rem;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+/* Pills (filtres map, elo bands, onglets daypart, etc.) */
+.pill {
+  border-radius: 9999px;
+  border: 1px solid rgb(51, 65, 85);        /* slate-700 */
+  background: rgba(30, 41, 59, 0.6);        /* slate-800/60 */
+  color: #e5e7eb;                           /* gray-200 */
+}
+
+.pill-active {
+  background: rgba(245, 158, 11, 0.2);      /* amber-500/20 */
+  color: #fbbf24;                           /* amber-400 */
+  border-color: rgba(245, 158, 11, 0.3);    /* amber-500/30 */
+}
+
+/* Grille clé/valeur pour les comparaisons */
+.kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 0.75rem;
+}
+
+.kv .k {
+  color: #cbd5e1;       /* slate-300 */
+  font-size: 0.825rem;
+}
+
+.kv .v {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .kv {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .kv .v {
+    white-space: normal;
+  }
+}
