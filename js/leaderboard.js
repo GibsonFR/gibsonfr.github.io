@@ -80,6 +80,23 @@ const leaderboardService = (function() {
     return rows;
   }
 
+  function getPlayerNameHtml(row) {
+    const premiumAvailable = window.premiumService && typeof window.premiumService.getPremiumPlayerNameHtml === "function";
+    if (premiumAvailable) {
+      return window.premiumService.getPremiumPlayerNameHtml(row);
+    }
+    const username = escapeHtml(row.username || row.steam_id);
+    const steamId = String(row.steam_id);
+    return `
+    <a
+      class="text-indigo-400 hover:underline"
+      href="player.html?steam_id=${encodeURIComponent(steamId)}"
+    >
+      ${username}
+    </a>
+  `;
+  }
+
   function renderLeaderboardTable(visibleRows) {
     const tableHeadHtml = `
     <thead class="bg-slate-900">
@@ -99,7 +116,7 @@ const leaderboardService = (function() {
         return `
       <tr class="border-t border-slate-800 hover:bg-slate-900">
         <td class="p-2">${row.__position}</td>
-        <td class="p-2">${premiumService.getPremiumPlayerNameHtml(row)}</td>
+        <td class="p-2">${getPlayerNameHtml(row)}</td>
         <td class="p-2 text-center">${escapeHtml(row.rank || "")}</td>
         <td class="p-2 text-center">${row.rp != null ? row.rp : ""}</td>
         <td class="p-2 text-center">${row.elo != null ? row.elo : ""}</td>
