@@ -7,15 +7,10 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
-    window.SUPA_URL  = "https://yykwhpeczfapkileuxtb.supabase.co";
-    window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
-  </script>
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="bg-slate-950 text-slate-100">
   <div class="max-w-4xl mx-auto p-4">
-    <!-- Auth bar -->
     <div id="authbar" class="mb-3"></div>
 
     <a href="index.html" class="text-indigo-400 hover:underline">&larr; Back to leaderboard</a>
@@ -25,14 +20,25 @@
       <div id="accStatus" class="text-slate-300">Loading…</div>
     </div>
 
-    <!-- PROFILE -->
     <section class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
       <h2 class="text-xl font-semibold mb-3">Profile</h2>
       <div class="grid sm:grid-cols-2 gap-3 text-sm">
-        <div><div class="text-slate-400">Discord name</div><div id="prof-name" class="text-slate-100">—</div></div>
-        <div><div class="text-slate-400">Email</div><div id="prof-email" class="text-slate-100">—</div></div>
-        <div><div class="text-slate-400">User ID</div><div id="prof-id" class="text-slate-100 break-all">—</div></div>
-        <div><div class="text-slate-400">Premium</div><div id="prof-premium" class="text-slate-100">—</div></div>
+        <div>
+          <div class="text-slate-400">Discord name</div>
+          <div id="prof-name" class="text-slate-100">—</div>
+        </div>
+        <div>
+          <div class="text-slate-400">Email</div>
+          <div id="prof-email" class="text-slate-100">—</div>
+        </div>
+        <div>
+          <div class="text-slate-400">User ID</div>
+          <div id="prof-id" class="text-slate-100 break-all">—</div>
+        </div>
+        <div>
+          <div class="text-slate-400">Premium</div>
+          <div id="prof-premium" class="text-slate-100">—</div>
+        </div>
       </div>
 
       <div class="mt-4 p-3 rounded-xl border border-slate-800 bg-slate-900/60">
@@ -41,7 +47,6 @@
       </div>
     </section>
 
-    <!-- PREMIUM & DONATION -->
     <section class="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
       <h2 class="text-xl font-semibold mb-2">Premium</h2>
       <p class="text-slate-300 mb-2">
@@ -55,7 +60,6 @@
       <div id="prem-state" class="mb-4 text-slate-300">Checking your status…</div>
 
       <div class="grid md:grid-cols-2 gap-4">
-        <!-- One-time Premium pass (30 days) -->
         <div class="p-4 rounded-xl border border-slate-800">
           <h3 class="font-semibold mb-1">30-day Premium pass (€2 one-time)</h3>
           <p class="text-slate-400 mb-3 text-sm">
@@ -65,7 +69,6 @@
           <div id="one-note" class="text-xs text-amber-300 mt-2"></div>
         </div>
 
-        <!-- Donation / Tip -->
         <div class="p-4 rounded-xl border border-slate-800">
           <h3 class="font-semibold mb-1">Tip / Donation (no perks)</h3>
           <p class="text-slate-400 mb-3 text-sm">
@@ -87,258 +90,7 @@
     </section>
   </div>
 
-  <!-- Core logic -->
-  <script>
-    const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON);
-
-    // Auth bar (login/logout)
-    async function renderAuthBar(){
-      const slot = document.getElementById('authbar');
-      const { data:{ user } } = await supa.auth.getUser();
-      if(!user){
-        slot.innerHTML = `<div class="flex items-center justify-end">
-          <button id="signin" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">
-            Sign in with Discord
-          </button>
-        </div>`;
-        document.getElementById('signin').onclick = ()=> supa.auth.signInWithOAuth({
-          provider: 'discord',
-          options: { redirectTo: location.href }
-        });
-        document.getElementById('accStatus').textContent = 'Please sign in to view your account.';
-        return null;
-      }
-      slot.innerHTML = `<div class="flex items-center justify-end gap-2">
-        <button id="signout" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm hover:bg-slate-700">Sign out</button>
-      </div>`;
-      document.getElementById('signout').onclick = async ()=>{ await supa.auth.signOut(); location.reload(); };
-      return user;
-    }
-
-    function getDiscordId(user){
-      const ids = user?.identities || [];
-      const disc = ids.find(i => i?.provider === 'discord');
-      const fromIdent = disc?.identity_data?.user_id || disc?.identity_data?.sub || disc?.identity_data?.id;
-      const fromMeta  = user?.user_metadata?.provider_id || user?.user_metadata?.sub || null;
-      return String(fromIdent || fromMeta || '').trim() || null;
-    }
-
-    async function loadLinkedPlayer(user){
-      const el = document.getElementById('linked-player');
-      try{
-        const discordId = getDiscordId(user);
-        if(!discordId){ el.textContent = 'No Discord ID found.'; return { discordId:null, steamId:null }; }
-        const res = await fetch('links_state.json', { cache:'no-store' });
-        if(!res.ok){ el.textContent = 'Could not load link state.'; return { discordId, steamId:null }; }
-        const map = await res.json();
-        const steamId = map[discordId] ? String(map[discordId]) : null;
-        if(!steamId){ el.textContent = 'No linked Steam ID found for your Discord account.'; }
-        else {
-          el.innerHTML = `Linked to SteamID <b>${steamId}</b> · <a class="text-indigo-300 hover:underline" href="player.html?steam_id=${encodeURIComponent(steamId)}">Open your player page</a>`;
-        }
-        return { discordId, steamId };
-      }catch(e){
-        el.textContent = 'Error while resolving linked profile.';
-        console.error(e);
-        return { discordId:null, steamId:null };
-      }
-    }
-
-    // Persist discord_id / steam_id in profiles so the leaderboard can mark premiums for everyone
-    async function resolveAndSaveIds(user, ids){
-      try{
-        await supa.from('profiles').upsert(
-          { id: user.id, discord_id: ids.discordId || null, steam_id: ids.steamId || null },
-          { onConflict: 'id' }
-        );
-      }catch(e){
-        console.warn('profiles upsert (ids) failed:', e);
-      }
-    }
-
-    async function loadProfile(){
-      const user = await renderAuthBar();
-      if(!user) return;
-
-      const meta = user.user_metadata || {};
-      let { data: prof, error } = await supa
-        .from('profiles')
-        .select('premium_until,is_premium,discord_id,steam_id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (error) console.error('profiles select error', error);
-
-      if (!prof) {
-        const { error: upErr } = await supa.from('profiles').upsert({ id: user.id });
-        if (upErr) console.warn('profiles upsert error', upErr);
-        const res2 = await supa
-          .from('profiles')
-          .select('premium_until,is_premium,discord_id,steam_id')
-          .eq('id', user.id)
-          .maybeSingle();
-        prof = res2.data || null;
-      }
-
-      const nameGuess =
-        meta.full_name || meta.name || meta.preferred_username || meta.user_name || '—';
-      const email = user.email || meta.email || '—';
-
-      const until = prof?.premium_until ? new Date(prof.premium_until) : null;
-      const active = !!(until && until > new Date());
-      const premiumTxt = active
-        ? `Active (until ${until.toISOString().slice(0,10)})`
-        : 'Not active';
-
-      document.getElementById('accStatus').innerHTML = `Logged in as <b>${nameGuess}</b>`;
-      document.getElementById('prof-name').textContent    = nameGuess;
-      document.getElementById('prof-email').textContent   = email;
-      document.getElementById('prof-id').textContent      = user.id;
-      document.getElementById('prof-premium').textContent = premiumTxt;
-      document.getElementById('prem-state').textContent   = premiumTxt;
-
-      const ids = await loadLinkedPlayer(user);
-      await resolveAndSaveIds(user, ids); // <-- enregistre discord_id / steam_id
-    }
-
-    document.addEventListener('DOMContentLoaded', loadProfile);
-  </script>
-
-  <!-- PayPal SDK + Buttons -->
-  <script>
-    const supaClient = supabase.createClient(window.SUPA_URL, window.SUPA_ANON);
-
-    async function getPayPalPublicConfig(){
-      const { data:{ session } } = await supaClient.auth.getSession();
-      const res = await fetch(`${window.SUPA_URL}/functions/v1/paypal-public-config`, {
-        method:'GET',
-        headers: { 'Authorization': `Bearer ${session?.access_token ?? ''}` }
-      });
-      if(!res.ok) return null;
-      return await res.json();
-    }
-
-    function loadPayPalSdk({ clientId, currency }, onReady){
-      if(!clientId){
-        const allNotes = ['one-note','donate-note'];
-        allNotes.forEach(id=>{
-          const el = document.getElementById(id);
-          if(el) el.textContent = 'PayPal is not configured (missing client id).';
-        });
-        return;
-      }
-      const params = new URLSearchParams({
-        'client-id': clientId,
-        'currency': currency || 'EUR',
-        'intent': 'capture'
-      }).toString();
-      const s = document.createElement('script');
-      s.src = `https://www.paypal.com/sdk/js?${params}`;
-      s.onload = onReady;
-      document.head.appendChild(s);
-    }
-
-    async function callCapture(orderId){
-      const { data:{ session } } = await supaClient.auth.getSession();
-      const res = await fetch(`${window.SUPA_URL}/functions/v1/capture-paypal-order`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token||''}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          orderId,
-          expectedAmount: "2.00",
-          expectedCurrency: "EUR"
-        })
-      });
-      const j = await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(j.error || res.statusText || 'Capture failed');
-      return j;
-    }
-
-    function mountOneTime(){
-      if(!window.paypal) return;
-      const host = document.getElementById('paypal-onetime');
-      if(!host) return;
-
-      paypal.Buttons({
-        style: { label: 'pay' },
-        createOrder: (data, actions) => actions.order.create({
-          intent: 'CAPTURE',
-          purchase_units: [{ amount: { currency_code: 'EUR', value: "2.00" } }]
-        }),
-        onApprove: async (data, actions) => {
-          const order = await actions.order.capture();
-          try{
-            await callCapture(order.id);
-            document.getElementById('prem-msg').textContent = '30-day pass activated. Enjoy!';
-            setTimeout(() => location.reload(), 800);
-          }catch(e){
-            document.getElementById('prem-msg').textContent = 'Activation error: ' + (e.message||e);
-          }
-        }
-      }).render('#paypal-onetime');
-    }
-
-    function mountDonation(){
-      if(!window.paypal) return;
-      const host = document.getElementById('paypal-donate');
-      if(!host) return;
-
-      const input = document.getElementById('donation-amount');
-      const quick5 = document.getElementById('donation-quick-5');
-      const quick10 = document.getElementById('donation-quick-10');
-
-      function renderButtons(){
-        host.innerHTML = "";
-        paypal.Buttons({
-          style: { label: 'donate' },
-          createOrder: (data, actions) => {
-            let amount = parseFloat(input.value || "3");
-            if (isNaN(amount) || amount < 2) amount = 2.00;
-            amount = amount.toFixed(2);
-            return actions.order.create({
-              intent: 'CAPTURE',
-              purchase_units: [{ amount: { currency_code: 'EUR', value: amount } }]
-            });
-          },
-          onApprove: async (data, actions) => {
-            await actions.order.capture();
-            document.getElementById('prem-msg').textContent =
-              'Thanks a lot for your support! (Donations do not grant extra features.)';
-          }
-        }).render('#paypal-donate');
-      }
-
-      [input, quick5, quick10].forEach(el=>{
-        if(!el) return;
-        el.addEventListener('click', (e)=>{
-          if(e.target === quick5) input.value = "5.00";
-          if(e.target === quick10) input.value = "10.00";
-          renderButtons();
-        });
-        if(el === input){
-          input.addEventListener('change', renderButtons);
-          input.addEventListener('keyup', renderButtons);
-        }
-      });
-
-      renderButtons();
-    }
-
-    document.addEventListener('DOMContentLoaded', async () => {
-      const cfg = await getPayPalPublicConfig();
-      if(!cfg){
-        const allNotes = ['one-note','donate-note'];
-        allNotes.forEach(id=>{
-          const el = document.getElementById(id);
-          if(el) el.textContent = 'Unable to fetch PayPal public config.';
-        });
-        return;
-      }
-      loadPayPalSdk(cfg, () => { mountOneTime(); mountDonation(); });
-    });
-  </script>
+  <script src="js/account.js"></script>
+  <script src="js/auth.js"></script>
 </body>
 </html>
