@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Match Replay Viewer</title>
+
+    <link rel="stylesheet" href="./replay-viewer.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "./three.js-master/build/three.module.js",
+            "three/addons/": "./three.js-master/examples/jsm/"
+          }
+        }
+    </script>
+</head>
+<body>
+    <div id="topbar">
+        <button id="btn-freecam" class="btn">Freecam</button>
+        <button id="btn-p1" class="btn">POV P1</button>
+        <button id="btn-p2" class="btn">POV P2</button>
+        <button id="btn-play" class="btn">Play</button>
+
+        <span id="match-info"></span>
+    </div>
+
+    <div id="auth-warning" class="auth-warning"></div>
+
+    <div id="viewer">
+        <div id="canvas-container">
+            <div id="crosshair"></div>
+        </div>
+    </div>
+
+    <div id="viewer">
+        <div id="canvas-container">
+            <div id="crosshair"></div>
+        </div>
+    </div>
+
+    <script type="module" src="./replay-viewer.js"></script>
+</body>
+</html>

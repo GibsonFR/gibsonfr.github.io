@@ -130,26 +130,50 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
 }
 
 function renderMatchHeader(matchRow, premiumSet) {
-  const playerOneNameHtml = createLinkedNameWithPremium(matchRow.p1_id, matchRow.p1_name || "P1", premiumSet);
-  const playerTwoNameHtml = createLinkedNameWithPremium(matchRow.p2_id, matchRow.p2_name || "P2", premiumSet);
-  const playerOneElo = matchRow.p1_elo_after ?? matchRow.p1_elo_before ?? "-";
-  const playerTwoElo = matchRow.p2_elo_after ?? matchRow.p2_elo_before ?? "-";
+    const playerOneNameHtml = createLinkedNameWithPremium(
+        matchRow.p1_id,
+        matchRow.p1_name || "P1",
+        premiumSet
+    );
+    const playerTwoNameHtml = createLinkedNameWithPremium(
+        matchRow.p2_id,
+        matchRow.p2_name || "P2",
+        premiumSet
+    );
+    const playerOneElo = matchRow.p1_elo_after ?? matchRow.p1_elo_before ?? "-";
+    const playerTwoElo = matchRow.p2_elo_after ?? matchRow.p2_elo_before ?? "-";
 
-  let winnerHtml = "—";
-  if (matchRow.winner === "1" || matchRow.winner === 1) {
-    winnerHtml = playerOneNameHtml;
-  } else if (matchRow.winner === "2" || matchRow.winner === 2) {
-    winnerHtml = playerTwoNameHtml;
-  }
+    let winnerHtml = "—";
+    if (matchRow.winner === "1" || matchRow.winner === 1) {
+        winnerHtml = playerOneNameHtml;
+    } else if (matchRow.winner === "2" || matchRow.winner === 2) {
+        winnerHtml = playerTwoNameHtml;
+    }
 
-  const replayHtml = matchRow.replay_url
-    ? `<a class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500" href="${matchRow.replay_url}" download>Download replay</a>`
-    : `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+    let replayHtml;
+    if (matchRow.replay_url) {
+        const safeReplayUrl = encodeURI(matchRow.replay_url);
+        replayHtml = `
+      <div class="flex flex-wrap items-center gap-2">
+        <a
+          class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm"
+          href="${safeReplayUrl}"
+          download
+        >
+          Download replay
+        </a>
+        <span id="watchReplaySlot" class="text-sm text-slate-400"></span>
+      </div>`;
+    } else {
+        replayHtml = `<span class="text-slate-500 text-sm">Replay not uploaded</span>`;
+    }
 
-  const matchCardContainer = getElement("#matchCard");
-  const playedAtText = matchRow.played_at ? new Date(matchRow.played_at).toLocaleString() : "";
+    const matchCardContainer = getElement("#matchCard");
+    const playedAtText = matchRow.played_at
+        ? new Date(matchRow.played_at).toLocaleString()
+        : "";
 
-  matchCardContainer.innerHTML = `
+    matchCardContainer.innerHTML = `
     <div class="space-y-3">
       <div class="text-slate-300 text-sm">${playedAtText}</div>
       <div class="text-xl font-bold">
@@ -157,10 +181,55 @@ function renderMatchHeader(matchRow, premiumSet) {
         <span class="text-slate-500">vs</span>
         ${playerTwoNameHtml} <span class="text-slate-400">(${playerTwoElo})</span>
       </div>
-      <div class="text-slate-300">Winner: <span class="text-slate-100">${winnerHtml}</span> · Map ${matchRow.map_id ?? "-"}</div>
+      <div class="text-slate-300">
+        Winner:
+        <span class="text-slate-100">${winnerHtml}</span>
+        · Map ${matchRow.map_id ?? "-"}
+      </div>
       <div class="pt-1">${replayHtml}</div>
     </div>`;
 }
+
+function updateWatchReplaySlot(user) {
+    const slot = getElement("#watchReplaySlot");
+    if (!slot) return;
+
+    // Pas de match ou pas de replay → rien
+    if (!currentMatchRow || !currentMatchRow.replay_url) {
+        slot.innerHTML = "";
+        return;
+    }
+
+    // Pas connecté → bouton grisé + petit hint
+    if (!user) {
+        slot.innerHTML = `
+      <div class="flex items-center gap-2">
+        <button
+          class="px-3 py-1.5 rounded border border-slate-700 bg-slate-900 text-slate-500 text-sm cursor-not-allowed"
+          title="Sign in with Discord to watch replays"
+        >
+          Watch replay
+        </button>
+        <span class="text-xs text-slate-500">Sign in to unlock</span>
+      </div>
+    `;
+        return;
+    }
+
+    // Connecté → vrai lien vers le viewer
+    const replayUrlParam = encodeURIComponent(currentMatchRow.replay_url);
+    const viewerHref = `replay-viewer.html?rpl=${replayUrlParam}`;
+
+    slot.innerHTML = `
+    <a
+      href="${viewerHref}"
+      class="inline-flex items-center px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm"
+    >
+      Watch replay
+    </a>
+  `;
+}
+
 
 function renderMatchNotFound() {
   const matchCardContainer = getElement("#matchCard");
@@ -241,6 +310,8 @@ async function updateGateBanner() {
   const analyzeButtonElement = getElement("#analyzeBtn");
 
   const user = await getCurrentUser();
+  updateWatchReplaySlot(user);
+
   if (!user) {
     gateBannerElement.classList.remove("hidden");
     gateBannerElement.innerHTML = `
@@ -408,6 +479,46 @@ function subscribeToRealtimeAnalysis(matchId) {
     .subscribe();
 }
 
+/**
+ * Gère le bouton "Watch replay (3D)" en fonction :
+ * - de la présence du replay
+ * - du fait que l'utilisateur soit connecté ou non
+ */
+function updateWatchReplayButton(gateState, matchRow) {
+  const btn = document.getElementById("watchReplayBtn");
+  if (!btn) return;
+
+  if (!matchRow.replay_url) {
+    btn.disabled = true;
+    btn.textContent = "Replay not uploaded";
+    btn.title = "Replay file not uploaded";
+    btn.onclick = null;
+    return;
+  }
+
+  // Pas connecté → bouton = "Sign in to watch replay"
+  if (!gateState.user) {
+    btn.disabled = false;
+    btn.textContent = "Sign in to watch replay";
+    btn.title = "Sign in with Discord to watch this replay";
+    btn.onclick = () => {
+      supabaseClient.auth.signInWithOAuth({
+        provider: "discord",
+        options: { redirectTo: window.location.href }
+      });
+    };
+    return;
+  }
+
+  // Connecté → bouton = "Watch replay (3D)" → envoi vers replay.html?id=<match_id>
+  btn.disabled = false;
+  btn.textContent = "Watch replay (3D)";
+  btn.title = "";
+  btn.onclick = () => {
+    window.location.href = `replay.html?id=${encodeURIComponent(matchIdValue)}`;
+  };
+}
+
 async function initializeMatchPage() {
   if (!matchIdParam) {
     renderMatchNotFound();
@@ -428,6 +539,7 @@ async function initializeMatchPage() {
   analysisBlockElement.classList.remove("hidden");
 
   let gateState = await updateGateBanner();
+  updateWatchReplayButton(gateState, matchRow);
 
   const analyzeButtonElement = getElement("#analyzeBtn");
   if (analyzeButtonElement) {
@@ -447,7 +559,8 @@ async function initializeMatchPage() {
   subscribeToRealtimeAnalysis(matchIdValue);
 
   supabaseClient.auth.onAuthStateChange(async () => {
-    await updateGateBanner();
+    gateState = await updateGateBanner();
+    updateWatchReplayButton(gateState, matchRow);
   });
 }
 
