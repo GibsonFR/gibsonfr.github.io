@@ -1,12 +1,13 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
-import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
-import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
-import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { OutlinePass } from "three/addons/postprocessing/OutlinePass.js";
+import * as THREE from "../three/build/three.module.js";
+import { OrbitControls } from "../three/examples/jsm/controls/OrbitControls.js";
+import { OBJLoader } from "../three/examples/jsm/loaders/OBJLoader.js";
+import { MTLLoader } from "../three/examples/jsm/loaders/MTLLoader.js";
+import { FBXLoader } from "../three/examples/jsm/loaders/FBXLoader.js";
+import * as SkeletonUtils from "../three/examples/jsm/utils/SkeletonUtils.js";
+import { EffectComposer } from "../three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "../three/examples/jsm/postprocessing/RenderPass.js";
+import { OutlinePass } from "../three/examples/jsm/postprocessing/OutlinePass.js";
+
 
 const SUPABASE_URL = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPABASE_ANON_KEY =
