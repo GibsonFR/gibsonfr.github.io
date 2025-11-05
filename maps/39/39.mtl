@@ -1,0 +1,79 @@
+﻿newmtl PaintWallBlue_2
+Kd 0.5529412 0.820935 0.8666667
+map_Kd PaintedPlaster017_1K_Color.png
+
+newmtl PaintWallWhite
+Kd 1 1 1
+map_Kd PaintedPlaster017_1K_Color.png
+
+newmtl clouds-49520
+Kd 1 1 1
+map_Kd clouds-49520.png
+
+newmtl SandSnow
+Kd 0.9245283 0.9245283 0.9245283
+map_Kd Ground033_1K_Color_snow.png
+
+newmtl PaintWall
+Kd 0.9056604 0.3921348 0.3460306
+map_Kd PaintedPlaster017_1K_Color.png
+
+newmtl Prototype_512x512_Orange
+Kd 1 1 1
+map_Kd prototype_512x512_orange.png
+
+newmtl Ladder
+Kd 1 0.3966451 0
+map_Kd LadderTexture.png
+
+newmtl Planks
+Kd 0.6981132 0.6981132 0.6981132
+map_Kd Planks003_1K_Color.png
+
+newmtl Planks_1
+Kd 0.8490566 0.8490566 0.8490566
+map_Kd Planks003_1K_Color.png
+
+newmtl Green_1
+Kd 0.2932757 0.3838904 0.2424043
+
+newmtl DarkWood_2
+Kd 0.3413689 0.2493701 0.2226699
+
+newmtl Wood_2
+Kd 0.4385602 0.3193411 0.2793592
+
+newmtl Metal_1
+Kd 0.2752835 0.2592566 0.335294
+
+newmtl DarkWood_4
+Kd 0.3595933 0.2817075 0.1937089
+
+newmtl Wood_3
+Kd 0.4142663 0.3246961 0.2234903
+
+newmtl mat15
+Kd 0.8152506 0.8543057 0.865042
+
+newmtl ScreenMaterial
+Kd 0.09985279 0.09985279 0.09985279
+
+newmtl mat17
+Kd 0.2716997 0.3491901 0.3958812
+
+newmtl mat16
+Kd 0.4731206 0.5657284 0.6180314
+
+newmtl mat22_0
+Kd 0.6262096 0.6262096 0.6262096
+
+newmtl Wood
+Kd 0.3846074 0.2899616 0.2547772
+
+newmtl LightWood_1
+Kd 0.4203382 0.3197229 0.2924258
+
+newmtl PaintWallBlue_1
+Kd 0.8666667 0.8042952 0.5529412
+map_Kd PaintedPlaster017_1K_Color.png
+
