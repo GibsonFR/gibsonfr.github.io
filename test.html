@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Map Replay Viewer</title>
+
+    <link rel="stylesheet" href="style.css" />
+
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "./three.js-master/build/three.module.js",
+            "three/addons/": "./three.js-master/examples/jsm/"
+          }
+        }
+    </script>
+</head>
+<body>
+    <div id="topbar">
+        <span>Map:</span>
+        <select id="map-select">
+            <option value="35">35</option>
+            <option value="36">36</option>
+            <option value="37">37</option>
+            <option value="39">39</option>
+            <option value="40" selected>40</option>
+        </select>
+
+        <span>Replay:</span>
+        <input id="rpl-input" type="file" accept=".rpl" />
+
+        <button id="btn-freecam" class="btn">Freecam</button>
+        <button id="btn-p1" class="btn">POV P1</button>
+        <button id="btn-p2" class="btn">POV P2</button>
+        <button id="btn-play" class="btn">Play</button>
+    </div>
+
+    <div id="viewer">
+        <div id="canvas-container">
+            <div id="crosshair"></div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
