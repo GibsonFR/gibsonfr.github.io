@@ -1,12 +1,13 @@
-import * as THREE from "../three/build/three.module.js";
-import { OrbitControls } from "../three/examples/jsm/controls/OrbitControls.js";
-import { OBJLoader } from "../three/examples/jsm/loaders/OBJLoader.js";
-import { MTLLoader } from "../three/examples/jsm/loaders/MTLLoader.js";
-import { FBXLoader } from "../three/examples/jsm/loaders/FBXLoader.js";
-import * as SkeletonUtils from "../three/examples/jsm/utils/SkeletonUtils.js";
-import { EffectComposer } from "../three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "../three/examples/jsm/postprocessing/RenderPass.js";
-import { OutlinePass } from "../three/examples/jsm/postprocessing/OutlinePass.js";
+import * as THREE from "../three.js-master/build/three.module.js";
+import { OrbitControls } from "../three.js-master/examples/jsm/controls/OrbitControls.js";
+import { OBJLoader } from "../three.js-master/examples/jsm/loaders/OBJLoader.js";
+import { MTLLoader } from "../three.js-master/examples/jsm/loaders/MTLLoader.js";
+import { FBXLoader } from "../three.js-master/examples/jsm/loaders/FBXLoader.js";
+import * as SkeletonUtils from "../three.js-master/examples/jsm/utils/SkeletonUtils.js";
+import { EffectComposer } from "../three.js-master/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "../three.js-master/examples/jsm/postprocessing/RenderPass.js";
+import { OutlinePass } from "../three.js-master/examples/jsm/postprocessing/OutlinePass.js";
+
 
 
 const SUPABASE_URL = "https://yykwhpeczfapkileuxtb.supabase.co";
