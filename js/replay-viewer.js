@@ -8,16 +8,11 @@ import { EffectComposer } from "../three.js-master/examples/jsm/postprocessing/E
 import { RenderPass } from "../three.js-master/examples/jsm/postprocessing/RenderPass.js";
 import { OutlinePass } from "../three.js-master/examples/jsm/postprocessing/OutlinePass.js";
 
-
-
 const SUPABASE_URL = "https://yykwhpeczfapkileuxtb.supabase.co";
 const SUPABASE_ANON_KEY =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
 
-const supabaseClient = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
-);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const crosshairElement = document.getElementById("crosshair");
 const freecamButton = document.getElementById("btn-freecam");
@@ -121,6 +116,8 @@ let player2IsMoving = false;
 let currentReplay = null;
 let playbackTime = 0;
 let playing = false;
+let replayAutoStartTimeout = null;
+let replayEndBackTimeout = null;
 let p1Index = 0;
 let p2Index = 0;
 let tagIndex = 0;
@@ -278,6 +275,10 @@ function init() {
   playButton.addEventListener("click", () => {
     playing = !playing;
     playButton.textContent = playing ? "Pause" : "Play";
+    if (playing && replayEndBackTimeout) {
+      clearTimeout(replayEndBackTimeout);
+      replayEndBackTimeout = null;
+    }
   });
 
   updatePovButtonLabels();
@@ -1137,8 +1138,7 @@ async function loadReplayFromUrl(url) {
       return;
     }
     applyReplay(replay);
-  } catch (err) {
-  }
+  } catch (err) {}
 }
 
 function loadReplayFromQueryString() {
@@ -1155,8 +1155,18 @@ function applyReplay(replay) {
   currentReplay = replay;
   updatePovButtonLabels();
   playbackTime = 0;
-  playing = true;
-  playButton.textContent = "Pause";
+
+  if (replayAutoStartTimeout) {
+    clearTimeout(replayAutoStartTimeout);
+    replayAutoStartTimeout = null;
+  }
+  if (replayEndBackTimeout) {
+    clearTimeout(replayEndBackTimeout);
+    replayEndBackTimeout = null;
+  }
+
+  playing = false;
+  playButton.textContent = "Play";
   createOrUpdateNameLabels();
   p1Index = 0;
   p2Index = 0;
@@ -1182,6 +1192,11 @@ function applyReplay(replay) {
 
   if (player1) player1.userData.replayInitialized = false;
   if (player2) player2.userData.replayInitialized = false;
+
+  replayAutoStartTimeout = setTimeout(() => {
+    playing = true;
+    playButton.textContent = "Pause";
+  }, 5000);
 }
 
 function parseReplay(buffer) {
@@ -1307,6 +1322,11 @@ function updateReplay(deltaTime) {
     playbackTime = replay.duration;
     playing = false;
     playButton.textContent = "Play";
+    if (!replayEndBackTimeout) {
+      replayEndBackTimeout = setTimeout(() => {
+        window.history.back();
+      }, 5000);
+    }
   }
 
   updatePlayerFromSamples(player1, replay.p1Samples, true, deltaTime);
@@ -1684,50 +1704,49 @@ function animate() {
 }
 
 async function bootstrapReplayViewer() {
-    const authWarning = document.getElementById("auth-warning");
-    const viewer = document.getElementById("viewer");
+  const authWarning = document.getElementById("auth-warning");
+  const viewer = document.getElementById("viewer");
 
-    try {
-        const { data: { user } } = await supabaseClient.auth.getUser();
+  try {
+    const {
+      data: { user },
+    } = await supabaseClient.auth.getUser();
 
-        // Pas connecté → on bloque le viewer et on propose login
-        if (!user) {
-            if (authWarning) {
-                authWarning.classList.add("visible");
-                authWarning.innerHTML = `
+    if (!user) {
+      if (authWarning) {
+        authWarning.classList.add("visible");
+        authWarning.innerHTML = `
           <span>🔒 You need an account to watch replays.</span>
           <button id="auth-login-btn" type="button">Sign in with Discord</button>
         `;
-            }
-            if (viewer) {
-                viewer.classList.add("viewer-disabled");
-            }
+      }
+      if (viewer) {
+        viewer.classList.add("viewer-disabled");
+      }
 
-            const loginBtn = document.getElementById("auth-login-btn");
-            if (loginBtn) {
-                loginBtn.addEventListener("click", () => {
-                    supabaseClient.auth.signInWithOAuth({
-                        provider: "discord",
-                        options: { redirectTo: window.location.href }
-                    });
-                });
-            }
-            return;
-        }
-    } catch (err) {
-        if (authWarning) {
-            authWarning.classList.add("visible");
-            authWarning.textContent =
-                "Error while checking login. Please refresh the page.";
-        }
-        if (viewer) {
-            viewer.classList.add("viewer-disabled");
-        }
-        return;
+      const loginBtn = document.getElementById("auth-login-btn");
+      if (loginBtn) {
+        loginBtn.addEventListener("click", () => {
+          supabaseClient.auth.signInWithOAuth({
+            provider: "discord",
+            options: { redirectTo: window.location.href },
+          });
+        });
+      }
+      return;
     }
+  } catch (err) {
+    if (authWarning) {
+      authWarning.classList.add("visible");
+      authWarning.textContent = "Error while checking login. Please refresh the page.";
+    }
+    if (viewer) {
+      viewer.classList.add("viewer-disabled");
+    }
+    return;
+  }
 
-    init();
+  init();
 }
 
 bootstrapReplayViewer();
-
