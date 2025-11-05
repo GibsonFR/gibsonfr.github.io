@@ -1194,8 +1194,14 @@ function applyReplay(replay) {
   if (player2) player2.userData.replayInitialized = false;
 
   replayAutoStartTimeout = setTimeout(() => {
-    playing = true;
-    playButton.textContent = "Pause";
+     playbackTime = 0;
+     p1Index = 0;
+     p2Index = 0;
+     tagIndex = 0;
+     useItemIndex = 0;
+
+     playing = true;
+     playButton.textContent = "Pause";
   }, 5000);
 }
 
