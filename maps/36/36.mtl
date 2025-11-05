@@ -1,0 +1,89 @@
+﻿newmtl Planks_1
+Kd 0.8490566 0.8490566 0.8490566
+map_Kd Planks003_1K_Color.png
+
+newmtl Rock11
+Kd 1 1 1
+map_Kd Rock013_1K_Color.png
+
+newmtl Play_grass_Beach
+Kd 0.9056604 0.9040354 0.5254539
+map_Kd Fabric024_1K_Color_white.png
+
+newmtl Sand2
+Kd 0.9245283 0.9245283 0.9245283
+map_Kd Ground033_1K_Color.png
+
+newmtl Brick2_1
+Kd 1 1 1
+map_Kd Bricks037_1K_Color.png
+
+newmtl Prototype_512x512_Orange
+Kd 1 1 1
+map_Kd prototype_512x512_orange.png
+
+newmtl Rock_0
+Kd 0.427451 0.427451 0.427451
+
+newmtl Sand3
+Kd 0.9245283 0.9245283 0.9245283
+map_Kd Ground033_1K_Color.png
+
+newmtl Metal_Clean
+Kd 1 1 1
+
+newmtl Planks
+Kd 0.6981132 0.6981132 0.6981132
+map_Kd Planks003_1K_Color.png
+
+newmtl Rock_2
+Kd 0.427451 0.427451 0.427451
+
+newmtl Bat
+Kd 1 1 1
+map_Kd Bat_Color.png
+
+newmtl BaseColor
+Kd 0.9063317 0.9063317 0.9063317
+
+newmtl Red_4
+Kd 0.735849 0.3436276 0.3436276
+
+newmtl GReem
+Kd 0.1128132 1 0
+
+newmtl Color1
+Kd 0.5607087 0.5979741 0.9063317
+
+newmtl SunshinePalmTree_mat
+Kd 1 1 1
+map_Kd SunshinePalmTree_BaseColor.png
+
+newmtl Ladder
+Kd 1 0.3966451 0
+map_Kd LadderTexture.png
+
+newmtl mat22
+Kd 0.6262096 0.6262096 0.6262096
+
+newmtl mat23
+Kd 0.09985279 0.09985279 0.09985279
+
+newmtl Rock_1
+Kd 0.427451 0.427451 0.427451
+
+newmtl mat15
+Kd 0.8152506 0.8543057 0.865042
+
+newmtl ScreenMaterial
+Kd 0.09985279 0.09985279 0.09985279
+
+newmtl mat17
+Kd 0.2716997 0.3491901 0.3958812
+
+newmtl mat16
+Kd 0.4731206 0.5657284 0.6180314
+
+newmtl mat22_0
+Kd 0.6262096 0.6262096 0.6262096
+
