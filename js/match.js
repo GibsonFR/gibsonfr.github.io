@@ -765,7 +765,7 @@ async function loadAnalysis(matchId) {
           <div title="Type of match">
             <span class="text-slate-400">Match type:</span> <span class="text-slate-200">${escapeHtml(matchType)}</span>
           </div>
-          <div title="How the loser died: time up, tag push near the end, or damage/environment.">
+          <div title="How the loser died: time, tag, or damage.">
             <span class="text-slate-400">Death type:</span> <span class="text-slate-200">${escapeHtml(deathType)}</span>
           </div>
         </div>
