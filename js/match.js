@@ -747,11 +747,14 @@ async function loadAnalysis(matchId) {
             ? formatNumber(summary.tag_switch_rate, 3)
             : "—";
 
+        const p1ShortName = summary.p1_name || (currentMatchRow && currentMatchRow.p1_name) || "P1";
+        const p2ShortName = summary.p2_name || (currentMatchRow && currentMatchRow.p2_name) || "P2";
+
         let dominanceText = "—";
         if (summary.dominant_player === 1) {
-            dominanceText = "Player 1 held tag more overall.";
+            dominanceText = `${p1ShortName} spent less time tagged overall (more dominant).`;
         } else if (summary.dominant_player === 2) {
-            dominanceText = "Player 2 held tag more overall.";
+            dominanceText = `${p2ShortName} spent less time tagged overall (more dominant).`;
         }
 
         matchSummaryEl.innerHTML = `
@@ -773,7 +776,7 @@ async function loadAnalysis(matchId) {
           <div title="Average number of tag ownership switches per second.">
             <span class="text-slate-400">Tag switch rate:</span> <span class="text-slate-200">${tagSwitchRateStr}/s</span>
           </div>
-          <div title="Which player controlled the tag role more across the match.">
+          <div title="Player who spent less total time tagged (having the tag is a disadvantage).">
             <span class="text-slate-400">Dominance:</span> <span class="text-slate-200">${escapeHtml(dominanceText)}</span>
           </div>
         </div>`;
