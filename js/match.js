@@ -22,9 +22,10 @@ function escapeHtml(text) {
     }[character]));
 }
 
-function buildStatCard(label, value, suffix) {
+function buildStatCard(label, value, suffix, tooltip) {
     const finalSuffix = suffix || "";
-    return `<div class="p-2 rounded bg-slate-800 border border-slate-700">
+    const titleAttr = tooltip ? ` title="${escapeHtml(tooltip)}"` : "";
+    return `<div class="p-2 rounded bg-slate-800 border border-slate-700"${titleAttr}>
     <div class="text-slate-400">${label}</div>
     <div class="text-slate-100 font-semibold">${value}${finalSuffix}</div>
   </div>`;
@@ -129,48 +130,201 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
 
     const cards = [];
 
+    // --- Core role quality ---
     cards.push(
-        buildStatCard("Quality (tagger)", formatNumber(playerStats.tagger_quality, 1)),
-        buildStatCard("Quality (hider)", formatNumber(playerStats.hider_quality, 1))
+        buildStatCard(
+            "Quality (tagger)",
+            formatNumber(playerStats.tagger_quality, 1),
+            "",
+            "Overall performance score when you are the tagger (0–100)."
+        ),
+        buildStatCard(
+            "Quality (hider)",
+            formatNumber(playerStats.hider_quality, 1),
+            "",
+            "Overall performance score when you are the hider (0–100)."
+        )
     );
 
+    // --- Role time / duration ---
     cards.push(
         buildStatCard(
             "Time as tagger",
-            tagShare != null ? formatPercentage(tagShare) : "—"
+            tagShare != null ? formatPercentage(tagShare) : "—",
+            "",
+            "Share of total round time where you were the tagger."
         ),
-        buildStatCard("Seconds — tagger", formatNumber(secondsAsTagger, 2), " s"),
-        buildStatCard("Seconds — hider", formatNumber(secondsAsHider, 2), " s")
+        buildStatCard(
+            "Seconds — tagger",
+            formatNumber(secondsAsTagger, 2),
+            " s",
+            "Absolute time spent as tagger during the match."
+        ),
+        buildStatCard(
+            "Seconds — hider",
+            formatNumber(secondsAsHider, 2),
+            " s",
+            "Absolute time spent as hider during the match."
+        )
     );
 
+    // --- Distance / spacing / movement ---
     cards.push(
-        buildStatCard("Avg dist (hider)", formatNumber(playerStats.avg_distance_as_hider, 2), " m"),
-        buildStatCard("Avg dist (tagger)", formatNumber(playerStats.avg_distance_as_tagger, 2), " m"),
         buildStatCard(
-            "Movement",
-            playerStats.movement_ratio != null ? formatPercentage(playerStats.movement_ratio) : "—"
+            "Avg dist (hider)",
+            formatNumber(playerStats.avg_distance_as_hider, 2),
+            " m",
+            "Average distance to the opponent while you are the hider. Higher usually means better spacing."
+        ),
+        buildStatCard(
+            "Avg dist (tagger)",
+            formatNumber(playerStats.avg_distance_as_tagger, 2),
+            " m",
+            "Average distance to the opponent while you are the tagger. Lower usually means better pressure."
+        ),
+        buildStatCard(
+            "Movement (overall)",
+            playerStats.movement_ratio != null ? formatPercentage(playerStats.movement_ratio) : "—",
+            "",
+            "Share of time you are moving faster than the camping threshold."
         ),
         buildStatCard(
             "Path diversity",
             playerStats.path_diversity_score != null ? formatNumber(playerStats.path_diversity_score, 1) : "—",
-            playerStats.path_diversity_score != null ? "/100" : ""
+            playerStats.path_diversity_score != null ? "/100" : "",
+            "How many different map cells you visit compared to the approximate map size (0–100). Higher means more varied routes."
         )
     );
 
+    // --- Retag behaviour ---
     cards.push(
-        buildStatCard("Retag median", formatNumber(playerStats.retag_median_seconds, 2), " s"),
-        buildStatCard("Retag initial", formatNumber(playerStats.retag_initial_seconds, 2), " s"),
-        buildStatCard("Retag avg", formatNumber(playerStats.retag_avg_seconds, 2), " s")
+        buildStatCard(
+            "Retag median",
+            formatNumber(playerStats.retag_median_seconds, 2),
+            " s",
+            "Median duration of a tagger streak before you lose the tag."
+        ),
+        buildStatCard(
+            "Retag initial",
+            formatNumber(playerStats.retag_initial_seconds, 2),
+            " s",
+            "Duration of your very first tagger streak of the match."
+        ),
+        buildStatCard(
+            "Retag avg",
+            formatNumber(playerStats.retag_avg_seconds, 2),
+            " s",
+            "Average duration of your tagger streaks."
+        )
     );
 
+    // --- Items & conversion ---
     cards.push(
         buildStatCard(
             "Item accuracy",
-            playerStats.item_accuracy != null ? formatPercentage(playerStats.item_accuracy) : "—"
+            playerStats.item_accuracy != null ? formatPercentage(playerStats.item_accuracy) : "—",
+            "",
+            "Among item uses that were in a reasonable range, how many directly led to a tag shortly after."
         ),
         buildStatCard(
             "Opp. conversion",
-            playerStats.conversion_rate != null ? formatPercentage(playerStats.conversion_rate) : "—"
+            playerStats.conversion_rate != null ? formatPercentage(playerStats.conversion_rate) : "—",
+            "",
+            "How often you convert close-range opportunities (<5m) into actual tags."
+        ),
+        buildStatCard(
+            "Item uses (eligible/all)",
+            `${playerStats.item_eligible_uses ?? 0} / ${playerStats.item_all_uses ?? 0}`,
+            "",
+            "Number of item uses counted as relevant (within range) versus total item uses."
+        )
+    );
+
+    // --- Chase / evasion / pressure ---
+    cards.push(
+        buildStatCard(
+            "Chase score",
+            playerStats.chase_score != null ? formatNumber(playerStats.chase_score, 1) : "—",
+            "/100",
+            "Average rate at which you close distance when you are chasing within the chase radius."
+        ),
+        buildStatCard(
+            "Evasion score",
+            playerStats.evasion_score != null ? formatNumber(playerStats.evasion_score, 1) : "—",
+            "/100",
+            "Average rate at which you open distance when you are being chased within the chase radius."
+        ),
+        buildStatCard(
+            "Danger time (hider)",
+            playerStats.hider_pressure_danger_share != null ? formatPercentage(playerStats.hider_pressure_danger_share) : "—",
+            "",
+            "Share of your hider time spent very close to the tagger (pressure radius)."
+        ),
+        buildStatCard(
+            "Safe time (hider)",
+            playerStats.hider_pressure_safe_share != null ? formatPercentage(playerStats.hider_pressure_safe_share) : "—",
+            "",
+            "Share of your hider time spent far enough from the tagger (safe distance)."
+        )
+    );
+
+    // --- Per-role movement ---
+    cards.push(
+        buildStatCard(
+            "Movement as tagger",
+            playerStats.movement_ratio_tagger != null ? formatPercentage(playerStats.movement_ratio_tagger) : "—",
+            "",
+            "Share of your tagger time where you are moving (not camping)."
+        ),
+        buildStatCard(
+            "Movement as hider",
+            playerStats.movement_ratio_hider != null ? formatPercentage(playerStats.movement_ratio_hider) : "—",
+            "",
+            "Share of your hider time where you are moving (not camping)."
+        )
+    );
+
+    // --- Style / geometry ---
+    cards.push(
+        buildStatCard(
+            "Exploration pattern",
+            playerStats.exploration_pattern || "—",
+            "",
+            "High-level description of your pathing: looper = you loop in a small area, imprevisible = you cover a lot without repeating, regular = in between."
+        ),
+        buildStatCard(
+            "Vertical style",
+            playerStats.vertical_style || "—",
+            "",
+            "Whether you tend to play above your opponent (air), below (ground) or mixed in height."
+        ),
+        buildStatCard(
+            "Predictive tagging",
+            playerStats.tagger_predictivity_score != null ? formatNumber(playerStats.tagger_predictivity_score, 1) : "—",
+            "/100",
+            "How much your tagger movement tends to anticipate where the hider will be next (higher is more predictive)."
+        ),
+        buildStatCard(
+            "Hider tangent score",
+            playerStats.hider_tangent_score != null ? formatNumber(playerStats.hider_tangent_score, 1) : "—",
+            "/100",
+            "How often you move tangentially (sideways) relative to the chaser when you are the hider."
+        )
+    );
+
+    // --- Raw movement totals ---
+    cards.push(
+        buildStatCard(
+            "Total moving time",
+            formatNumber(playerStats.time_moving_total, 2),
+            " s",
+            "Total time you spent moving above the camping speed."
+        ),
+        buildStatCard(
+            "Total idle time",
+            formatNumber(playerStats.time_idle_total, 2),
+            " s",
+            "Total time you spent moving slower than the camping speed (or standing still)."
         )
     );
 
@@ -251,10 +405,20 @@ function renderProfileDiagram(containerSelector, profile) {
         return;
     }
 
+    const descriptions = {
+        Aggression: "Tagger-side quality, chase speed, item accuracy and close-range conversion.",
+        Evasion: "Hider-side quality, escape speed and how rarely you stay in danger range.",
+        Control: "How often you keep the opponent tagged and convert close-range situations.",
+        Mobility: "How much you move and how diverse your pathing is across the map."
+    };
+
     const rows = entries.map(([label, value]) => {
         const width = Math.max(4, Math.min(100, value));
+        const titleAttr = descriptions[label]
+            ? ` title="${escapeHtml(descriptions[label])}"`
+            : "";
         return `
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2"${titleAttr}>
         <div class="w-20 text-[11px] text-slate-400">${label}</div>
         <div class="flex-1 h-2 rounded bg-slate-800 overflow-hidden">
           <div class="h-2 rounded bg-indigo-500" style="width:${width}%"></div>
@@ -565,13 +729,63 @@ async function loadAnalysis(matchId) {
     getElement("#p1q").textContent = data.p1_quality ?? "—";
     getElement("#p2q").textContent = data.p2_quality ?? "—";
 
+    // --- match-level summary from new backend fields ---
+    const matchSummaryEl = getElement("#matchSummary");
+    if (matchSummaryEl) {
+        const durationStr = summary.duration_s != null
+            ? `${formatNumber(summary.duration_s, 2)} s`
+            : "—";
+
+        const matchType = summary.match_type || "unknown";
+        const deathType = summary.death_type || "unknown";
+
+        const tagShareDiffStr = summary.tag_share_diff != null
+            ? formatPercentage(summary.tag_share_diff)
+            : "—";
+
+        const tagSwitchRateStr = summary.tag_switch_rate != null
+            ? formatNumber(summary.tag_switch_rate, 3)
+            : "—";
+
+        let dominanceText = "—";
+        if (summary.dominant_player === 1) {
+            dominanceText = "Player 1 held tag more overall.";
+        } else if (summary.dominant_player === 2) {
+            dominanceText = "Player 2 held tag more overall.";
+        }
+
+        matchSummaryEl.innerHTML = `
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <div title="Total replay duration according to the analysis.">
+            <span class="text-slate-400">Duration:</span> <span class="text-slate-200">${durationStr}</span>
+          </div>
+          <div title="High-level classification based on tag share and number of switches.">
+            <span class="text-slate-400">Match type:</span> <span class="text-slate-200">${escapeHtml(matchType)}</span>
+          </div>
+          <div title="How the loser died: time up, tag push near the end, or damage/environment.">
+            <span class="text-slate-400">Death type:</span> <span class="text-slate-200">${escapeHtml(deathType)}</span>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs mt-1">
+          <div title="Absolute difference between both players' tag time, normalized by total match time.">
+            <span class="text-slate-400">Tag share diff:</span> <span class="text-slate-200">${tagShareDiffStr}</span>
+          </div>
+          <div title="Average number of tag ownership switches per second.">
+            <span class="text-slate-400">Tag switch rate:</span> <span class="text-slate-200">${tagSwitchRateStr}/s</span>
+          </div>
+          <div title="Which player controlled the tag role more across the match.">
+            <span class="text-slate-400">Dominance:</span> <span class="text-slate-200">${escapeHtml(dominanceText)}</span>
+          </div>
+        </div>`;
+    }
+
     const p1Stats = data.p1_stats || {};
     const p2Stats = data.p2_stats || {};
 
     renderPlayerStatsCards("#p1cards", p1Stats, "#p1sample");
     renderPlayerStatsCards("#p2cards", p2Stats, "#p2sample");
 
-    // Nouveau : diagrammes de profil
+    // Profile diagrams
     const p1Profile = computeProfileScores(p1Stats);
     const p2Profile = computeProfileScores(p2Stats);
     renderProfileDiagram("#p1profile", p1Profile);
