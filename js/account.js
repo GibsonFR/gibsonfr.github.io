@@ -1,49 +1,4 @@
-async function renderAuthBar() {
-    const authbarElement = document.getElementById("authbar");
-    const statusElement = document.getElementById("accStatus");
-
-    const {
-        data: { user }
-    } = await supabaseClient.auth.getUser();
-
-    if (!user) {
-        authbarElement.innerHTML = `<div class="flex items-center justify-end">
-      <button id="signin" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">
-        Sign in with Discord
-      </button>
-    </div>`;
-
-        const signinButton = document.getElementById("signin");
-        if (signinButton) {
-            signinButton.onclick = () => {
-                supabaseClient.auth.signInWithOAuth({
-                    provider: "discord",
-                    options: { redirectTo: location.href }
-                });
-            };
-        }
-
-        if (statusElement) {
-            statusElement.textContent = "Please sign in to view your account.";
-        }
-        return null;
-    }
-
-    authbarElement.innerHTML = `<div class="flex items-center justify-end gap-2">
-    <button id="signout" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm hover:bg-slate-700">Sign out</button>
-  </div>`;
-
-    const signoutButton = document.getElementById("signout");
-    if (signoutButton) {
-        signoutButton.onclick = async () => {
-            await supabaseClient.auth.signOut();
-            location.reload();
-        };
-    }
-    return user;
-}
-
-function getDiscordIdFromUser(user) {
+async function getDiscordIdFromUser(user) {
     const identities = user && user.identities ? user.identities : [];
     const discordIdentity = identities.find(
         identity => identity && identity.provider === "discord"
@@ -64,7 +19,7 @@ async function loadLinkedPlayer(user) {
     const linkedElement = document.getElementById("linked-player");
 
     try {
-        const discordId = getDiscordIdFromUser(user);
+        const discordId = await getDiscordIdFromUser(user);
         if (!discordId) {
             if (linkedElement) {
                 linkedElement.textContent = "No Discord ID found.";
@@ -123,8 +78,18 @@ async function saveProfileIdentifiers(user, identifiers) {
 }
 
 async function loadProfile() {
-    const user = await renderAuthBar();
-    if (!user) return;
+    const statusElement = document.getElementById("accStatus");
+
+    const {
+        data: { user }
+    } = await supabaseClient.auth.getUser();
+
+    if (!user) {
+        if (statusElement) {
+            statusElement.textContent = "Please sign in to view your account.";
+        }
+        return;
+    }
 
     const metadata = user.user_metadata || {};
     let profileRow = null;
@@ -174,7 +139,6 @@ async function loadProfile() {
         ? `Active (until ${premiumUntilDate.toISOString().slice(0, 10)})`
         : "Not active";
 
-    const statusElement = document.getElementById("accStatus");
     if (statusElement) {
         statusElement.innerHTML = `Logged in as <b>${nameGuess}</b>`;
     }
@@ -201,7 +165,6 @@ async function getPayPalPublicConfig() {
             data: { session }
         } = await supabaseClient.auth.getSession();
 
-        // On récupère l’URL du projet depuis config.js
         const baseUrl =
             (typeof window !== "undefined" && window.SUPABASE_URL) ||
             (typeof SUPABASE_URL !== "undefined" ? SUPABASE_URL : null);
@@ -365,8 +328,7 @@ function mountOneTimePurchaseButton() {
                 } catch (error) {
                     const messageElement = document.getElementById("prem-msg");
                     if (messageElement) {
-                        messageElement.textContent = `Activation error: ${error.message || String(error)
-                            }`;
+                        messageElement.textContent = `Activation error: ${error.message || String(error)}`;
                     }
                 }
             }
