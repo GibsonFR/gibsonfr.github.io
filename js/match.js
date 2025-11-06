@@ -290,7 +290,7 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Exploration pattern",
             playerStats.exploration_pattern || "—",
             "",
-            "High-level description of your pathing: looper = you loop in a small area, imprevisible = you cover a lot without repeating, regular = in between."
+            "Description of your pathing: looper = you loop in a small area, imprevisible = you cover a lot without repeating, regular = in between."
         ),
         buildStatCard(
             "Vertical style",
@@ -762,7 +762,7 @@ async function loadAnalysis(matchId) {
           <div title="Total replay duration according to the analysis.">
             <span class="text-slate-400">Duration:</span> <span class="text-slate-200">${durationStr}</span>
           </div>
-          <div title="High-level classification based on tag share and number of switches.">
+          <div title="Type of match">
             <span class="text-slate-400">Match type:</span> <span class="text-slate-200">${escapeHtml(matchType)}</span>
           </div>
           <div title="How the loser died: time up, tag push near the end, or damage/environment.">
@@ -773,10 +773,10 @@ async function loadAnalysis(matchId) {
           <div title="Absolute difference between both players' tag time, normalized by total match time.">
             <span class="text-slate-400">Tag share diff:</span> <span class="text-slate-200">${tagShareDiffStr}</span>
           </div>
-          <div title="Average number of tag ownership switches per second.">
+          <div title="Average number of tag switches per second.">
             <span class="text-slate-400">Tag switch rate:</span> <span class="text-slate-200">${tagSwitchRateStr}/s</span>
           </div>
-          <div title="Player who spent less total time tagged (having the tag is a disadvantage).">
+          <div title="Player who spent less total time tagged.">
             <span class="text-slate-400">Dominance:</span> <span class="text-slate-200">${escapeHtml(dominanceText)}</span>
           </div>
         </div>`;
