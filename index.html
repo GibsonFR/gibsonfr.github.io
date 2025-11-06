@@ -23,11 +23,8 @@
         <h1 class="text-3xl font-extrabold tracking-tight">
           🦀 Ranked Tag 1v1
         </h1>
-        <p class="mt-1 text-sm text-slate-400">
-          Ranked ladder for Crab Game. Elo / RP / tiers, replays and more.
-        </p>
         <p class="mt-1 text-xs text-slate-500" id="heroStats">
-          Live snapshot, updated every few minutes.
+          Updated every few minutes
         </p>
       </div>
 
@@ -41,7 +38,7 @@
         <a href="player.html" class="px-3 py-2 rounded bg-slate-900 border border-slate-700 hover:border-indigo-500">
           My profile
         </a>
-        <a href="https://discord.gg/" target="_blank" rel="noreferrer"
+        <a href="https://discord.gg/4zmpPMQzEZ" target="_blank" rel="noreferrer"
            class="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 font-medium">
           Join Discord
         </a>
@@ -52,7 +49,7 @@
       <div>
         <h2 class="text-xl font-semibold mb-3">Search a player</h2>
         <p class="text-sm text-slate-400 mb-3">
-          Search by in-game name or full SteamID64, and open a detailed profile page.
+          Search by in game name or full SteamID
         </p>
         <div class="flex flex-col sm:flex-row gap-2">
           <input
@@ -66,22 +63,14 @@
           </button>
         </div>
         <p class="mt-2 text-xs text-slate-500">
-          Tip: partial username works too (profile page handles the exact lookup).
+          Tip: partial username works too!
         </p>
       </div>
 
       <aside class="border border-slate-800 rounded-xl bg-slate-900/40 p-4 text-sm text-slate-300">
         <h2 class="font-semibold mb-2">What is this?</h2>
         <p class="mb-2">
-          Ranked Tag 1v1 is a custom ranked system for Crab Game. Every match generates a replay,
-          Elo / RP changes and a full match history stored on Supabase.
-        </p>
-        <p class="mb-2">
-          To reduce Supabase traffic, the global leaderboard is served from a
-          small JSON snapshot generated every few minutes.
-        </p>
-        <p class="text-xs text-slate-500">
-          You can still see live recent matches and detailed player pages powered by Supabase.
+          Ranked Tag 1v1 is a ranked system for Crab Game Tag Gamemode.
         </p>
       </aside>
     </section>
@@ -119,16 +108,11 @@
       <section id="recentMatches">
         <h2 class="text-lg font-semibold mb-2">Recent matches</h2>
         <p class="mb-2 text-xs text-slate-500">
-          Fetched live from Supabase (only last 20 matches → very light).
+          Fetched live from Supabase.
         </p>
         <div id="recent" class="grid gap-3"></div>
       </section>
     </main>
-
-    <footer class="mt-10 text-xs text-slate-500 border-t border-slate-900 pt-4">
-      <p>Ranked Tag 1v1 is an unofficial fan project. Data is stored on Supabase, and the heavy leaderboard
-        is served via a static JSON snapshot to keep things fast and cheap.</p>
-    </footer>
 
   </div>
 
