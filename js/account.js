@@ -1,6 +1,3 @@
-const supabaseClient = window.supabaseClient;
-const SUPABASE_URL = window.SUPABASE_URL;
-
 async function renderAuthBar() {
     const authbarElement = document.getElementById("authbar");
     const statusElement = document.getElementById("accStatus");
