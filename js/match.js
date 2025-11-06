@@ -311,28 +311,31 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
     );
 
     cardsContainer.innerHTML = `
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
-          <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Tagger</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            ${taggerCards.join("")}
+      <div class="flex flex-col gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Tagger</div>
+            <div class="grid grid-cols-1 gap-2">
+              ${taggerCards.join("")}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Hider</div>
+            <div class="grid grid-cols-1 gap-2">
+              ${hiderCards.join("")}
+            </div>
           </div>
         </div>
         <div>
-          <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Hider</div>
+          <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">General</div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            ${hiderCards.join("")}
+            ${generalCards.join("")}
           </div>
-        </div>
-      </div>
-      <div class="mt-5">
-        <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">General</div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          ${generalCards.join("")}
         </div>
       </div>
     `;
 }
+
 
 
 function safeAverage(values) {
