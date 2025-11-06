@@ -369,7 +369,16 @@ async function loadLeaderboardData(isReload) {
 
         if (statusElement) {
             const generatedAt = snapshot.generated_at || "";
-            statusElement.textContent = `Ready · ${totalPlayers} players${generatedAt ? ` · ${generatedAt}` : ""}`;
+
+            let prettyTime = "";
+            if (generatedAt) {
+                const d = new Date(generatedAt);
+                if (!Number.isNaN(d.getTime())) {
+                    prettyTime = d.toLocaleString(); 
+                }
+            }
+
+            statusElement.textContent = `Ready · ${totalPlayers} players${prettyTime ? ` · ${prettyTime}` : ""}`;
         }
 
         const heroStats = document.getElementById("heroStats");
