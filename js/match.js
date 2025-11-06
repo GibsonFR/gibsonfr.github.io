@@ -314,29 +314,30 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
     );
 
     cardsContainer.innerHTML = `
-      <div class="space-y-6 text-sm md:text-base">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div>
+      <div class="space-y-6 text-sm md:text-base w-full">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+          <div class="w-full">
             <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">Tagger</div>
-            <div class="flex flex-col gap-3">
+            <div class="flex flex-col gap-3 w-full [&>div]:w-full">
               ${taggerCards.join("")}
             </div>
           </div>
-          <div>
+          <div class="w-full">
             <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">Hider</div>
-            <div class="flex flex-col gap-3">
+            <div class="flex flex-col gap-3 w-full [&>div]:w-full">
               ${hiderCards.join("")}
             </div>
           </div>
         </div>
-        <div>
+        <div class="w-full">
           <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">General</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full [&>div]:w-full">
             ${generalCards.join("")}
           </div>
         </div>
       </div>
     `;
+
 }
 
 function safeAverage(values) {
