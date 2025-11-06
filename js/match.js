@@ -25,11 +25,12 @@ function escapeHtml(text) {
 function buildStatCard(label, value, suffix, tooltip) {
     const finalSuffix = suffix || "";
     const titleAttr = tooltip ? ` title="${escapeHtml(tooltip)}"` : "";
-    return `<div class="p-2 rounded bg-slate-800 border border-slate-700"${titleAttr}>
-    <div class="text-slate-400">${label}</div>
-    <div class="text-slate-100 font-semibold">${value}${finalSuffix}</div>
-  </div>`;
+    return `<div class="p-3 md:p-4 rounded-lg bg-slate-800 border border-slate-700 shadow-sm"${titleAttr}>
+      <div class="text-xs md:text-sm text-slate-400">${label}</div>
+      <div class="mt-1 text-sm md:text-lg font-semibold text-slate-50">${value}${finalSuffix}</div>
+    </div>`;
 }
+
 
 function formatPercentage(value) {
     if (value == null || Number.isNaN(value)) {
@@ -117,6 +118,7 @@ async function fetchMatchById(matchId) {
 function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) {
     const cardsContainer = getElement(containerSelector);
     const sampleContainer = getElement(sampleSelector);
+    if (!cardsContainer || !sampleContainer) return;
 
     const lowSampleTaggerText = playerStats.low_sample_tagger ? "· tagger sample low" : "";
     const lowSampleHiderText = playerStats.low_sample_hider ? "· hider sample low" : "";
@@ -156,7 +158,7 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Avg dist (tagger)",
             formatNumber(playerStats.avg_distance_as_tagger, 2),
             " m",
-            "Average distance to the opponent while you are the tagger. Lower usually means better pressure."
+            "Average distance to the opponent while you are the tagger."
         ),
         buildStatCard(
             "Chase score",
@@ -168,25 +170,25 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Movement as tagger",
             playerStats.movement_ratio_tagger != null ? formatPercentage(playerStats.movement_ratio_tagger) : "—",
             "",
-            "Share of your tagger time where you are moving (not camping)."
+            "Share of your tagger time where you are moving."
         ),
         buildStatCard(
             "Predictive tagging",
             playerStats.tagger_predictivity_score != null ? formatNumber(playerStats.tagger_predictivity_score, 1) : "—",
             "/100",
-            "How much your tagger movement tends to anticipate where the hider will be next (higher is more predictive)."
+            "How much your tagger movement tends to anticipate where the hider will be next."
         ),
         buildStatCard(
             "Item accuracy",
             playerStats.item_accuracy != null ? formatPercentage(playerStats.item_accuracy) : "—",
             "",
-            "Among item uses that were in a reasonable range, how many directly led to a tag shortly after."
+            "Among eligible item uses, share that directly lead to a tag shortly after."
         ),
         buildStatCard(
             "Opp. conversion",
             playerStats.conversion_rate != null ? formatPercentage(playerStats.conversion_rate) : "—",
             "",
-            "How often you convert close-range opportunities (<5m) into actual tags."
+            "How often you convert close-range opportunities into tags."
         )
     );
 
@@ -213,37 +215,37 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Avg dist (hider)",
             formatNumber(playerStats.avg_distance_as_hider, 2),
             " m",
-            "Average distance to the opponent while you are the hider. Higher usually means better spacing."
+            "Average distance to the opponent while you are the hider."
         ),
         buildStatCard(
             "Evasion score",
             playerStats.evasion_score != null ? formatNumber(playerStats.evasion_score, 1) : "—",
             "/100",
-            "Average rate at which you open distance when you are being chased within the chase radius."
+            "Average rate at which you open distance when you are being chased."
         ),
         buildStatCard(
             "Danger time (hider)",
             playerStats.hider_pressure_danger_share != null ? formatPercentage(playerStats.hider_pressure_danger_share) : "—",
             "",
-            "Share of your hider time spent very close to the tagger (pressure radius)."
+            "Share of your hider time spent very close to the tagger."
         ),
         buildStatCard(
             "Safe time (hider)",
             playerStats.hider_pressure_safe_share != null ? formatPercentage(playerStats.hider_pressure_safe_share) : "—",
             "",
-            "Share of your hider time spent far enough from the tagger (safe distance)."
+            "Share of your hider time spent far enough from the tagger."
         ),
         buildStatCard(
             "Movement as hider",
             playerStats.movement_ratio_hider != null ? formatPercentage(playerStats.movement_ratio_hider) : "—",
             "",
-            "Share of your hider time where you are moving (not camping)."
+            "Share of your hider time where you are moving."
         ),
         buildStatCard(
             "Hider tangent score",
             playerStats.hider_tangent_score != null ? formatNumber(playerStats.hider_tangent_score, 1) : "—",
             "/100",
-            "How often you move tangentially (sideways) relative to the chaser when you are the hider."
+            "How often you move tangentially relative to the chaser when you are the hider."
         )
     );
 
@@ -258,7 +260,7 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Path diversity",
             playerStats.path_diversity_score != null ? formatNumber(playerStats.path_diversity_score, 1) : "—",
             playerStats.path_diversity_score != null ? "/100" : "",
-            "How many different map cells you visit compared to the approximate map size (0–100). Higher means more varied routes."
+            "How many different map cells you visit compared to the map size."
         ),
         buildStatCard(
             "Retag median",
@@ -270,7 +272,7 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Retag initial",
             formatNumber(playerStats.retag_initial_seconds, 2),
             " s",
-            "Duration of your very first tagger streak of the match."
+            "Duration of your first tagger streak in the match."
         ),
         buildStatCard(
             "Retag avg",
@@ -282,19 +284,19 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Item uses (eligible/all)",
             `${playerStats.item_eligible_uses ?? 0} / ${playerStats.item_all_uses ?? 0}`,
             "",
-            "Number of item uses counted as relevant (within range) versus total item uses."
+            "Number of item uses counted as relevant versus total item uses."
         ),
         buildStatCard(
             "Exploration pattern",
             playerStats.exploration_pattern || "—",
             "",
-            "Description of your pathing: looper = you loop in a small area, imprevisible = you cover a lot without repeating, regular = in between."
+            "Short description of your pathing pattern on the map."
         ),
         buildStatCard(
             "Vertical style",
             playerStats.vertical_style || "—",
             "",
-            "Whether you tend to play above your opponent (air), below (ground) or mixed in height."
+            "Whether you tend to play higher, lower or mixed."
         ),
         buildStatCard(
             "Total moving time",
@@ -306,37 +308,35 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Total idle time",
             formatNumber(playerStats.time_idle_total, 2),
             " s",
-            "Total time you spent moving slower than the camping speed (or standing still)."
+            "Total time you spent below the camping speed."
         )
     );
 
     cardsContainer.innerHTML = `
-      <div class="flex flex-col gap-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="space-y-6 text-sm md:text-base">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div>
-            <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Tagger</div>
-            <div class="grid grid-cols-1 gap-2">
+            <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">Tagger</div>
+            <div class="flex flex-col gap-3">
               ${taggerCards.join("")}
             </div>
           </div>
           <div>
-            <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Hider</div>
-            <div class="grid grid-cols-1 gap-2">
+            <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">Hider</div>
+            <div class="flex flex-col gap-3">
               ${hiderCards.join("")}
             </div>
           </div>
         </div>
         <div>
-          <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">General</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">General</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             ${generalCards.join("")}
           </div>
         </div>
       </div>
     `;
 }
-
-
 
 function safeAverage(values) {
     const nums = values.filter(v => typeof v === "number" && !Number.isNaN(v));
