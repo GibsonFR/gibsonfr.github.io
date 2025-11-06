@@ -147,13 +147,13 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Overall performance score when you are the tagger (0–100)."
         ),
         buildStatCard(
-            "Time as tagger",
+            "Time as tagger %",
             tagShare != null ? formatPercentage(tagShare) : "—",
             "",
-            "Share of total round time where you were the tagger."
+            "% of total round time where you were the tagger."
         ),
         buildStatCard(
-            "Seconds — tagger",
+            "Time as tagger",
             formatNumber(secondsAsTagger, 2),
             " s",
             "Absolute time spent as tagger during the match."
@@ -183,16 +183,16 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "How much your tagger movement tends to anticipate where the hider will be next."
         ),
         buildStatCard(
-            "Item accuracy",
+            "Tag accuracy",
             playerStats.item_accuracy != null ? formatPercentage(playerStats.item_accuracy) : "—",
             "",
-            "Among eligible item uses, share that directly lead to a tag shortly after."
+            "Among tag uses, % that directly lead to a tag shortly after."
         ),
         buildStatCard(
-            "Opp. conversion",
+            "Opportunities conversion",
             playerStats.conversion_rate != null ? formatPercentage(playerStats.conversion_rate) : "—",
             "",
-            "How often you convert close-range opportunities into tags."
+            "How often you convert close range opportunities into tags."
         )
     );
 
@@ -204,13 +204,13 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Overall performance score when you are the hider (0–100)."
         ),
         buildStatCard(
-            "Time as hider",
+            "Time as hider %",
             hiderShare != null ? formatPercentage(hiderShare) : "—",
             "",
-            "Share of total round time where you were the hider."
+            "% of total round time where you were the hider."
         ),
         buildStatCard(
-            "Seconds — hider",
+            "Time as hider",
             formatNumber(secondsAsHider, 2),
             " s",
             "Absolute time spent as hider during the match."
@@ -246,7 +246,7 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Share of your hider time where you are moving."
         ),
         buildStatCard(
-            "Hider tangent score",
+            "Hider anticipation movement",
             playerStats.hider_tangent_score != null ? formatNumber(playerStats.hider_tangent_score, 1) : "—",
             "/100",
             "How often you move tangentially relative to the chaser when you are the hider."
@@ -261,7 +261,7 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Share of time you are moving faster than the camping threshold."
         ),
         buildStatCard(
-            "Path diversity",
+            "Routes diversity",
             playerStats.path_diversity_score != null ? formatNumber(playerStats.path_diversity_score, 1) : "—",
             playerStats.path_diversity_score != null ? "/100" : "",
             "How many different map cells you visit compared to the map size."
@@ -285,10 +285,10 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Average duration of your tagger streaks."
         ),
         buildStatCard(
-            "Item uses (eligible/all)",
+            "Tag Attempt",
             `${playerStats.item_eligible_uses ?? 0} / ${playerStats.item_all_uses ?? 0}`,
             "",
-            "Number of item uses counted as relevant versus total item uses."
+            "Tag/Tag Attempt"
         ),
         buildStatCard(
             "Exploration pattern",
