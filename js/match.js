@@ -25,11 +25,12 @@ function escapeHtml(text) {
 function buildStatCard(label, value, suffix, tooltip) {
     const finalSuffix = suffix || "";
     const titleAttr = tooltip ? ` title="${escapeHtml(tooltip)}"` : "";
-    return `<div class="p-3 md:p-4 rounded-lg bg-slate-800 border border-slate-700 shadow-sm"${titleAttr}>
-      <div class="text-xs md:text-sm text-slate-400">${label}</div>
-      <div class="mt-1 text-sm md:text-lg font-semibold text-slate-50">${value}${finalSuffix}</div>
-    </div>`;
+    return `<div class="w-full p-3 md:p-4 rounded-lg bg-slate-800 border border-slate-700 shadow-sm"${titleAttr}>
+    <div class="text-xs md:text-sm text-slate-400">${label}</div>
+    <div class="mt-1 text-sm md:text-lg font-semibold text-slate-50">${value}${finalSuffix}</div>
+  </div>`;
 }
+
 
 
 function formatPercentage(value) {
