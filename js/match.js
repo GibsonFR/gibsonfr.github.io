@@ -127,27 +127,19 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
     const secondsAsHider = playerStats.seconds_as_hider ?? 0;
     const totalSeconds = secondsAsTagger + secondsAsHider;
     const tagShare = totalSeconds > 0 ? secondsAsTagger / totalSeconds : null;
+    const hiderShare = totalSeconds > 0 ? secondsAsHider / totalSeconds : null;
 
-    const cards = [];
+    const taggerCards = [];
+    const hiderCards = [];
+    const generalCards = [];
 
-    // --- Core role quality ---
-    cards.push(
+    taggerCards.push(
         buildStatCard(
             "Quality (tagger)",
             formatNumber(playerStats.tagger_quality, 1),
             "",
             "Overall performance score when you are the tagger (0–100)."
         ),
-        buildStatCard(
-            "Quality (hider)",
-            formatNumber(playerStats.hider_quality, 1),
-            "",
-            "Overall performance score when you are the hider (0–100)."
-        )
-    );
-
-    // --- Role time / duration ---
-    cards.push(
         buildStatCard(
             "Time as tagger",
             tagShare != null ? formatPercentage(tagShare) : "—",
@@ -161,65 +153,29 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "Absolute time spent as tagger during the match."
         ),
         buildStatCard(
-            "Seconds — hider",
-            formatNumber(secondsAsHider, 2),
-            " s",
-            "Absolute time spent as hider during the match."
-        )
-    );
-
-    // --- Distance / spacing / movement ---
-    cards.push(
-        buildStatCard(
-            "Avg dist (hider)",
-            formatNumber(playerStats.avg_distance_as_hider, 2),
-            " m",
-            "Average distance to the opponent while you are the hider. Higher usually means better spacing."
-        ),
-        buildStatCard(
             "Avg dist (tagger)",
             formatNumber(playerStats.avg_distance_as_tagger, 2),
             " m",
             "Average distance to the opponent while you are the tagger. Lower usually means better pressure."
         ),
         buildStatCard(
-            "Movement (overall)",
-            playerStats.movement_ratio != null ? formatPercentage(playerStats.movement_ratio) : "—",
+            "Chase score",
+            playerStats.chase_score != null ? formatNumber(playerStats.chase_score, 1) : "—",
+            "/100",
+            "Average rate at which you close distance when you are chasing within the chase radius."
+        ),
+        buildStatCard(
+            "Movement as tagger",
+            playerStats.movement_ratio_tagger != null ? formatPercentage(playerStats.movement_ratio_tagger) : "—",
             "",
-            "Share of time you are moving faster than the camping threshold."
+            "Share of your tagger time where you are moving (not camping)."
         ),
         buildStatCard(
-            "Path diversity",
-            playerStats.path_diversity_score != null ? formatNumber(playerStats.path_diversity_score, 1) : "—",
-            playerStats.path_diversity_score != null ? "/100" : "",
-            "How many different map cells you visit compared to the approximate map size (0–100). Higher means more varied routes."
-        )
-    );
-
-    // --- Retag behaviour ---
-    cards.push(
-        buildStatCard(
-            "Retag median",
-            formatNumber(playerStats.retag_median_seconds, 2),
-            " s",
-            "Median duration of a tagger streak before you lose the tag."
+            "Predictive tagging",
+            playerStats.tagger_predictivity_score != null ? formatNumber(playerStats.tagger_predictivity_score, 1) : "—",
+            "/100",
+            "How much your tagger movement tends to anticipate where the hider will be next (higher is more predictive)."
         ),
-        buildStatCard(
-            "Retag initial",
-            formatNumber(playerStats.retag_initial_seconds, 2),
-            " s",
-            "Duration of your very first tagger streak of the match."
-        ),
-        buildStatCard(
-            "Retag avg",
-            formatNumber(playerStats.retag_avg_seconds, 2),
-            " s",
-            "Average duration of your tagger streaks."
-        )
-    );
-
-    // --- Items & conversion ---
-    cards.push(
         buildStatCard(
             "Item accuracy",
             playerStats.item_accuracy != null ? formatPercentage(playerStats.item_accuracy) : "—",
@@ -231,22 +187,33 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             playerStats.conversion_rate != null ? formatPercentage(playerStats.conversion_rate) : "—",
             "",
             "How often you convert close-range opportunities (<5m) into actual tags."
-        ),
-        buildStatCard(
-            "Item uses (eligible/all)",
-            `${playerStats.item_eligible_uses ?? 0} / ${playerStats.item_all_uses ?? 0}`,
-            "",
-            "Number of item uses counted as relevant (within range) versus total item uses."
         )
     );
 
-    // --- Chase / evasion / pressure ---
-    cards.push(
+    hiderCards.push(
         buildStatCard(
-            "Chase score",
-            playerStats.chase_score != null ? formatNumber(playerStats.chase_score, 1) : "—",
-            "/100",
-            "Average rate at which you close distance when you are chasing within the chase radius."
+            "Quality (hider)",
+            formatNumber(playerStats.hider_quality, 1),
+            "",
+            "Overall performance score when you are the hider (0–100)."
+        ),
+        buildStatCard(
+            "Time as hider",
+            hiderShare != null ? formatPercentage(hiderShare) : "—",
+            "",
+            "Share of total round time where you were the hider."
+        ),
+        buildStatCard(
+            "Seconds — hider",
+            formatNumber(secondsAsHider, 2),
+            " s",
+            "Absolute time spent as hider during the match."
+        ),
+        buildStatCard(
+            "Avg dist (hider)",
+            formatNumber(playerStats.avg_distance_as_hider, 2),
+            " m",
+            "Average distance to the opponent while you are the hider. Higher usually means better spacing."
         ),
         buildStatCard(
             "Evasion score",
@@ -265,27 +232,58 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             playerStats.hider_pressure_safe_share != null ? formatPercentage(playerStats.hider_pressure_safe_share) : "—",
             "",
             "Share of your hider time spent far enough from the tagger (safe distance)."
-        )
-    );
-
-    // --- Per-role movement ---
-    cards.push(
-        buildStatCard(
-            "Movement as tagger",
-            playerStats.movement_ratio_tagger != null ? formatPercentage(playerStats.movement_ratio_tagger) : "—",
-            "",
-            "Share of your tagger time where you are moving (not camping)."
         ),
         buildStatCard(
             "Movement as hider",
             playerStats.movement_ratio_hider != null ? formatPercentage(playerStats.movement_ratio_hider) : "—",
             "",
             "Share of your hider time where you are moving (not camping)."
+        ),
+        buildStatCard(
+            "Hider tangent score",
+            playerStats.hider_tangent_score != null ? formatNumber(playerStats.hider_tangent_score, 1) : "—",
+            "/100",
+            "How often you move tangentially (sideways) relative to the chaser when you are the hider."
         )
     );
 
-    // --- Style / geometry ---
-    cards.push(
+    generalCards.push(
+        buildStatCard(
+            "Movement (overall)",
+            playerStats.movement_ratio != null ? formatPercentage(playerStats.movement_ratio) : "—",
+            "",
+            "Share of time you are moving faster than the camping threshold."
+        ),
+        buildStatCard(
+            "Path diversity",
+            playerStats.path_diversity_score != null ? formatNumber(playerStats.path_diversity_score, 1) : "—",
+            playerStats.path_diversity_score != null ? "/100" : "",
+            "How many different map cells you visit compared to the approximate map size (0–100). Higher means more varied routes."
+        ),
+        buildStatCard(
+            "Retag median",
+            formatNumber(playerStats.retag_median_seconds, 2),
+            " s",
+            "Median duration of a tagger streak before you lose the tag."
+        ),
+        buildStatCard(
+            "Retag initial",
+            formatNumber(playerStats.retag_initial_seconds, 2),
+            " s",
+            "Duration of your very first tagger streak of the match."
+        ),
+        buildStatCard(
+            "Retag avg",
+            formatNumber(playerStats.retag_avg_seconds, 2),
+            " s",
+            "Average duration of your tagger streaks."
+        ),
+        buildStatCard(
+            "Item uses (eligible/all)",
+            `${playerStats.item_eligible_uses ?? 0} / ${playerStats.item_all_uses ?? 0}`,
+            "",
+            "Number of item uses counted as relevant (within range) versus total item uses."
+        ),
         buildStatCard(
             "Exploration pattern",
             playerStats.exploration_pattern || "—",
@@ -298,22 +296,6 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
             "",
             "Whether you tend to play above your opponent (air), below (ground) or mixed in height."
         ),
-        buildStatCard(
-            "Predictive tagging",
-            playerStats.tagger_predictivity_score != null ? formatNumber(playerStats.tagger_predictivity_score, 1) : "—",
-            "/100",
-            "How much your tagger movement tends to anticipate where the hider will be next (higher is more predictive)."
-        ),
-        buildStatCard(
-            "Hider tangent score",
-            playerStats.hider_tangent_score != null ? formatNumber(playerStats.hider_tangent_score, 1) : "—",
-            "/100",
-            "How often you move tangentially (sideways) relative to the chaser when you are the hider."
-        )
-    );
-
-    // --- Raw movement totals ---
-    cards.push(
         buildStatCard(
             "Total moving time",
             formatNumber(playerStats.time_moving_total, 2),
@@ -328,8 +310,30 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
         )
     );
 
-    cardsContainer.innerHTML = cards.join("");
+    cardsContainer.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Tagger</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${taggerCards.join("")}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">Hider</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${hiderCards.join("")}
+          </div>
+        </div>
+      </div>
+      <div class="mt-5">
+        <div class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wide">General</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          ${generalCards.join("")}
+        </div>
+      </div>
+    `;
 }
+
 
 function safeAverage(values) {
     const nums = values.filter(v => typeof v === "number" && !Number.isNaN(v));
