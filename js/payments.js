@@ -1,14 +1,45 @@
-// payments.js — legacy wrapper to keep compat with old pages that import this file
-// It simply ensures paypal.js is loaded and exposes startCheckout().
-(function(){
-  function ensurePaypal(){
-    if (window.paypalLoaded) return Promise.resolve();
-    return new Promise((resolve)=>{
-      const s = document.createElement('script');
-      s.src = 'paypal.js';
-      s.onload = ()=>{ window.paypalLoaded = true; resolve(); };
-      document.head.appendChild(s);
-    });
-  }
-  window.startCheckout = async function(){ await ensurePaypal(); if (window.startCheckout) window.startCheckout(); };
+(function () {
+    let realStartCheckout =
+        typeof window.startCheckout === "function"
+            ? window.startCheckout
+            : null;
+    let loaded = !!realStartCheckout;
+    let loadingPromise = null;
+
+    function ensurePaypal() {
+        if (loaded) return Promise.resolve();
+        if (loadingPromise) return loadingPromise;
+
+        loadingPromise = new Promise(resolve => {
+            if (typeof window.startCheckout === "function") {
+                realStartCheckout = window.startCheckout;
+                loaded = true;
+                return resolve();
+            }
+
+            const s = document.createElement("script");
+            s.src = "paypal.js";
+            s.onload = () => {
+                loaded = true;
+                if (typeof window.startCheckout === "function") {
+                    realStartCheckout = window.startCheckout;
+                }
+                resolve();
+            };
+            document.head.appendChild(s);
+        });
+
+        return loadingPromise;
+    }
+
+    window.startCheckout = async function () {
+        await ensurePaypal();
+        if (typeof realStartCheckout === "function") {
+            return realStartCheckout();
+        } else {
+            console.warn(
+                "[payments] startCheckout called but underlying implementation not found."
+            );
+        }
+    };
 })();
