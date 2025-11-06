@@ -314,29 +314,38 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
     );
 
     cardsContainer.innerHTML = `
-      <div class="space-y-6 text-sm md:text-base w-full">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-          <div class="w-full">
-            <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">Tagger</div>
-            <div class="flex flex-col gap-3 w-full [&>div]:w-full">
+      <div class="space-y-10 text-sm md:text-base w-full max-w-none">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full [&>div]:w-full [&>div]:flex-1">
+          <div class="w-full flex flex-col">
+            <div class="text-xs font-semibold text-slate-300 mb-4 uppercase tracking-wide">
+              Tagger
+            </div>
+            <div class="flex flex-col gap-3 flex-1">
               ${taggerCards.join("")}
             </div>
           </div>
-          <div class="w-full">
-            <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">Hider</div>
-            <div class="flex flex-col gap-3 w-full [&>div]:w-full">
+
+          <div class="w-full flex flex-col">
+            <div class="text-xs font-semibold text-slate-300 mb-4 uppercase tracking-wide">
+              Hider
+            </div>
+            <div class="flex flex-col gap-3 flex-1">
               ${hiderCards.join("")}
             </div>
           </div>
         </div>
+
         <div class="w-full">
-          <div class="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wide">General</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full [&>div]:w-full">
+          <div class="text-xs font-semibold text-slate-300 mb-4 uppercase tracking-wide">
+            General
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full [&>div]:flex-1">
             ${generalCards.join("")}
           </div>
         </div>
       </div>
     `;
+
 
 }
 
