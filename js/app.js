@@ -315,17 +315,7 @@ function renderLeaderboard() {
 async function loadLeaderboardData(isReload) {
     const statusElement = document.getElementById("status");
     if (statusElement) {
-        const generatedAt = snapshot.generated_at || "";
-
-        let prettyTime = "";
-        if (generatedAt) {
-            const d = new Date(generatedAt);
-            if (!Number.isNaN(d.getTime())) {
-                prettyTime = d.toLocaleString(); 
-            }
-        }
-
-        statusElement.textContent = `Ready · ${totalPlayers} players${prettyTime ? ` · ${prettyTime}` : ""}`;
+        statusElement.textContent = isReload ? "Refreshing…" : "Loading…";
     }
 
     try {
@@ -393,6 +383,7 @@ async function loadLeaderboardData(isReload) {
         }
     }
 }
+
 
 async function loadRecentMatches() {
     const recentContainer = document.getElementById("recent");
