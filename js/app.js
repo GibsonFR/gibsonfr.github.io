@@ -240,8 +240,7 @@ function renderLeaderboardTable(rowsSlice) {
       <td class="p-2 text-center">${row.elo ?? ""}</td>
       <td class="p-2 text-center">${row.games ?? 0}</td>
       <td class="p-2 text-center">${row.win_rate ?? 0}</td>
-    </tr>`
-    ).join("");
+    </tr>`).join("");
 
     const boardElement = document.getElementById("board");
     if (!boardElement) return;
@@ -251,15 +250,15 @@ function renderLeaderboardTable(rowsSlice) {
     document.querySelectorAll("[data-sort]").forEach(headerCell => {
         headerCell.onclick = () => {
             const clickedKey = headerCell.getAttribute("data-sort");
-            if (!clickedKey) return;
-
+            if (!clickedKey) {
+                return;
+            }
             if (currentSortState.key === clickedKey) {
                 currentSortState.dir = currentSortState.dir === "asc" ? "desc" : "asc";
             } else {
                 currentSortState.key = clickedKey;
                 currentSortState.dir = clickedKey === "player" ? "asc" : "desc";
             }
-
             sortedLeaderboardRows = applySortToLeaderboardRows([...leaderboardRows]);
             currentPageIndex = 0;
             renderLeaderboard();
@@ -360,14 +359,7 @@ async function loadLeaderboardData(isReload) {
 
         if (statusElement) {
             const generatedAt = snapshot.generated_at || "";
-            let prettyTime = "";
-            if (generatedAt) {
-                const d = new Date(generatedAt);
-                if (!Number.isNaN(d.getTime())) {
-                    prettyTime = d.toLocaleString(); 
-                }
-            }
-            statusElement.textContent = `Ready · ${totalPlayers} players${prettyTime ? ` · ${prettyTime}` : ""}`;
+            statusElement.textContent = `Ready · ${totalPlayers} players${generatedAt ? ` · ${generatedAt}` : ""}`;
         }
 
         const heroStats = document.getElementById("heroStats");
