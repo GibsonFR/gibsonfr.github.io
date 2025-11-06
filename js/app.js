@@ -312,7 +312,17 @@ function renderLeaderboard() {
 async function loadLeaderboardData(isReload) {
     const statusElement = document.getElementById("status");
     if (statusElement) {
-        statusElement.textContent = isReload ? "Refreshing…" : "Loading…";
+        const generatedAt = snapshot.generated_at || "";
+
+        let prettyTime = "";
+        if (generatedAt) {
+            const d = new Date(generatedAt);
+            if (!Number.isNaN(d.getTime())) {
+                prettyTime = d.toLocaleString(); 
+            }
+        }
+
+        statusElement.textContent = `Ready · ${totalPlayers} players${prettyTime ? ` · ${prettyTime}` : ""}`;
     }
 
     try {

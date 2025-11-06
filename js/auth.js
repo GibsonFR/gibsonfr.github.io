@@ -11,7 +11,7 @@
 function getDiscordIdFromUser(user) {
     const identities = user && user.identities ? user.identities : [];
     const discordIdentity = identities.find(
-        identity => identity && identity.provider === "discord"
+        (identity) => identity && identity.provider === "discord"
     );
 
     const identityData = discordIdentity && discordIdentity.identity_data
@@ -39,16 +39,14 @@ async function resolveSteamIdForUser(user) {
         const mappedSteamId = linksMap[String(discordId)];
         return mappedSteamId ? String(mappedSteamId) : null;
     } catch (error) {
-        console.warn("[auth] failed to resolve steam id from links_state.json", error);
+        console.warn("[auth] resolveSteamIdForUser failed", error);
         return null;
     }
 }
 
 async function goToMyProfile() {
     try {
-        const {
-            data: { user },
-        } = await supabaseClient.auth.getUser();
+        const { data: { user } } = await supabaseClient.auth.getUser();
 
         if (!user) {
             await supabaseClient.auth.signInWithOAuth({
@@ -73,25 +71,6 @@ async function goToMyProfile() {
 
 window.goToMyProfile = goToMyProfile;
 
-function wireMyProfileButtons() {
-    const handler = (event) => {
-        event.preventDefault();
-        goToMyProfile();
-    };
-
-    const candidates = document.querySelectorAll("a, button");
-    candidates.forEach((el) => {
-        if (el.dataset.myProfileWired === "1") return;
-        if (!el.textContent) return;
-
-        const label = el.textContent.trim().toLowerCase();
-        if (label === "my profile") {
-            el.dataset.myProfileWired = "1";
-            el.addEventListener("click", handler);
-        }
-    });
-}
-
 async function renderAuthBar() {
     const authbar = document.getElementById("authbar");
     if (!authbar) return;
@@ -104,7 +83,7 @@ async function renderAuthBar() {
         user = null;
     }
 
-    const joinDiscordUrl = "https://discord.gg/MfX7hHVAZM"; 
+    const joinDiscordUrl = "https://discord.gg/2XrGVdrCCS";
 
     if (!user) {
         authbar.innerHTML = `
@@ -114,6 +93,7 @@ async function renderAuthBar() {
           Sign in with Discord
         </button>
         <a href="${joinDiscordUrl}"
+           target="_blank" rel="noreferrer"
            class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700">
           Join Discord
         </a>
@@ -159,8 +139,8 @@ async function renderAuthBar() {
 
         const myProfileBtn = document.getElementById("authMyProfileBtn");
         if (myProfileBtn) {
-            myProfileBtn.onclick = (e) => {
-                e.preventDefault();
+            myProfileBtn.onclick = (event) => {
+                event.preventDefault();
                 goToMyProfile();
             };
         }
@@ -173,7 +153,6 @@ async function renderAuthBar() {
             };
         }
     }
-    wireMyProfileButtons();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
