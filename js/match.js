@@ -122,21 +122,151 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
     const sampleText = [lowSampleTaggerText, lowSampleHiderText].filter(Boolean).join(" ");
     sampleContainer.textContent = sampleText;
 
-    cardsContainer.innerHTML = [
-        buildStatCard("Quality (tagger)", playerStats.quality_tagger ?? "—"),
-        buildStatCard("Quality (hider)", playerStats.quality_hider ?? "—"),
-        buildStatCard("Time as tagger", formatPercentage(playerStats.time_as_tagger_share)),
-        buildStatCard("Seconds — tagger", playerStats.seconds_as_tagger ?? "—", " s"),
-        buildStatCard("Seconds — hider", playerStats.seconds_as_hider ?? "—", " s"),
-        buildStatCard("Avg dist (hider)", playerStats.avg_distance_as_hider ?? "—", " m"),
-        buildStatCard("Avg dist (tagger)", playerStats.avg_distance_as_tagger ?? "—", " m"),
-        buildStatCard("Avg speed", playerStats.avg_speed_ms ?? "—", " m/s"),
-        buildStatCard("Retag median", playerStats.retag_median_seconds ?? "—", " s"),
-        buildStatCard("Retag initial", playerStats.retag_initial_seconds ?? "—", " s"),
-        buildStatCard("Retag avg", playerStats.retag_avg_seconds ?? "—", " s"),
-        buildStatCard("Accuracy", playerStats.accuracy != null ? formatNumber(playerStats.accuracy * 100, 1) : "—", playerStats.accuracy != null ? "%" : "")
-    ].join("");
+    const secondsAsTagger = playerStats.seconds_as_tagger ?? 0;
+    const secondsAsHider = playerStats.seconds_as_hider ?? 0;
+    const totalSeconds = secondsAsTagger + secondsAsHider;
+    const tagShare = totalSeconds > 0 ? secondsAsTagger / totalSeconds : null;
+
+    const cards = [];
+
+    cards.push(
+        buildStatCard("Quality (tagger)", formatNumber(playerStats.tagger_quality, 1)),
+        buildStatCard("Quality (hider)", formatNumber(playerStats.hider_quality, 1))
+    );
+
+    cards.push(
+        buildStatCard(
+            "Time as tagger",
+            tagShare != null ? formatPercentage(tagShare) : "—"
+        ),
+        buildStatCard("Seconds — tagger", formatNumber(secondsAsTagger, 2), " s"),
+        buildStatCard("Seconds — hider", formatNumber(secondsAsHider, 2), " s")
+    );
+
+    cards.push(
+        buildStatCard("Avg dist (hider)", formatNumber(playerStats.avg_distance_as_hider, 2), " m"),
+        buildStatCard("Avg dist (tagger)", formatNumber(playerStats.avg_distance_as_tagger, 2), " m"),
+        buildStatCard(
+            "Movement",
+            playerStats.movement_ratio != null ? formatPercentage(playerStats.movement_ratio) : "—"
+        ),
+        buildStatCard(
+            "Path diversity",
+            playerStats.path_diversity_score != null ? formatNumber(playerStats.path_diversity_score, 1) : "—",
+            playerStats.path_diversity_score != null ? "/100" : ""
+        )
+    );
+
+    cards.push(
+        buildStatCard("Retag median", formatNumber(playerStats.retag_median_seconds, 2), " s"),
+        buildStatCard("Retag initial", formatNumber(playerStats.retag_initial_seconds, 2), " s"),
+        buildStatCard("Retag avg", formatNumber(playerStats.retag_avg_seconds, 2), " s")
+    );
+
+    cards.push(
+        buildStatCard(
+            "Item accuracy",
+            playerStats.item_accuracy != null ? formatPercentage(playerStats.item_accuracy) : "—"
+        ),
+        buildStatCard(
+            "Opp. conversion",
+            playerStats.conversion_rate != null ? formatPercentage(playerStats.conversion_rate) : "—"
+        )
+    );
+
+    cardsContainer.innerHTML = cards.join("");
 }
+
+function safeAverage(values) {
+    const nums = values.filter(v => typeof v === "number" && !Number.isNaN(v));
+    if (!nums.length) return null;
+    const sum = nums.reduce((a, b) => a + b, 0);
+    return sum / nums.length;
+}
+
+function computeProfileScores(stats) {
+    if (!stats) stats = {};
+
+    const secondsAsTagger = stats.seconds_as_tagger ?? 0;
+    const secondsAsHider = stats.seconds_as_hider ?? 0;
+    const totalSeconds = secondsAsTagger + secondsAsHider;
+
+    const aggression = safeAverage([
+        stats.tagger_quality,
+        stats.chase_score,
+        stats.item_accuracy != null ? stats.item_accuracy * 100 : null,
+        stats.conversion_rate != null ? stats.conversion_rate * 100 : null
+    ]);
+
+    const evasion = safeAverage([
+        stats.hider_quality,
+        stats.evasion_score,
+        stats.hider_pressure_danger_share != null
+            ? (1 - stats.hider_pressure_danger_share) * 100
+            : null
+    ]);
+
+    const control = safeAverage([
+        totalSeconds > 0 ? (1 - secondsAsTagger / totalSeconds) * 100 : null,
+        stats.conversion_rate != null ? stats.conversion_rate * 100 : null
+    ]);
+
+    const mobility = safeAverage([
+        stats.movement_ratio != null ? stats.movement_ratio * 100 : null,
+        stats.movement_ratio_hider != null ? stats.movement_ratio_hider * 100 : null,
+        stats.path_diversity_score
+    ]);
+
+    function clamp0_100(v) {
+        if (v == null || Number.isNaN(v)) return null;
+        return Math.max(0, Math.min(100, Math.round(v)));
+    }
+
+    return {
+        aggression: clamp0_100(aggression),
+        evasion: clamp0_100(evasion),
+        control: clamp0_100(control),
+        mobility: clamp0_100(mobility)
+    };
+}
+
+function renderProfileDiagram(containerSelector, profile) {
+    const container = getElement(containerSelector);
+    if (!container) return;
+
+    if (!profile) {
+        container.innerHTML = '<div class="text-xs text-slate-500">Profile unavailable.</div>';
+        return;
+    }
+
+    const entries = [
+        ["Aggression", profile.aggression],
+        ["Evasion", profile.evasion],
+        ["Control", profile.control],
+        ["Mobility", profile.mobility]
+    ].filter(([_, v]) => v != null);
+
+    if (!entries.length) {
+        container.innerHTML = '<div class="text-xs text-slate-500">Profile unavailable.</div>';
+        return;
+    }
+
+    const rows = entries.map(([label, value]) => {
+        const width = Math.max(4, Math.min(100, value));
+        return `
+      <div class="flex items-center gap-2">
+        <div class="w-20 text-[11px] text-slate-400">${label}</div>
+        <div class="flex-1 h-2 rounded bg-slate-800 overflow-hidden">
+          <div class="h-2 rounded bg-indigo-500" style="width:${width}%"></div>
+        </div>
+        <div class="w-9 text-right text-[11px] text-slate-300">${value}</div>
+      </div>`;
+    });
+
+    container.innerHTML = rows.join("");
+}
+
+
 
 function renderMatchHeader(matchRow, premiumSet) {
     const playerOneNameHtml = createLinkedNameWithPremium(
@@ -413,21 +543,41 @@ async function loadAnalysis(matchId) {
     analysisResultElement.classList.remove("hidden");
 
     const summary = data.summary || {};
-    const playerOneLabel = createPlainNameWithPremium(currentMatchRow && currentMatchRow.p1_id, summary.p1_name || "P1", currentPremiumSteamIds);
-    const playerTwoLabel = createPlainNameWithPremium(currentMatchRow && currentMatchRow.p2_id, summary.p2_name || "P2", currentPremiumSteamIds);
+    const playerOneLabel = createPlainNameWithPremium(
+        currentMatchRow && currentMatchRow.p1_id,
+        summary.p1_name || "P1",
+        currentPremiumSteamIds
+    );
+    const playerTwoLabel = createPlainNameWithPremium(
+        currentMatchRow && currentMatchRow.p2_id,
+        summary.p2_name || "P2",
+        currentPremiumSteamIds
+    );
 
     getElement("#p1title").innerHTML = `${playerOneLabel} — Quality`;
     getElement("#p2title").innerHTML = `${playerTwoLabel} — Quality`;
 
-    const analyzedAtText = data.analyzed_at ? new Date(data.analyzed_at).toLocaleString() : "—";
+    const analyzedAtText = data.analyzed_at
+        ? new Date(data.analyzed_at).toLocaleString()
+        : "—";
     getElement("#analAt").textContent = analyzedAtText;
     getElement("#ver").textContent = data.version || "—";
     getElement("#p1q").textContent = data.p1_quality ?? "—";
     getElement("#p2q").textContent = data.p2_quality ?? "—";
 
-    renderPlayerStatsCards("#p1cards", data.p1_stats || {}, "#p1sample");
-    renderPlayerStatsCards("#p2cards", data.p2_stats || {}, "#p2sample");
+    const p1Stats = data.p1_stats || {};
+    const p2Stats = data.p2_stats || {};
+
+    renderPlayerStatsCards("#p1cards", p1Stats, "#p1sample");
+    renderPlayerStatsCards("#p2cards", p2Stats, "#p2sample");
+
+    // Nouveau : diagrammes de profil
+    const p1Profile = computeProfileScores(p1Stats);
+    const p2Profile = computeProfileScores(p2Stats);
+    renderProfileDiagram("#p1profile", p1Profile);
+    renderProfileDiagram("#p2profile", p2Profile);
 }
+
 
 async function queueAnalysisRequest(matchId, replayUrl, gateState) {
     const analyzeButtonElement = getElement("#analyzeBtn");
