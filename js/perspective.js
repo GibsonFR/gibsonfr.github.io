@@ -11,15 +11,6 @@ const MAP_NAMES = {
 };
 const prettyMap = id => (MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : `Map ${id}`);
 
-const escapeHtml = value =>
-    (value || "").replace(/[&<>"']/g, character => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        "\"": "&quot;",
-        "'": "&#39;"
-    }[character]));
-
 const formatPercent = value =>
     (value == null || Number.isNaN(value) ? "—" : `${Math.round(value * 1000) / 10}%`);
 
