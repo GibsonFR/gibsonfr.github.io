@@ -8,12 +8,6 @@ import { EffectComposer } from "../three.js-master/examples/jsm/postprocessing/E
 import { RenderPass } from "../three.js-master/examples/jsm/postprocessing/RenderPass.js";
 import { OutlinePass } from "../three.js-master/examples/jsm/postprocessing/OutlinePass.js";
 
-const SUPABASE_URL = "https://yykwhpeczfapkileuxtb.supabase.co";
-const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5a3docGVjemZhcGtpbGV1eHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwMjM4NzUsImV4cCI6MjA3NzU5OTg3NX0.Sz2G1DG0CVYC9WSuYSODnH9k0_ybVluZAtRGBwb55wo";
-
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 const crosshairElement = document.getElementById("crosshair");
 const freecamButton = document.getElementById("btn-freecam");
 const player1Button = document.getElementById("btn-p1");
