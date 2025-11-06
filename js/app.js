@@ -7,13 +7,13 @@ const premiumCrownSvg = `<span title="Premium member" aria-label="Premium member
 </span>`;
 
 function escapeHtml(text) {
-    return (text || "").replace(/[&<>"']/g, character => ({
+    return (text || "").replace(/[&<>"']/g, ch => ({
         "&": "&amp;",
         "<": "&lt;",
         ">": "&gt;",
         "\"": "&quot;",
         "'": "&#39;"
-    }[character]));
+    }[ch]));
 }
 
 function getPremiumNameHtml(leaderboardRow) {
@@ -33,7 +33,8 @@ async function fetchPremiumFromProfiles() {
             if (response.ok) {
                 linksStateMap = await response.json();
             }
-        } catch (_err) {
+        } catch {
+
         }
 
         const nowIsoString = new Date().toISOString();
@@ -117,13 +118,14 @@ async function markSignedInUserAsPremium() {
         if (steamId) {
             premiumSteamIds.add(String(steamId));
         }
-    } catch (_error) {
+    } catch {
     }
 }
 
 async function initializePremiumMarkers() {
     await Promise.all([markSignedInUserAsPremium(), fetchPremiumFromProfiles()]);
 }
+
 
 let pageSizeValue = 1000;
 let currentPageIndex = 0;
@@ -238,7 +240,8 @@ function renderLeaderboardTable(rowsSlice) {
       <td class="p-2 text-center">${row.elo ?? ""}</td>
       <td class="p-2 text-center">${row.games ?? 0}</td>
       <td class="p-2 text-center">${row.win_rate ?? 0}</td>
-    </tr>`).join("");
+    </tr>`
+    ).join("");
 
     const boardElement = document.getElementById("board");
     if (!boardElement) return;
@@ -248,15 +251,15 @@ function renderLeaderboardTable(rowsSlice) {
     document.querySelectorAll("[data-sort]").forEach(headerCell => {
         headerCell.onclick = () => {
             const clickedKey = headerCell.getAttribute("data-sort");
-            if (!clickedKey) {
-                return;
-            }
+            if (!clickedKey) return;
+
             if (currentSortState.key === clickedKey) {
                 currentSortState.dir = currentSortState.dir === "asc" ? "desc" : "asc";
             } else {
                 currentSortState.key = clickedKey;
                 currentSortState.dir = clickedKey === "player" ? "asc" : "desc";
             }
+
             sortedLeaderboardRows = applySortToLeaderboardRows([...leaderboardRows]);
             currentPageIndex = 0;
             renderLeaderboard();
@@ -275,7 +278,8 @@ function renderPagerControls() {
     <button id="prev" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${currentPageIndex <= 0 ? "opacity-50" : ""}">‹ Prev</button>
     <span class="text-slate-300">Page <b>${currentPageIndex + 1}</b> / ${totalPages} · Total <b>${totalPlayers}</b></span>
     <button id="next" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${currentPageIndex >= totalPages - 1 ? "opacity-50" : ""}">Next ›</button>
-    <button id="last" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${currentPageIndex >= totalPages - 1 ? "opacity-50" : ""}">Last »</button>`;
+    <button id="last" class="px-2 py-1 rounded bg-slate-800 border border-slate-700 ${currentPageIndex >= totalPages - 1 ? "opacity-50" : ""}">Last »</button>
+  `;
 
     document.getElementById("first").onclick = () => {
         currentPageIndex = 0;
@@ -312,17 +316,7 @@ function renderLeaderboard() {
 async function loadLeaderboardData(isReload) {
     const statusElement = document.getElementById("status");
     if (statusElement) {
-        const generatedAt = snapshot.generated_at || "";
-
-        let prettyTime = "";
-        if (generatedAt) {
-            const d = new Date(generatedAt);
-            if (!Number.isNaN(d.getTime())) {
-                prettyTime = d.toLocaleString(); 
-            }
-        }
-
-        statusElement.textContent = `Ready · ${totalPlayers} players${prettyTime ? ` · ${prettyTime}` : ""}`;
+        statusElement.textContent = isReload ? "Refreshing…" : "Loading…";
     }
 
     try {
@@ -366,7 +360,14 @@ async function loadLeaderboardData(isReload) {
 
         if (statusElement) {
             const generatedAt = snapshot.generated_at || "";
-            statusElement.textContent = `Ready · ${totalPlayers} players${generatedAt ? ` · ${generatedAt}` : ""}`;
+            let prettyTime = "";
+            if (generatedAt) {
+                const d = new Date(generatedAt);
+                if (!Number.isNaN(d.getTime())) {
+                    prettyTime = d.toLocaleString(); 
+                }
+            }
+            statusElement.textContent = `Ready · ${totalPlayers} players${prettyTime ? ` · ${prettyTime}` : ""}`;
         }
 
         const heroStats = document.getElementById("heroStats");
@@ -421,9 +422,7 @@ async function loadRecentMatches() {
 
             recentContainer.innerHTML += matchHtml;
         }
-
-    }
-    catch (error) {
+    } catch (error) {
         console.error("loadRecentMatches failed", error);
     }
 }
