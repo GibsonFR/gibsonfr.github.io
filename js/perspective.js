@@ -9,460 +9,208 @@ const MAP_NAMES = {
     39: "Tiny Town 2",
     40: "Tiny Town"
 };
-const prettyMap = id => (MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : `Map ${id}`);
+const prettyMap = id => (MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : String(id));
 
-const escapeHtml = value =>
-    (value || "").replace(/[&<>"']/g, character => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        "\"": "&quot;",
-        "'": "&#39;"
-    }[character]));
+const PRESET_WINDOWS = [
+    { label: "Last 20", value: 20 },
+    { label: "Last 50", value: 50 },
+    { label: "Last 100", value: 100 },
+    { label: "All", value: WINDOW_ALL }
+];
 
-const formatPercent = value =>
-    (value == null || Number.isNaN(value) ? "—" : `${Math.round(value * 1000) / 10}%`);
+const ELO_BANDS = [
+    { label: "<1100", min: 0, max: 1099 },
+    { label: "1100–1299", min: 1100, max: 1299 },
+    { label: "1300–1499", min: 1300, max: 1499 },
+    { label: "1500–1699", min: 1500, max: 1699 },
+    { label: "1700+", min: 1700, max: Infinity }
+];
 
-const formatNumber = (value, digits = 1) =>
-(value == null || Number.isNaN(value)
-    ? "—"
-    : Math.round(value * Math.pow(10, digits)) / Math.pow(10, digits));
-
-const formatSeconds = value =>
-    (value == null || Number.isNaN(value) ? "—" : `${formatNumber(value, 1)}s`);
-
-function getMedian(values) {
-    const sorted = (values || []).filter(Number.isFinite).sort((a, b) => a - b);
-    if (!sorted.length) {
-        return null;
-    }
-    const middle = sorted.length / 2;
-    if (sorted.length % 2) {
-        return sorted[middle | 0];
-    }
-    return (sorted[middle - 1] + sorted[middle]) / 2;
+function getAverage(values) {
+    if (!values || values.length === 0) return null;
+    const sum = values.reduce((acc, val) => acc + val, 0);
+    return sum / values.length;
 }
 
-function getQuantile(values, quantileValue) {
-    const sorted = (values || []).filter(Number.isFinite).sort((a, b) => a - b);
-    if (!sorted.length) {
-        return null;
+function getMedian(values) {
+    if (!values || values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) {
+        return (sorted[mid - 1] + sorted[mid]) / 2;
     }
-    const position = (sorted.length - 1) * quantileValue;
-    const lowerIndex = Math.floor(position);
-    const upperIndex = Math.ceil(position);
-    if (lowerIndex === upperIndex) {
-        return sorted[lowerIndex];
-    }
-    return (
-        sorted[lowerIndex] +
-        (sorted[upperIndex] - sorted[lowerIndex]) * (position - lowerIndex)
-    );
+    return sorted[mid];
+}
+
+function getStdDev(values) {
+    if (!values || values.length < 2) return null;
+    const avg = getAverage(values);
+    const variance =
+        values.reduce((acc, val) => acc + (val - avg) * (val - avg), 0) /
+        values.length;
+    return Math.sqrt(variance);
+}
+
+function getIQR(values) {
+    if (!values || values.length < 4) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const q1Index = Math.floor(sorted.length * 0.25);
+    const q3Index = Math.floor(sorted.length * 0.75);
+    const q1 = sorted[q1Index];
+    const q3 = sorted[q3Index];
+    return q3 - q1;
 }
 
 function getP90(values) {
-    return getQuantile(values, 0.9);
+    if (!values || values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const idx = Math.floor(sorted.length * 0.9);
+    return sorted[Math.min(idx, sorted.length - 1)];
 }
 
-function getP10(values) {
-    return getQuantile(values, 0.1);
+function getLastValues(values, count) {
+    if (!values) return [];
+    return values.slice(Math.max(0, values.length - count));
 }
 
 function getSum(values) {
     return (values || []).reduce(
-        (total, current) => total + (Number.isFinite(current) ? current : 0),
+        (acc, val) => (Number.isFinite(val) ? acc + val : acc),
         0
     );
 }
 
-function getAverage(values) {
-    const filtered = (values || []).filter(Number.isFinite);
-    if (!filtered.length) {
-        return null;
-    }
-    return getSum(filtered) / filtered.length;
+function buildTooltipHtml(text) {
+    const safe = String(text || "");
+    return ` data-tip="${safe.replace(/"/g, "&quot;")}"`;
 }
 
-function getStandardDeviation(values) {
-    const filtered = (values || []).filter(Number.isFinite);
-    if (!filtered.length) {
-        return null;
-    }
-    const meanValue = getAverage(filtered);
-    return Math.sqrt(
-        getAverage(filtered.map(element => (element - meanValue) * (element - meanValue)))
-    );
-}
-
-function getLastValues(values, count) {
-    return (values || []).slice(Math.max(0, values.length - count));
-}
-
-function clampUnit(value) {
-    return Math.max(0, Math.min(1, Number(value) || 0));
-}
-
-function buildSparkline(values, width = 240, height = 48) {
-    const filteredValues = (values || []).filter(Number.isFinite);
-    if (!filteredValues.length) {
-        return `<svg width="${width}" height="${height}"></svg>`;
-    }
-    const minimum = Math.min(...filteredValues);
-    const maximum = Math.max(...filteredValues);
-    const normalize = value =>
-        maximum === minimum ? 0.5 : (value - minimum) / (maximum - minimum);
-    const points = filteredValues.map((value, index) => [
-        (index * (width - 6)) / Math.max(1, filteredValues.length - 1) + 3,
-        height - 6 - normalize(value) * (height - 12) + 3
-    ]);
-    const path = `M ${points.map(point => point.join(" ")).join(" L ")}`;
-    return `<svg width="${width}" height="${height}" class="text-amber-300"><path d="${path}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
-}
-
-function buildBar(shareValue, title) {
-    const widthPercent = `${(clampUnit(shareValue) * 100).toFixed(1)}%`;
-    const safeTitle = title ? escapeHtml(title) : "";
-    return `<div class="w-full h-2 rounded bg-slate-800/80 overflow-hidden" title="${safeTitle}">
-    <div class="bar h-2 rounded bg-gradient-to-r from-amber-400 to-amber-200" style="width:${widthPercent}"></div>
-  </div>`;
-}
-
-const intersectionObserver = new IntersectionObserver(
-    entries => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add("show", "pulse-once");
-                intersectionObserver.unobserve(entry.target);
-                entry.target.querySelectorAll("[data-count-to]").forEach(counterElement => {
-                    animateCounter(
-                        counterElement,
-                        Number(counterElement.dataset.countTo || 0),
-                        counterElement.dataset.suffix || ""
-                    );
-                });
-                entry.target.querySelectorAll(".bar").forEach(barElement => {
-                    const finalWidth = barElement.style.width;
-                    barElement.style.width = "0%";
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            barElement.style.width = finalWidth;
-                        });
-                    });
-                });
-            }
-        });
-    },
-    { threshold: 0.2 }
-);
-
-function mountRevealAnimations(scopeElement) {
-    (scopeElement || document)
-        .querySelectorAll(".reveal")
-        .forEach(element => {
-            intersectionObserver.observe(element);
-        });
-}
-
-function animateCounter(element, targetValue, suffix) {
-    if (!Number.isFinite(targetValue)) {
-        element.textContent = "—";
-        return;
-    }
-    const durationMs = 700;
-    const startTime = performance.now();
-    const startValue = 0;
-    const endValue = Number(targetValue);
-
-    function step(timestamp) {
-        const progress = Math.min(1, (timestamp - startTime) / durationMs);
-        const interpolatedValue =
-            Math.round((startValue + (endValue - startValue) * progress) * 10) / 10;
-        if (suffix === "%") {
-            element.textContent = `${Math.round(interpolatedValue * 10) / 10
-                }${suffix}`;
-        } else {
-            element.textContent = `${interpolatedValue}${suffix}`;
-        }
-        if (progress < 1) {
-            requestAnimationFrame(step);
-        }
-    }
-
-    requestAnimationFrame(step);
-}
-
-
-const premiumCrownSvg = `<span title="Premium member" aria-label="Premium member">
-  <svg class="inline-block ml-1 h-4 w-4 align-[-1px] text-amber-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M5 19h14a1 1 0 0 0 1-1v-7.5l-3.8 2.85a1 1 0 0 1-1.52-.47L12 5.6l-2.68 7.28a1 1 0 0 1-1.52.47L4 10.5V18a1 1 0 0 0 1 1Zm-3 2a1 1 0 1 0 0 2h20a1 1 0 1 0 0-2H2Z"/>
-  </svg>
-</span>`;
-
-function getPremiumLabelHtml(steamIdValue, displayValue, isPremium) {
-    const baseLabel = escapeHtml(displayValue || steamIdValue || "Player");
-    if (isPremium) {
-        return `<span class="text-amber-300" title="Premium member">${baseLabel}</span>${premiumCrownSvg}`;
-    }
-    return baseLabel;
-}
-
-async function isPremiumSteamId(steamIdValue) {
-    try {
-        const nowIsoString = new Date().toISOString();
-        const { data } = await supabaseClient
-            .from("profiles")
-            .select("steam_id")
-            .eq("steam_id", steamIdValue)
-            .gt("premium_until", nowIsoString)
-            .maybeSingle();
-        return !!data;
-    } catch {
-        return false;
-    }
-}
-
-async function fetchPremiumSteamIdSet(steamIds) {
-    const premiumSet = new Set();
-    if (!steamIds || !steamIds.length) {
-        return premiumSet;
-    }
-    try {
-        const nowIsoString = new Date().toISOString();
-        const { data } = await supabaseClient
-            .from("profiles")
-            .select("steam_id")
-            .in("steam_id", steamIds)
-            .gt("premium_until", nowIsoString);
-        (data || []).forEach(row => {
-            if (row.steam_id) {
-                premiumSet.add(String(row.steam_id));
-            }
-        });
-        return premiumSet;
-    } catch {
-        return premiumSet;
-    }
-}
-
-
-async function getCurrentUser() {
-    const {
-        data: { user }
-    } = await supabaseClient.auth.getUser();
-    return user || null;
-}
-
-async function isUserPremium(user) {
-    try {
-        const { data } = await supabaseClient
-            .from("profiles")
-            .select("premium_until")
-            .eq("id", user.id)
-            .maybeSingle();
-        return !!(
-            data &&
-            data.premium_until &&
-            new Date(data.premium_until) > new Date()
-        );
-    } catch {
-        return false;
-    }
-}
-
-async function updateGateBannerUi() {
-    const gateBannerElement = document.getElementById("gateBanner");
-    const refreshButton = document.getElementById("refreshBtn");
-    const queueButton = document.getElementById("queueBtn");
-    const compareButton = document.getElementById("cmpBtn");
-    const user = await getCurrentUser();
-    if (!user) {
-        gateBannerElement.classList.remove("hidden");
-        gateBannerElement.innerHTML = `<div class="flex items-start gap-3">
-      <div class="text-amber-300">🔒</div>
-      <div>
-        <div class="font-semibold mb-1">Sign in required</div>
-        <div class="text-slate-300 text-sm">Perspective is a <b>Premium</b> feature. Please sign in with Discord to continue.</div>
-        <div class="mt-2"><button id="signinBtn" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Sign in with Discord</button></div>
+function buildChip(label, value, tip, suffix) {
+    const finalSuffix = suffix || "";
+    const isEmpty = value == null || value === "—";
+    const displayValue = isEmpty ? "—" : value;
+    const extraClass = isEmpty ? "text-slate-500" : "text-emerald-300";
+    const tooltipAttr = tip ? buildTooltipHtml(tip) : "";
+    return `<div class="flex flex-col gap-1 px-2 py-1 rounded bg-slate-800/70 border border-slate-700/70 chip tip"${tooltipAttr}>
+      <div class="text-xs uppercase tracking-wide text-slate-400">${label}</div>
+      <div class="text-lg font-semibold ${extraClass}">
+        ${displayValue}${finalSuffix}
       </div>
     </div>`;
-        refreshButton.disabled = true;
-        queueButton.disabled = true;
-        compareButton.disabled = true;
-        document.getElementById("signinBtn").onclick = () => {
-            supabaseClient.auth.signInWithOAuth({
-                provider: "discord",
-                options: { redirectTo: location.href }
-            });
-        };
-        return { user: null, premium: false };
-    }
-    const isPremiumUser = await isUserPremium(user);
-    if (!isPremiumUser) {
-        gateBannerElement.classList.remove("hidden");
-        gateBannerElement.innerHTML = `<div class="flex items-start gap-3">
-      <div class="text-amber-300">👑</div>
-      <div>
-        <div class="font-semibold mb-1">Premium only</div>
-        <div class="text-slate-300 text-sm">Perspective is available for <b>Premium members</b> only. Upgrade to unlock unlimited analyses and Perspective.</div>
-        <div class="mt-2 flex items-center gap-2">
-          <a href="account.html" class="px-3 py-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-sm">Go Premium (€2)</a>
-        </div>
+}
+
+function buildSectionCard(title, subtitle, contentHtml, extraClasses, tip) {
+    const tooltipAttr = tip ? buildTooltipHtml(tip) : "";
+    return `<section class="bg-slate-900/70 rounded-xl border border-slate-700/80 p-4 shadow-sm section-card ${extraClasses || ""} tip"${tooltipAttr}>
+      <div class="flex items-baseline justify-between gap-2 mb-2">
+        <h2 class="text-base font-semibold text-slate-100">${title}</h2>
+        ${subtitle
+            ? `<p class="text-xs text-slate-400">${subtitle}</p>`
+            : ""
+        }
       </div>
-    </div>`;
-        refreshButton.disabled = true;
-        queueButton.disabled = true;
-        compareButton.disabled = true;
-        return { user, premium: false };
-    }
-    gateBannerElement.classList.add("hidden");
-    refreshButton.disabled = false;
-    queueButton.disabled = false;
-    compareButton.disabled = false;
-    return { user, premium: true };
+      ${contentHtml}
+    </section>`;
 }
 
-
-let cachedSnapshotPlayers = null;
-
-async function loadSnapshotPlayers() {
-    if (cachedSnapshotPlayers) return cachedSnapshotPlayers;
-    try {
-        const res = await fetch("leaderboard_snapshot.json", { cache: "no-store" });
-        if (!res.ok) return [];
-        const snapshot = await res.json();
-        const players = Array.isArray(snapshot.players) ? snapshot.players : [];
-        cachedSnapshotPlayers = players;
-        return players;
-    } catch (error) {
-        console.error("[perspective] failed to load leaderboard_snapshot.json", error);
-        return [];
-    }
+function formatPercent(value, decimals = 1) {
+    if (value == null || !Number.isFinite(value)) return "—";
+    const factor = Math.pow(10, decimals);
+    return (Math.round(value * 100 * factor) / factor).toFixed(decimals);
 }
 
-
-async function fetchPlayerRow() {
-    const snapshotPlayers = await loadSnapshotPlayers();
-    let row = snapshotPlayers.find(
-        p => String(p.steam_id) === String(steamId)
-    );
-    if (row) {
-        return {
-            steam_id: row.steam_id,
-            username: row.username || row.steam_id,
-            elo: row.elo,
-            rp: row.rp,
-            rank_label: row.rank_label,
-            games: row.games,
-            win_rate: row.win_rate
-        };
-    }
-    const { data, error } = await supabaseClient
-        .from("players")
-        .select("steam_id, username, elo, rp, rank_label, games, win_rate")
-        .eq("steam_id", steamId)
-        .maybeSingle();
-    if (error) {
-        console.warn("[perspective] players select error", error);
-    }
-    return data || null;
+function formatNumber(value, decimals = 2) {
+    if (value == null || !Number.isFinite(value)) return "—";
+    return Number(value).toFixed(decimals);
 }
 
-async function fetchMatchesForPlayer(steamIdValue, limit) {
-    const { data, error } = await supabaseClient
-        .from("matches")
-        .select(
-            "id, played_at, map_id, winner, p1_id, p2_id, p1_name, p2_name, p1_elo_before, p1_elo_after, p2_elo_before, p2_elo_after"
-        )
-        .or(`p1_id.eq.${steamIdValue},p2_id.eq.${steamIdValue}`)
-        .order("played_at", { ascending: true })
-        .limit(limit);
-    if (error) {
-        console.warn("matches error", error);
-        return [];
-    }
-    return data || [];
+function formatSeconds(value, decimals = 1) {
+    if (value == null || !Number.isFinite(value)) return "—";
+    return Number(value).toFixed(decimals);
 }
 
-async function fetchAnalysesForMatchIds(matchIds) {
-    if (!matchIds.length) {
-        return new Map();
+function buildEloBandFilterChips(currentBands) {
+    return ELO_BANDS.map(band => {
+        const isActive = currentBands.has(band.min);
+        const baseClasses =
+            "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs border cursor-pointer select-none";
+        const activeClasses =
+            "bg-emerald-500/20 border-emerald-400 text-emerald-100";
+        const inactiveClasses =
+            "bg-slate-900/60 border-slate-600 text-slate-300 hover:border-emerald-300/70 hover:text-emerald-100";
+        const finalClasses = baseClasses + " " + (isActive ? activeClasses : inactiveClasses);
+        const tipText = `Filter matches where the opponent's Elo is in this range (${band.label}).`;
+        return `<button class="${finalClasses} elo-band-chip tip" data-min="${band.min}" data-max="${band.max}"${buildTooltipHtml(
+            tipText
+        )}>
+      <span class="w-2 h-2 rounded-full ${isActive ? "bg-emerald-400" : "bg-slate-500"
+            }"></span>
+      <span>${band.label}</span>
+    </button>`;
+    }).join("");
+}
+
+// ---------------------
+// Data loading helpers
+// ---------------------
+async function fetchJson(url, options) {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status} for ${url}`);
     }
-    const { data, error } = await supabaseClient
-        .from("match_analyses")
-        .select("match_id, p1_quality, p2_quality, p1_stats, p2_stats, analyzed_at")
-        .in("match_id", matchIds);
-    if (error) {
-        console.warn("analyses error", error);
-        return new Map();
-    }
-    const map = new Map();
-    (data || []).forEach(row => {
-        map.set(row.match_id, row);
+    return await res.json();
+}
+
+async function fetchMatchesForPlayer(steamId) {
+    if (!steamId) return [];
+    const params = new URLSearchParams({
+        or: `(p1_id.eq.${steamId},p2_id.eq.${steamId})`,
+        order: "played_at.desc",
+        select:
+            "id,played_at,winner,map_id,replay_url,p1_id,p2_id,p1_name,p2_name,p1_elo_before,p2_elo_before,p1_elo_after,p2_elo_after"
     });
-    return map;
-}
-
-function groupSessions(sortedMatches, gapMs) {
-    const sessions = [];
-    let currentSession = [];
-    let lastTime = null;
-    for (const matchRow of sortedMatches) {
-        const timeValue = new Date(matchRow.played_at).getTime();
-        if (lastTime != null && timeValue - lastTime > gapMs) {
-            if (currentSession.length) {
-                sessions.push(currentSession);
-            }
-            currentSession = [];
+    const baseUrl = `${window.SUPABASE_REST_URL}/matches`;
+    const urlWithParams = `${baseUrl}?${params.toString()}`;
+    const resp = await fetchJson(urlWithParams, {
+        headers: {
+            apikey: window.SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${window.SUPABASE_ANON_KEY}`
         }
-        currentSession.push(matchRow);
-        lastTime = timeValue;
-    }
-    if (currentSession.length) {
-        sessions.push(currentSession);
-    }
-    return sessions;
+    });
+    return resp || [];
 }
 
-function getDaypartsBuckets(matches, playerSteamId) {
-    const parts = [
-        { key: "Night", range: "0–5", hours: [0, 1, 2, 3, 4, 5], matches: 0, wins: 0 },
-        { key: "Morning", range: "6–11", hours: [6, 7, 8, 9, 10, 11], matches: 0, wins: 0 },
-        { key: "Afternoon", range: "12–17", hours: [12, 13, 14, 15, 16, 17], matches: 0, wins: 0 },
-        { key: "Evening", range: "18–23", hours: [18, 19, 20, 21, 22, 23], matches: 0, wins: 0 }
-    ];
-    const indexByHour = new Map();
-    parts.forEach((part, index) => {
-        part.hours.forEach(hour => {
-            indexByHour.set(hour, index);
+async function fetchAnalysesForMatches(matchIds) {
+    if (!matchIds || matchIds.length === 0) return [];
+    const chunks = [];
+    const size = 200;
+    for (let i = 0; i < matchIds.length; i += size) {
+        chunks.push(matchIds.slice(i, i + size));
+    }
+    const all = [];
+    for (const chunk of chunks) {
+        const baseUrl = `${window.SUPABASE_REST_URL}/match_analyses`;
+        const params = new URLSearchParams({
+            select: "*",
+            match_id: `in.(${chunk.join(",")})`
         });
-    });
-    for (const matchRow of matches) {
-        const isPlayerP1 = String(matchRow.p1_id) === String(playerSteamId);
-        const playerSide = isPlayerP1 ? "p1" : "p2";
-        let isWin = null;
-        if (matchRow.winner === 1 || matchRow.winner === "1") {
-            isWin = playerSide === "p1";
-        } else if (matchRow.winner === 2 || matchRow.winner === "2") {
-            isWin = playerSide === "p2";
-        }
-        const hour = new Date(matchRow.played_at).getHours();
-        const partIndex = indexByHour.get(hour);
-        if (partIndex == null) {
-            continue;
-        }
-        parts[partIndex].matches += 1;
-        if (isWin) {
-            parts[partIndex].wins += 1;
+        const urlWithParams = `${baseUrl}?${params.toString()}`;
+        const resp = await fetchJson(urlWithParams, {
+            headers: {
+                apikey: window.SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${window.SUPABASE_ANON_KEY}`
+            }
+        });
+        if (Array.isArray(resp)) {
+            all.push(...resp);
         }
     }
-    return parts.map(part => ({
-        key: part.key,
-        range: part.range,
-        matches: part.matches,
-        winrate: part.matches ? part.wins / part.matches : null
-    }));
+    return all;
 }
 
+// ---------------------
+// Aggregation / metrics
+// ---------------------
 function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     let scopedMatches = mapId
         ? matches.filter(matchRow => String(matchRow.map_id) === String(mapId))
@@ -482,8 +230,13 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         });
     }
 
-    const eloSeries = [];
-    const results = [];
+    const byId = new Map();
+    for (const row of analyses) {
+        if (row && row.match_id != null) {
+            byId.set(row.match_id, row);
+        }
+    }
+
     const qualityValues = [];
     const speeds = [];
     const distanceHider = [];
@@ -495,8 +248,90 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const retagMedianValues = [];
     const retagAverageValues = [];
     const accuracyValues = [];
+    // New aggregated series for advanced stats
+    const taggerQualityValues = [];
+    const hiderQualityValues = [];
+    const chaseValues = [];
+    const evasionValues = [];
+    const pathDiversityValues = [];
+    const movementRatioValues = [];
+    const movementTaggerRatioValues = [];
+    const movementHiderRatioValues = [];
+    const verticalAboveShares = [];
+    const verticalBelowShares = [];
     const matchesByMap = new Map();
     const matchesByOpponent = new Map();
+
+    const results = [];
+    const eloSeries = [];
+    const dayparts = {
+        morning: 0,
+        afternoon: 0,
+        evening: 0,
+        night: 0
+    };
+
+    function classifyDaypart(dateString) {
+        try {
+            const d = new Date(dateString);
+            const hour = d.getHours();
+            if (hour >= 6 && hour < 12) return "morning";
+            if (hour >= 12 && hour < 18) return "afternoon";
+            if (hour >= 18 && hour < 24) return "evening";
+            return "night";
+        } catch {
+            return null;
+        }
+    }
+
+    const sessionThresholdMs = 60 * 60 * 1000;
+    const sessionStats = {
+        sessions: [],
+        longestStreak: 0,
+        averageSessionLength: null
+    };
+
+    let currentSession = null;
+
+    const sortedByDate = scopedMatches
+        .slice()
+        .sort((a, b) => new Date(a.played_at) - new Date(b.played_at));
+    for (const matchRow of sortedByDate) {
+        const matchDate = new Date(matchRow.played_at);
+        if (!currentSession) {
+            currentSession = {
+                start: matchDate,
+                end: matchDate,
+                matchCount: 1
+            };
+        } else {
+            const deltaMs = matchDate - currentSession.end;
+            if (deltaMs <= sessionThresholdMs) {
+                currentSession.end = matchDate;
+                currentSession.matchCount += 1;
+            } else {
+                sessionStats.sessions.push(currentSession);
+                currentSession = {
+                    start: matchDate,
+                    end: matchDate,
+                    matchCount: 1
+                };
+            }
+        }
+    }
+    if (currentSession) {
+        sessionStats.sessions.push(currentSession);
+    }
+
+    if (sessionStats.sessions.length > 0) {
+        sessionStats.longestStreak = Math.max(
+            ...sessionStats.sessions.map(s => s.matchCount)
+        );
+        const lengths = sessionStats.sessions.map(
+            s => (s.end - s.start) / 60000
+        );
+        sessionStats.averageSessionLength = getAverage(lengths);
+    }
 
     for (const matchRow of scopedMatches) {
         const isPlayerP1 = String(matchRow.p1_id) === String(playerSteamId);
@@ -517,13 +352,22 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         }
 
         const eloAfterMatch = isPlayerP1
-            ? matchRow.p1_elo_after ?? matchRow.p1_elo_before
-            : matchRow.p2_elo_after ?? matchRow.p2_elo_before;
-        if (eloAfterMatch != null) {
-            eloSeries.push(Number(eloAfterMatch));
+            ? matchRow.p1_elo_after
+            : matchRow.p2_elo_after;
+        if (Number.isFinite(eloAfterMatch)) {
+            eloSeries.push({
+                played_at: matchRow.played_at,
+                elo: Number(eloAfterMatch),
+                win: isWin === true
+            });
         }
 
-        const analysisRow = analyses.get(matchRow.id);
+        const part = classifyDaypart(matchRow.played_at);
+        if (part && dayparts[part] != null) {
+            dayparts[part] += 1;
+        }
+
+        const analysisRow = byId.get(matchRow.id);
         if (analysisRow) {
             const qualityValue = isPlayerP1
                 ? analysisRow.p1_quality
@@ -568,12 +412,47 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             if (Number.isFinite(stats.retag_avg_seconds)) {
                 retagAverageValues.push(Number(stats.retag_avg_seconds));
             }
-            if (Number.isFinite(stats.accuracy)) {
-                accuracyValues.push(Number(stats.accuracy));
+            // Item accuracy (backend: item_accuracy)
+            if (Number.isFinite(stats.item_accuracy)) {
+                accuracyValues.push(Number(stats.item_accuracy));
+            }
+            // Role qualities
+            if (Number.isFinite(stats.tagger_quality)) {
+                taggerQualityValues.push(Number(stats.tagger_quality));
+            }
+            if (Number.isFinite(stats.hider_quality)) {
+                hiderQualityValues.push(Number(stats.hider_quality));
+            }
+            // Chase / evasion
+            if (Number.isFinite(stats.chase_score)) {
+                chaseValues.push(Number(stats.chase_score));
+            }
+            if (Number.isFinite(stats.evasion_score)) {
+                evasionValues.push(Number(stats.evasion_score));
+            }
+            // Path diversity & movement ratios
+            if (Number.isFinite(stats.path_diversity_score)) {
+                pathDiversityValues.push(Number(stats.path_diversity_score));
+            }
+            if (Number.isFinite(stats.movement_ratio)) {
+                movementRatioValues.push(Number(stats.movement_ratio));
+            }
+            if (Number.isFinite(stats.movement_ratio_tagger)) {
+                movementTaggerRatioValues.push(Number(stats.movement_ratio_tagger));
+            }
+            if (Number.isFinite(stats.movement_ratio_hider)) {
+                movementHiderRatioValues.push(Number(stats.movement_ratio_hider));
+            }
+            // Vertical play shares
+            if (Number.isFinite(stats.vertical_above_share)) {
+                verticalAboveShares.push(Number(stats.vertical_above_share));
+            }
+            if (Number.isFinite(stats.vertical_below_share)) {
+                verticalBelowShares.push(Number(stats.vertical_below_share));
             }
         }
 
-        const mapKey = String(matchRow.map_id);
+        const mapKey = String(matchRow.map_id || "unknown");
         if (!matchesByMap.has(mapKey)) {
             matchesByMap.set(mapKey, {
                 map_id: matchRow.map_id,
@@ -584,7 +463,13 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
                 tagShares: [],
                 retagMedian: [],
                 distanceHider: [],
-                distanceTagger: []
+                distanceTagger: [],
+                // per-map advanced series
+                taggerQ: [],
+                hiderQ: [],
+                pathDiv: [],
+                chase: [],
+                evade: []
             });
         }
         const mapBucket = matchesByMap.get(mapKey);
@@ -592,32 +477,22 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         if (isWin) {
             mapBucket.wins += 1;
         }
-        if (analysisRow) {
-            const stats = isPlayerP1 ? analysisRow.p1_stats || {} : analysisRow.p2_stats || {};
-            const qualityValue = isPlayerP1
-                ? analysisRow.p1_quality
-                : analysisRow.p2_quality;
-            if (Number.isFinite(qualityValue)) {
-                mapBucket.qualityValues.push(Number(qualityValue));
+        const analysisRowForMap = byId.get(matchRow.id);
+        if (analysisRowForMap) {
+            const stats = isPlayerP1
+                ? analysisRowForMap.p1_stats || {}
+                : analysisRowForMap.p2_stats || {};
+            const qualityValForMap = isPlayerP1
+                ? analysisRowForMap.p1_quality
+                : analysisRowForMap.p2_quality;
+            if (Number.isFinite(qualityValForMap)) {
+                mapBucket.qualityValues.push(Number(qualityValForMap));
             }
             if (Number.isFinite(stats.avg_speed_ms)) {
                 mapBucket.speedValues.push(Number(stats.avg_speed_ms));
             }
-            let shareValue = null;
-            if (
-                Number.isFinite(stats.seconds_as_tagger) &&
-                Number.isFinite(stats.seconds_as_hider)
-            ) {
-                const totalSeconds =
-                    Number(stats.seconds_as_tagger) + Number(stats.seconds_as_hider);
-                if (totalSeconds > 0) {
-                    shareValue = Number(stats.seconds_as_tagger) / totalSeconds;
-                }
-            } else if (Number.isFinite(stats.time_as_tagger_share)) {
-                shareValue = Number(stats.time_as_tagger_share);
-            }
-            if (shareValue != null) {
-                mapBucket.tagShares.push(shareValue);
+            if (Number.isFinite(stats.time_as_tagger_share)) {
+                mapBucket.tagShares.push(Number(stats.time_as_tagger_share));
             }
             if (Number.isFinite(stats.retag_median_seconds)) {
                 mapBucket.retagMedian.push(Number(stats.retag_median_seconds));
@@ -627,6 +502,21 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             }
             if (Number.isFinite(stats.avg_distance_as_tagger)) {
                 mapBucket.distanceTagger.push(Number(stats.avg_distance_as_tagger));
+            }
+            if (Number.isFinite(stats.tagger_quality)) {
+                mapBucket.taggerQ.push(Number(stats.tagger_quality));
+            }
+            if (Number.isFinite(stats.hider_quality)) {
+                mapBucket.hiderQ.push(Number(stats.hider_quality));
+            }
+            if (Number.isFinite(stats.path_diversity_score)) {
+                mapBucket.pathDiv.push(Number(stats.path_diversity_score));
+            }
+            if (Number.isFinite(stats.chase_score)) {
+                mapBucket.chase.push(Number(stats.chase_score));
+            }
+            if (Number.isFinite(stats.evasion_score)) {
+                mapBucket.evade.push(Number(stats.evasion_score));
             }
         }
 
@@ -640,17 +530,17 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
                 qualityValues: []
             });
         }
-        const opponentBucket = matchesByOpponent.get(opponentKey);
-        opponentBucket.matches += 1;
+        const oppBucket = matchesByOpponent.get(opponentKey);
+        oppBucket.matches += 1;
         if (isWin) {
-            opponentBucket.wins += 1;
+            oppBucket.wins += 1;
         }
         if (analysisRow) {
-            const qualityValue = isPlayerP1
+            const qValue = isPlayerP1
                 ? analysisRow.p1_quality
                 : analysisRow.p2_quality;
-            if (Number.isFinite(qualityValue)) {
-                opponentBucket.qualityValues.push(Number(qualityValue));
+            if (Number.isFinite(qValue)) {
+                oppBucket.qualityValues.push(Number(qValue));
             }
         }
     }
@@ -668,31 +558,24 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const qualityStats = {
         average: getAverage(qualityValues),
         median: getMedian(qualityValues),
-        lower_quartile: getQuantile(qualityValues, 0.25),
-        upper_quartile: getQuantile(qualityValues, 0.75),
+        spread_std: getStdDev(qualityValues),
+        spread_iqr: getIQR(qualityValues),
         best_match: qualityValues.length ? Math.max(...qualityValues) : null,
-        worst_match: qualityValues.length ? Math.min(...qualityValues) : null,
-        spread_std: getStandardDeviation(qualityValues),
-        spread_iqr:
-            getQuantile(qualityValues, 0.75) != null &&
-                getQuantile(qualityValues, 0.25) != null
-                ? getQuantile(qualityValues, 0.75) -
-                getQuantile(qualityValues, 0.25)
-                : null
+        worst_match: qualityValues.length ? Math.min(...qualityValues) : null
     };
 
     const taggingStats = {
         share_as_tagger: tagShareValue,
         time_as_tagger_average: getAverage(tagSeconds),
-        time_as_tagger_median: getMedian(tagSeconds),
         time_as_hider_average: getAverage(hiderSeconds),
-        time_as_hider_median: getMedian(hiderSeconds)
+        time_as_tagger_total: getSum(tagSeconds),
+        time_as_hider_total: getSum(hiderSeconds)
     };
 
     const speedStats = {
         average_mps: getAverage(speeds),
-        p90_mps: getP90(speeds),
-        p10_mps: getP10(speeds)
+        median_mps: getMedian(speeds),
+        p90_mps: getP90(speeds)
     };
 
     const distanceStats = {
@@ -708,6 +591,32 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
 
     const accuracyStats = {
         average: getAverage(accuracyValues)
+    };
+
+    // Advanced aggregated role / movement stats
+    const roleQuality = {
+        tagger_avg: getAverage(taggerQualityValues),
+        hider_avg: getAverage(hiderQualityValues)
+    };
+
+    const chasing = {
+        chase_avg: getAverage(chaseValues),
+        evasion_avg: getAverage(evasionValues)
+    };
+
+    const movement = {
+        ratio_avg: getAverage(movementRatioValues),
+        ratio_tagger_avg: getAverage(movementTaggerRatioValues),
+        ratio_hider_avg: getAverage(movementHiderRatioValues)
+    };
+
+    const path = {
+        diversity_avg: getAverage(pathDiversityValues)
+    };
+
+    const vertical = {
+        above_share_avg: getAverage(verticalAboveShares),
+        below_share_avg: getAverage(verticalBelowShares)
     };
 
     const eloSeriesAll = eloSeries.slice();
@@ -736,7 +645,12 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             share_as_tagger: getAverage(mapBucket.tagShares),
             retag_median_seconds: getAverage(mapBucket.retagMedian),
             average_hider_distance_m: getAverage(mapBucket.distanceHider),
-            average_tagger_distance_m: getAverage(mapBucket.distanceTagger)
+            average_tagger_distance_m: getAverage(mapBucket.distanceTagger),
+            average_tagger_quality: getAverage(mapBucket.taggerQ),
+            average_hider_quality: getAverage(mapBucket.hiderQ),
+            path_diversity_avg: getAverage(mapBucket.pathDiv),
+            chase_avg: getAverage(mapBucket.chase),
+            evasion_avg: getAverage(mapBucket.evade)
         }))
         .sort((a, b) => b.matches - a.matches);
 
@@ -745,20 +659,13 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             id: opponentBucket.id,
             name: opponentBucket.name,
             matches: opponentBucket.matches,
-            winrate: opponentBucket.matches ? opponentBucket.wins / opponentBucket.matches : null,
+            wins: opponentBucket.wins,
+            winrate: opponentBucket.matches
+                ? opponentBucket.wins / opponentBucket.matches
+                : null,
             average_quality: getAverage(opponentBucket.qualityValues)
         }))
         .sort((a, b) => b.matches - a.matches);
-
-    const sessions = groupSessions(scopedMatches, 5 * 60 * 1000);
-    const sessionStats = {
-        sessions: sessions.length,
-        avg_matches_per_session: sessions.length
-            ? sessions.map(session => session.length).reduce((a, b) => a + b, 0) /
-            sessions.length
-            : null
-    };
-    const dayparts = getDaypartsBuckets(scopedMatches, playerSteamId);
 
     return {
         scopeCount: totalMatches,
@@ -770,6 +677,11 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         distance: distanceStats,
         retag: retagStats,
         accuracy: accuracyStats,
+        roleQuality,
+        chasing,
+        movement,
+        path,
+        vertical,
         eloSeries: eloSeriesAll,
         form: recentResults,
         bestStreak: bestStreakValue,
@@ -780,23 +692,9 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     };
 }
 
-function buildChip(label, value, tip, suffix) {
-    const finalSuffix = suffix || "";
-    const isEmpty = value == null || value === "—";
-    const displayedValue = isEmpty ? "—" : value;
-    const dataValueAttributes = isEmpty
-        ? ""
-        : `data-count-to="${value}" data-suffix="${finalSuffix}"`;
-    return `<div class="px-3 py-2 rounded-xl bg-slate-800/70 border border-slate-700 text-sm reveal">
-    <span class="tip text-slate-400" data-tip="${escapeHtml(tip)}">${label}</span>
-    <span class="ml-1 text-slate-100 font-semibold" ${dataValueAttributes}>${displayedValue}${finalSuffix}</span>
-  </div>`;
-}
-
-function buildSection(title, bodyHtml) {
-    return `<div class="mt-6 card reveal"><h3 class="text-xl font-semibold mb-3">${title}</h3>${bodyHtml}</div>`;
-}
-
+// ---------------------
+// UI builders
+// ---------------------
 function buildOverviewChips(metrics) {
     return [
         buildChip(
@@ -888,7 +786,15 @@ function buildOverviewChips(metrics) {
             metrics.speed.average_mps != null
                 ? Number(metrics.speed.average_mps).toFixed(2)
                 : "—",
-            "Movement speed (m/s).",
+            "Average movement speed (m/s).",
+            " m/s"
+        ),
+        buildChip(
+            "Median speed",
+            metrics.speed.median_mps != null
+                ? Number(metrics.speed.median_mps).toFixed(2)
+                : "—",
+            "Middle speed value (m/s).",
             " m/s"
         ),
         buildChip(
@@ -940,11 +846,86 @@ function buildOverviewChips(metrics) {
             "s"
         ),
         buildChip(
-            "Accuracy (average)",
+            "Item accuracy (average)",
             metrics.accuracy.average != null
                 ? Math.round(metrics.accuracy.average * 1000) / 10
                 : "—",
-            "Share of successful attempts.",
+            "Average success rate of offensive items (only when item use was relevant).",
+            "%"
+        ),
+        buildChip(
+            "Tagger quality (avg)",
+            metrics.roleQuality.tagger_avg != null
+                ? Number(metrics.roleQuality.tagger_avg).toFixed(1)
+                : "—",
+            "Average tagger-quality score over the selected games (0–100)."
+        ),
+        buildChip(
+            "Hider quality (avg)",
+            metrics.roleQuality.hider_avg != null
+                ? Number(metrics.roleQuality.hider_avg).toFixed(1)
+                : "—",
+            "Average hider-quality score over the selected games (0–100)."
+        ),
+        buildChip(
+            "Chase efficiency (avg)",
+            metrics.chasing.chase_avg != null
+                ? Number(metrics.chasing.chase_avg).toFixed(1)
+                : "—",
+            "How effectively you close distance as the tagger during chases (0–100)."
+        ),
+        buildChip(
+            "Evasion efficiency (avg)",
+            metrics.chasing.evasion_avg != null
+                ? Number(metrics.chasing.evasion_avg).toFixed(1)
+                : "—",
+            "How effectively you increase distance as the hider during chases (0–100)."
+        ),
+        buildChip(
+            "Path diversity (avg)",
+            metrics.path.diversity_avg != null
+                ? Number(metrics.path.diversity_avg).toFixed(1)
+                : "—",
+            "Average path diversity score across games (higher = explores more of the map)."
+        ),
+        buildChip(
+            "Movement ratio (overall)",
+            metrics.movement.ratio_avg != null
+                ? Math.round(metrics.movement.ratio_avg * 1000) / 10
+                : "—",
+            "Share of time spent moving (any role).",
+            "%"
+        ),
+        buildChip(
+            "Movement ratio as tagger",
+            metrics.movement.ratio_tagger_avg != null
+                ? Math.round(metrics.movement.ratio_tagger_avg * 1000) / 10
+                : "—",
+            "Share of time spent moving while you are the tagger.",
+            "%"
+        ),
+        buildChip(
+            "Movement ratio as hider",
+            metrics.movement.ratio_hider_avg != null
+                ? Math.round(metrics.movement.ratio_hider_avg * 1000) / 10
+                : "—",
+            "Share of time spent moving while you are the hider.",
+            "%"
+        ),
+        buildChip(
+            "Air time share",
+            metrics.vertical.above_share_avg != null
+                ? Math.round(metrics.vertical.above_share_avg * 1000) / 10
+                : "—",
+            "Share of time spent above your opponent (aerial style).",
+            "%"
+        ),
+        buildChip(
+            "Ground time share",
+            metrics.vertical.below_share_avg != null
+                ? Math.round(metrics.vertical.below_share_avg * 1000) / 10
+                : "—",
+            "Share of time spent below your opponent (ground style).",
             "%"
         )
     ].join("");
@@ -961,871 +942,603 @@ function buildFormSection(metrics) {
     const finalDotsHtml =
         dotsHtml || '<span class="text-slate-500 text-sm">No recent games</span>';
     const contentHtml = `<div class="flex items-center justify-between gap-4 flex-wrap">
-      <div class="text-slate-300 tip" data-tip="Longest consecutive sequence of wins within the scope.">Best win streak: <b>${metrics.bestStreak || 0}</b></div>
-      <div class="flex items-center gap-1" title="Most recent results (green = win, red = loss).">${finalDotsHtml}</div>
-      <div class="ml-auto" title="Rating trend over time.">${buildSparkline(metrics.eloSeries)}</div>
-    </div>`;
-    return buildSection("Form & rating", contentHtml);
-}
-
-function buildTaggingSection(metrics) {
-    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Share of total time played as the tagger.">${formatPercent(metrics.tagging.share_as_tagger)}</div>
-        ${buildBar(metrics.tagging.share_as_tagger || 0, "Tag time share")}
+      <div class="text-slate-300 tip" data-tip="Recent match outcomes (win = green, loss = red).">
+        <div class="mb-1 text-xs uppercase tracking-wide text-slate-400">
+          Recent Form
+        </div>
+        <div class="flex items-center flex-wrap gap-1">
+          ${finalDotsHtml}
+        </div>
       </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the tagger each match.">Average time as tagger</div>
-        <div class="text-slate-100 font-semibold">${formatSeconds(metrics.tagging.time_as_tagger_average)} <span class="text-slate-400">· median ${formatSeconds(metrics.tagging.time_as_tagger_median)}</span></div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average number of seconds spent as the hider each match.">Average time as hider</div>
-        <div class="text-slate-100 font-semibold">${formatSeconds(metrics.tagging.time_as_hider_average)} <span class="text-slate-400">· median ${formatSeconds(metrics.tagging.time_as_hider_median)}</span></div>
+      <div class="text-right">
+        <div class="text-xs text-slate-400 mb-0.5 tip" data-tip="Longest sequence of consecutive wins in the selected matches.">
+          Best win streak
+        </div>
+        <div class="text-xl font-semibold text-emerald-300">${metrics.bestStreak || 0}</div>
       </div>
     </div>`;
-    return buildSection("Tagging profile", contentHtml);
+    return buildSectionCard("Form & streaks", "", contentHtml, "");
 }
 
-function buildSpeedAndDistanceSection(metrics) {
-    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average movement speed and 90th percentile (peak bursts).">Average speed / P90</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.speed.average_mps, 2)} m/s · ${formatNumber(metrics.speed.p90_mps, 2)} m/s</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while playing as the hider.">Average hider distance</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.distance.average_hider_m, 2)} m</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average distance traveled while playing as the tagger.">Average tagger distance</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.distance.average_tagger_m, 2)} m</div>
-      </div>
-    </div>`;
-    return buildSection("Speed & distance", contentHtml);
-}
+function buildEloSection(metrics) {
+    const series = metrics.eloSeries || [];
+    if (!series.length) {
+        const contentHtml =
+            '<p class="text-slate-400 text-sm">No Elo data available for this scope.</p>';
+        return buildSectionCard("Elo trend", "", contentHtml, "");
+    }
 
-function buildRetagAndAccuracySection(metrics) {
-    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags.">Retag (median)</div>
-        <div class="text-slate-100 font-semibold">${formatSeconds(metrics.retag.median_seconds)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average and 90th percentile of retag time (lower is better).">Retag (average / P90)</div>
-        <div class="text-slate-100 font-semibold">${formatSeconds(metrics.retag.average_seconds)} / ${formatSeconds(metrics.retag.p90_seconds)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Share of successful attempts; higher means better precision.">Accuracy (average)</div>
-        <div class="text-slate-100 font-semibold">${metrics.accuracy.average != null ? formatPercent(metrics.accuracy.average) : "—"}</div>
-      </div>
-    </div>`;
-    return buildSection("Retagging & accuracy", contentHtml);
-}
-
-function buildQualitySection(metrics) {
-    const iqrWidth =
-        metrics.quality.average != null &&
-            metrics.quality.upper_quartile != null &&
-            metrics.quality.lower_quartile != null
-            ? (metrics.quality.average - metrics.quality.lower_quartile) /
-            Math.max(
-                0.001,
-                metrics.quality.upper_quartile - metrics.quality.lower_quartile
-            )
-            : 0;
-    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average game quality score.">Average quality</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.quality.average, 1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Median game quality score.">Median quality</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.quality.median, 1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Interquartile range (Q3−Q1). Middle 50% spread. Smaller = more consistent.">Quality IQR</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.quality.spread_iqr, 1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Standard deviation of quality scores.">Quality SD</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.quality.spread_std, 2)}</div>
-      </div>
-      <div class="md:col-span-2">
-        <div class="text-slate-300 tip mb-1" data-tip="Average position inside the IQR band.">${formatNumber(metrics.quality.lower_quartile, 1)} to ${formatNumber(metrics.quality.upper_quartile, 1)} (IQR)</div>
-        ${buildBar(iqrWidth, "Average inside the IQR band")}
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Best single-match quality in scope.">Best match quality</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.quality.best_match, 1)}</div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Worst single-match quality in scope.">Worst match quality</div>
-        <div class="text-slate-100 font-semibold">${formatNumber(metrics.quality.worst_match, 1)}</div>
-      </div>
-    </div>`;
-    return buildSection("Quality & consistency", contentHtml);
-}
-
-function buildSessionsAndTimeSection(metrics) {
-    const dayparts = metrics.dayparts || [];
-    const encodedData = encodeURIComponent(JSON.stringify(dayparts));
-    const defaultKey = dayparts.length
-        ? dayparts.reduce(
-            (best, current) =>
-                current.matches > best.matches ? current : best
-        ).key
-        : "Morning";
-    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div>
-      <div class="text-slate-400">Sessions (≤5 min gap)</div>
-      <div class="text-lg font-semibold">${metrics.sessionStats.sessions || 0}</div>
-      <div class="mt-2 text-slate-400">Avg matches per session</div>
-      <div class="font-semibold">${formatNumber(metrics.sessionStats.avg_matches_per_session, 2)}</div>
-    </div>
-    <div class="md:col-span-2">
-      <div class="flex items-center justify-between gap-2">
-        <div class="text-slate-400">Win rate by daypart (local)</div>
-        <div class="dp-tabs flex flex-wrap gap-2"></div>
-      </div>
-      <div class="dp-panel mt-3 p-4 rounded-xl border border-slate-800 bg-slate-900/40"></div>
-      <div class="hidden" data-dp-scope data-dp-data="${encodedData}" data-dp-selected="${defaultKey}"></div>
-    </div>
-  </div>`;
-    return buildSection("Playtime & sessions", contentHtml);
-}
-
-function mountDaypartTabs(scopeElement) {
-    (scopeElement || document)
-        .querySelectorAll("[data-dp-scope]")
-        .forEach(container => {
-            const rawData = container.getAttribute("data-dp-data") || "[]";
-            const data = JSON.parse(decodeURIComponent(rawData));
-            if (!data.length) {
-                return;
-            }
-            let selectedKey =
-                container.getAttribute("data-dp-selected") || data[0].key;
-            const wrapElement = container.parentElement;
-            const tabsElement = wrapElement.querySelector(".dp-tabs");
-            const panelElement = wrapElement.querySelector(".dp-panel");
-
-            function renderTabs() {
-                tabsElement.innerHTML = data
-                    .map(
-                        part => `
-        <button class="px-2 py-1.5 text-sm pill ${part.key === selectedKey ? "pill-active" : ""
-                            }" data-dp="${part.key}">
-          ${part.key}<span class="ml-1 text-slate-400 text-xs">${part.range
-                            }</span>
-        </button>`
-                    )
-                    .join("");
-            }
-
-            function renderPanel() {
-                const selectedPart =
-                    data.find(part => part.key === selectedKey) || data[0];
-                const winrateText =
-                    selectedPart.winrate == null
-                        ? "—"
-                        : `${Math.round(selectedPart.winrate * 1000) / 10}%`;
-                panelElement.innerHTML = `
-        <div class="flex items-center justify_between gap-4 flex-wrap">
-          <div>
-            <div class="text-xs text-slate-400">${selectedPart.range} · ${selectedPart.matches || 0
-                    } matches</div>
-            <div class="text-2xl font-extrabold tracking-tight mt-1">${winrateText}</div>
-          </div>
-          <div class="min-w-[180px] w-full sm:w-auto">${buildBar(
-                        selectedPart.winrate || 0,
-                        "Win rate"
-                    )}</div>
-        </div>`;
-            }
-
-            tabsElement.addEventListener("click", event => {
-                const button = event.target.closest("[data-dp]");
-                if (!button) {
-                    return;
-                }
-                selectedKey = button.getAttribute("data-dp");
-                container.setAttribute("data-dp-selected", selectedKey);
-                renderTabs();
-                renderPanel();
+    const sortedSeries = [...series].sort(
+        (a, b) => new Date(a.played_at) - new Date(b.played_at)
+    );
+    const pointsHtml = sortedSeries
+        .map(point => {
+            const dateStr = new Date(point.played_at).toLocaleString(undefined, {
+                hour12: false
             });
+            const tipText = `Elo: ${point.elo} (match on ${dateStr})`;
+            return `<div class="flex items-center gap-1 tip" data-tip="${tipText.replace(
+                /"/g,
+                "&quot;"
+            )}">
+        <div class="w-2 h-2 rounded-full ${point.win ? "bg-emerald-400" : "bg-rose-400"
+                }"></div>
+        <span class="text-xs text-slate-300">${point.elo}</span>
+      </div>`;
+        })
+        .join('<span class="w-2 inline-block"></span>');
 
-            renderTabs();
-            renderPanel();
-        });
-}
-
-function buildMapsSection(maps, currentMapFilter) {
-    if (currentMapFilter != null) {
-        return "";
-    }
-    if (!maps || !maps.length) {
-        return buildSection(
-            "Per-map breakdown",
-            '<div class="text-slate-400 text-sm">No data.</div>'
-        );
-    }
-    const topMaps = maps.slice(0, 12);
-    const cardsHtml = topMaps
-        .map(
-            mapMetrics => `
-    <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/40">
-      <div class="flex items-center justify-between">
-        <div class="font-semibold">${prettyMap(mapMetrics.map_id)}</div>
-      </div>
-      <div class="mt-2 text-slate-400 text-sm">${mapMetrics.matches} matches</div>
-      <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <div class="text-slate-400">Win rate</div>
-          <div class="font-semibold">${mapMetrics.winrate != null
-                    ? `${Math.round(mapMetrics.winrate * 1000) / 10}%`
-                    : "—"
-                }</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Avg quality</div>
-          <div class="font-semibold">${formatNumber(
-                    mapMetrics.average_quality,
-                    1
-                )}</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Tag share</div>
-          <div class="font-semibold">${mapMetrics.share_as_tagger != null
-                    ? `${Math.round(mapMetrics.share_as_tagger * 1000) / 10}%`
-                    : "—"
-                }</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Avg speed</div>
-          <div class="font-semibold">${formatNumber(
-                    mapMetrics.average_speed_mps,
-                    2
-                )} m/s</div>
-        </div>
-        <div class="col-span-2">
-          <div class="text-slate-400">Retag median</div>
-          <div class="font-semibold">${formatSeconds(
-                    mapMetrics.retag_median_seconds
-                )}</div>
-        </div>
-      </div>
-    </div>`
-        )
-        .join("");
-    return buildSection(
-        "Per-map breakdown",
-        `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${cardsHtml}</div>`
+    const contentHtml = `<div class="flex flex-wrap items-center gap-2">
+      ${pointsHtml}
+    </div>`;
+    return buildSectionCard(
+        "Elo trend",
+        "Chronological Elo after each match (colored by result).",
+        contentHtml,
+        ""
     );
 }
 
-function buildOpponentsSection(opponents) {
-    if (!opponents || !opponents.length) {
-        return buildSection(
-            "Most faced opponents",
-            '<div class="text-slate-400 text-sm">No data.</div>'
-        );
+function buildMapsSection(metrics) {
+    const maps = metrics.maps || [];
+    if (!maps.length) {
+        const contentHtml =
+            '<p class="text-slate-400 text-sm">No map-specific data for this scope.</p>';
+        return buildSectionCard("Maps", "", contentHtml, "");
     }
-    const headHtml = `
-    <thead class="bg-slate-900/60 text-slate-300">
-      <tr>
-        <th class="py-2 pl-3 text-left font-medium">Opponent</th>
-        <th class="py-2 text-right font-medium">Win rate</th>
-        <th class="py-2 pr-3 text-right font-medium">Avg quality</th>
-      </tr>
-    </thead>`;
-    const rowsHtml = opponents
-        .slice(0, 50)
-        .map(opponentMetrics => {
-            const name = opponentMetrics.name || opponentMetrics.id || "Unknown";
+    const rowsHtml = maps
+        .map(mapRow => {
             const winrateText =
-                opponentMetrics.winrate != null
-                    ? `${Math.round(opponentMetrics.winrate * 1000) / 10}%`
+                mapRow.winrate != null
+                    ? `${formatPercent(mapRow.winrate)}%`
                     : "—";
-            const qualityText = formatNumber(
-                opponentMetrics.average_quality,
-                1
+            const avgQuality = formatNumber(mapRow.average_quality, 1);
+            const avgSpeed = formatNumber(mapRow.average_speed_mps, 2);
+            const shareTagger =
+                mapRow.share_as_tagger != null
+                    ? `${formatPercent(mapRow.share_as_tagger)}%`
+                    : "—";
+            const retagMedian = formatSeconds(mapRow.retag_median_seconds, 1);
+            const distHider = formatNumber(
+                mapRow.average_hider_distance_m,
+                2
             );
-            return `<tr class="border-t border-slate-800">
-      <td class="py-2 pl-3">
-        <a class="text-indigo-400 hover:underline break-words" href="player.html?steam_id=${encodeURIComponent(
-                opponentMetrics.id
-            )}">${escapeHtml(name)}</a>
-        <span class="text-slate-500 ml-1">${opponentMetrics.matches || 0
-                } matches</span>
+            const distTagger = formatNumber(
+                mapRow.average_tagger_distance_m,
+                2
+            );
+            const taggerQ = formatNumber(mapRow.average_tagger_quality, 1);
+            const hiderQ = formatNumber(mapRow.average_hider_quality, 1);
+            const pathDiv = formatNumber(mapRow.path_diversity_avg, 1);
+            const chaseAvg = formatNumber(mapRow.chase_avg, 1);
+            const evadeAvg = formatNumber(mapRow.evasion_avg, 1);
+
+            const tipMapName = `Your performance statistics on this map (${prettyMap(
+                mapRow.map_id
+            )}).`;
+
+            return `<tr class="border-b border-slate-800 hover:bg-slate-800/40 transition">
+      <td class="px-2 py-1 text-sm text-slate-200 tip" data-tip="${tipMapName.replace(
+                /"/g,
+                "&quot;"
+            )}">
+        ${prettyMap(mapRow.map_id)}
       </td>
-      <td class="py-2 text-right">${winrateText}</td>
-      <td class="py-2 pr-3 text-right">${qualityText}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${mapRow.matches}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${winrateText}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${avgQuality}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${avgSpeed}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${shareTagger}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${retagMedian}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${distHider}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${distTagger}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${taggerQ}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${hiderQ}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${pathDiv}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${chaseAvg}</td>
+      <td class="px-2 py-1 text-xs text-slate-300">${evadeAvg}</td>
     </tr>`;
         })
         .join("");
-    const tableHtml = `<div class="overflow-x-auto rounded border border-slate-800">
-      <table class="min-w-full text-sm">${headHtml}<tbody>${rowsHtml}</tbody></table>
+    const headerHtml = `<tr class="border-b border-slate-700/80 text-xs text-slate-400 uppercase tracking-wide">
+      <th class="px-2 py-1 text-left">Map</th>
+      <th class="px-2 py-1 text-right">Matches</th>
+      <th class="px-2 py-1 text-right">Win&nbsp;%</th>
+      <th class="px-2 py-1 text-right">Avg Q</th>
+      <th class="px-2 py-1 text-right">Avg speed</th>
+      <th class="px-2 py-1 text-right">Tag share</th>
+      <th class="px-2 py-1 text-right">Retag med</th>
+      <th class="px-2 py-1 text-right">Hider dist</th>
+      <th class="px-2 py-1 text-right">Tagger dist</th>
+      <th class="px-2 py-1 text-right">Tagger Q</th>
+      <th class="px-2 py-1 text-right">Hider Q</th>
+      <th class="px-2 py-1 text-right">Path div</th>
+      <th class="px-2 py-1 text-right">Chase</th>
+      <th class="px-2 py-1 text-right">Evade</th>
+    </tr>`;
+    const tableHtml = `<div class="overflow-x-auto">
+      <table class="min-w-full text-xs">
+        <thead>${headerHtml}</thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
     </div>`;
-    return buildSection("Most faced opponents", tableHtml);
-}
-
-function renderAllSections(contentElement, metrics, currentMapFilter) {
-    contentElement.innerHTML = `
-    <div id="chipGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      ${buildOverviewChips(metrics)}
-    </div>
-    ${buildFormSection(metrics)}
-    ${buildTaggingSection(metrics)}
-    ${buildSpeedAndDistanceSection(metrics)}
-    ${buildRetagAndAccuracySection(metrics)}
-    ${buildQualitySection(metrics)}
-    ${buildSessionsAndTimeSection(metrics)}
-    ${buildMapsSection(metrics.maps, currentMapFilter)}
-    ${buildOpponentsSection(metrics.opponents)}
-  `;
-    mountRevealAnimations(contentElement);
-    mountDaypartTabs(contentElement);
-}
-
-async function loadPerspectiveRow(playerSteamId) {
-    const { data } = await supabaseClient
-        .from("player_perspectives")
-        .select("*")
-        .eq("player_id", playerSteamId)
-        .eq("window_size", WINDOW_ALL)
-        .maybeSingle();
-    return data || null;
-}
-
-function renderLegacySummary(containerElement, perspectiveRow) {
-    if (!perspectiveRow) {
-        containerElement.innerHTML = "";
-        return;
-    }
-    const summary = perspectiveRow.summary || {};
-    containerElement.innerHTML = `
-    <div class="mt-6 card">
-      <div class="text-sm text-slate-300 mb-2">Worker summary</div>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div>
-          <div class="text-slate-400">Matches</div>
-          <div class="font-semibold">${summary.matches ?? "—"}</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Wins</div>
-          <div class="font-semibold">${summary.wins ?? "—"}</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Win rate</div>
-          <div class="font-semibold">${summary.winrate != null
-            ? `${Math.round(summary.winrate * 1000) / 10}%`
-            : "—"
-        }</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Avg quality</div>
-          <div class="font-semibold">${summary.avg_quality != null
-            ? Number(summary.avg_quality).toFixed(1)
-            : "—"
-        }</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Median quality</div>
-          <div class="font-semibold">${summary.med_quality != null
-            ? Number(summary.med_quality).toFixed(1)
-            : "—"
-        }</div>
-        </div>
-        <div>
-          <div class="text-slate-400">Avg duration</div>
-          <div class="font-semibold">${summary.avg_duration != null
-            ? `${Number(summary.avg_duration).toFixed(1)}s`
-            : "—"
-        }</div>
-        </div>
-      </div>
-    </div>`;
-}
-
-let jobChannel = null;
-
-function subscribePerspectiveRealtime(playerSteamId, onReady) {
-    if (jobChannel) {
-        try {
-            supabaseClient.removeChannel(jobChannel);
-        } catch {
-        }
-        jobChannel = null;
-    }
-    jobChannel = supabaseClient
-        .channel(`persp_live_${playerSteamId}`)
-        .on(
-            "postgres_changes",
-            {
-                event: "INSERT",
-                schema: "public",
-                table: "player_perspectives",
-                filter: `player_id=eq.${playerSteamId}`
-            },
-            payload => {
-                onReady(payload.new);
-            }
-        )
-        .on(
-            "postgres_changes",
-            {
-                event: "UPDATE",
-                schema: "public",
-                table: "player_perspectives",
-                filter: `player_id=eq.${playerSteamId}`
-            },
-            payload => {
-                onReady(payload.new);
-            }
-        )
-        .subscribe();
-}
-
-async function queuePerspectiveRequest(playerSteamId, requestedBy) {
-    const { error } = await supabaseClient.from("perspective_requests").insert({
-        player_id: playerSteamId,
-        window_size: WINDOW_ALL,
-        requested_by: requestedBy || "web"
-    });
-    if (error) {
-        throw new Error(error.message || "Insert failed");
-    }
-}
-
-async function waitForPerspective(playerSteamId, timeoutMs) {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeoutMs) {
-        const row = await loadPerspectiveRow(playerSteamId);
-        if (row) {
-            return row;
-        }
-        await new Promise(resolve => {
-            setTimeout(resolve, 1500);
-        });
-    }
-    return null;
-}
-
-
-let matchesCache = [];
-let analysesCache = new Map();
-let currentMapFilter = null;
-let currentEloBands = new Set();
-
-function buildPill(isActive, label, attributeName, attributeValue) {
-    const activeClass = isActive ? "pill-active" : "";
-    return `<button ${attributeName}="${attributeValue}" class="px-3 py-1.5 pill ${activeClass}">${label}</button>`;
-}
-
-function renderScopeBar() {
-    const scopeBarElement = document.getElementById("scopeBar");
-    const presentMaps = [...new Set(matchesCache.map(matchRow => matchRow.map_id))].sort(
-        (a, b) => a - b
+    return buildSectionCard(
+        "Maps",
+        "Per-map performance overview.",
+        tableHtml,
+        ""
     );
-    const buttonsHtml = [
-        buildPill(currentMapFilter == null, "All", "data-map", ""),
-        ...presentMaps.map(mapId =>
-            buildPill(
-                currentMapFilter != null && String(currentMapFilter) === String(mapId),
-                prettyMap(mapId),
-                "data-map",
-                mapId
-            )
-        )
-    ].join("");
-    scopeBarElement.innerHTML = `<div class="flex flex-wrap items-center gap-2">${buttonsHtml}</div>`;
-    scopeBarElement.classList.remove("hidden");
-    scopeBarElement.querySelectorAll("[data-map]").forEach(buttonElement => {
-        buttonElement.onclick = async () => {
-            const value = buttonElement.getAttribute("data-map");
-            currentMapFilter = value === "" ? null : value;
-            await recomputeAndRender();
-            renderScopeBar();
-        };
-    });
 }
 
-const ELO_BANDS = [800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800];
-
-function inferAutoBand() {
-    const eloSeriesForPlayer = matchesCache
-        .map(matchRow => {
-            const isPlayerP1 = String(matchRow.p1_id) === String(steamId);
-            const selfAfter = isPlayerP1
-                ? matchRow.p1_elo_after ?? matchRow.p1_elo_before
-                : matchRow.p2_elo_after ?? matchRow.p2_elo_before;
-            return Number(selfAfter);
+function buildOpponentsSection(metrics) {
+    const opponents = metrics.opponents || [];
+    if (!opponents.length) {
+        const contentHtml =
+            '<p class="text-slate-400 text-sm">No opponent data for this scope.</p>';
+        return buildSectionCard("Opponents", "", contentHtml, "");
+    }
+    const rowsHtml = opponents
+        .slice(0, 20)
+        .map(opp => {
+            const winrateText =
+                opp.winrate != null
+                    ? `${formatPercent(opp.winrate)}%`
+                    : "—";
+            const avgQual = formatNumber(opp.average_quality, 1);
+            const tipText = `Aggregated performance against ${opp.name} (${opp.matches} matches).`;
+            return `<tr class="border-b border-slate-800 hover:bg-slate-800/40 transition tip"
+      data-tip="${tipText.replace(/"/g, "&quot;")}">
+      <td class="px-2 py-1 text-xs text-slate-200">${opp.name}</td>
+      <td class="px-2 py-1 text-xs text-slate-300 text-right">${opp.matches}</td>
+      <td class="px-2 py-1 text-xs text-slate-300 text-right">${winrateText}</td>
+      <td class="px-2 py-1 text-xs text-slate-300 text-right">${avgQual}</td>
+    </tr>`;
         })
-        .filter(Number.isFinite);
-    if (!eloSeriesForPlayer.length) {
-        return 1300;
-    }
-    const medianValue = getMedian(eloSeriesForPlayer);
-    return Math.floor(medianValue / 100) * 100;
-}
-
-function renderFilterBar() {
-    const filterBarElement = document.getElementById("filterBar");
-    const autoBand = inferAutoBand();
-    const bandButtonsHtml = ELO_BANDS.map(bandValue => {
-        const isActive = currentEloBands.has(bandValue);
-        const activeClass = isActive ? "pill-active" : "";
-        return `<button data-band="${bandValue}" class="px-2 py-1 text-sm pill ${activeClass}">${bandValue}–${bandValue + 99
-            }</button>`;
-    }).join("");
-    filterBarElement.innerHTML = `
-    <div class="flex items_center gap-2 flex-wrap">
-      <span class="text-slate-400 mr-1">Elo bands:</span>
-      <button id="autoBand" class="px-2 py-1 text-sm pill">${autoBand}–${autoBand + 99
-        } (auto)</button>
-      <button id="clearBands" class="px-2 py-1 text-sm pill">All opponents</button>
-      ${bandButtonsHtml}
+        .join("");
+    const headerHtml = `<tr class="border-b border-slate-700/80 text-xs text-slate-400 uppercase tracking-wide">
+      <th class="px-2 py-1 text-left">Opponent</th>
+      <th class="px-2 py-1 text-right">Matches</th>
+      <th class="px-2 py-1 text-right">Win&nbsp;%</th>
+      <th class="px-2 py-1 text-right">Avg Q</th>
+    </tr>`;
+    const tableHtml = `<div class="overflow-x-auto">
+      <table class="min-w-full text-xs">
+        <thead>${headerHtml}</thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
     </div>`;
-    filterBarElement.classList.remove("hidden");
-
-    document.getElementById("autoBand").onclick = async () => {
-        currentEloBands = new Set([inferAutoBand()]);
-        await recomputeAndRender();
-        renderFilterBar();
-    };
-    document.getElementById("clearBands").onclick = async () => {
-        currentEloBands = new Set();
-        await recomputeAndRender();
-        renderFilterBar();
-    };
-    filterBarElement.querySelectorAll("[data-band]").forEach(buttonElement => {
-        buttonElement.onclick = async () => {
-            const bandValue = Number(buttonElement.getAttribute("data-band"));
-            if (currentEloBands.has(bandValue)) {
-                currentEloBands.delete(bandValue);
-            } else {
-                currentEloBands.add(bandValue);
-            }
-            await recomputeAndRender();
-            renderFilterBar();
-        };
-    });
-}
-
-async function buildMetrics() {
-    return aggregateMetrics(
-        steamId,
-        matchesCache,
-        analysesCache,
-        currentMapFilter,
-        currentEloBands
+    return buildSectionCard(
+        "Opponents",
+        "Top opponents in this scope.",
+        tableHtml,
+        ""
     );
 }
 
-async function recomputeAndRender() {
-    const contentElement = document.getElementById("content");
-    const statusElement = document.getElementById("status");
-    statusElement.textContent = "Computing…";
-    const metrics = await buildMetrics();
-    contentElement.innerHTML = "";
-    renderAllSections(contentElement, metrics, currentMapFilter);
-    statusElement.textContent = "";
-}
-
-async function initializePerspectivePage() {
-    const headElement = document.getElementById("head");
-    const statusElement = document.getElementById("status");
-    const jobInfoElement = document.getElementById("jobInfo");
-    const contentElement = document.getElementById("content");
-
-    const playerRow = await fetchPlayerRow();
-    if (!playerRow) {
-        headElement.innerHTML =
-            '<div class="text-red-400">Player not found.</div>';
-        return;
+function buildSessionSection(metrics) {
+    const sess = metrics.sessionStats || {};
+    const sessions = sess.sessions || [];
+    if (!sessions.length) {
+        const contentHtml =
+            '<p class="text-slate-400 text-sm">No session data for this scope.</p>';
+        return buildSectionCard("Sessions", "", contentHtml, "");
     }
+    const avgSessionLength = sess.averageSessionLength || 0;
+    const longestStreak = sess.longestStreak || 0;
+    const totalMatches = metrics.scopeCount || 0;
 
-    const isSelfPremium = await isPremiumSteamId(steamId);
-    const displayName = playerRow.username || playerRow.steam_id || "?";
-    const avatarLetter = displayName.trim().charAt(0).toUpperCase() || "?";
-
-    headElement.innerHTML = `
-    <div class="card reveal">
-      <div class="flex items-center gap-4">
-        <div class="w-14 h-14 rounded-full bg-indigo-600/20 border border-indigo-500/30 grid place-items-center text-xl font-bold text-indigo-300">
-          ${avatarLetter}
-        </div>
-        <div>
-          <div class="text-2xl font-extrabold leading-tight">
-            ${getPremiumLabelHtml(steamId, displayName, isSelfPremium)}
-          </div>
-          <div id="chips" class="mt-2 grid grid-cols-2 sm:flex sm:flex-wrap gap-2"></div>
-        </div>
+    const contentHtml = `<div class="grid grid-cols-2 gap-4">
+      <div class="tip" data-tip="Approximate average session length (in minutes) for the selected matches.">
+        <div class="text-xs text-slate-400 mb-1 uppercase tracking-wide">Avg session length</div>
+        <div class="text-2xl font-semibold text-emerald-300">${formatNumber(
+        avgSessionLength,
+        1
+    )}<span class="text-sm text-slate-400 ml-1">min</span></div>
+      </div>
+      <div class="tip" data-tip="Longest session (number of matches played without a long break).">
+        <div class="text-xs text-slate-400 mb-1 uppercase tracking-wide">Longest session</div>
+        <div class="text-2xl font-semibold text-emerald-300">${longestStreak}</div>
+      </div>
+      <div class="tip col-span-2" data-tip="Total matches included in the sessions calculation.">
+        <div class="text-xs text-slate-400 mb-1 uppercase tracking-wide">Matches in scope</div>
+        <div class="text-lg font-semibold text-slate-200">${totalMatches}</div>
       </div>
     </div>`;
+    return buildSectionCard(
+        "Sessions",
+        "How your matches group into play sessions.",
+        contentHtml,
+        ""
+    );
+}
 
-    mountRevealAnimations(headElement);
+function buildDaypartSection(metrics) {
+    const d = metrics.dayparts || {};
+    const total =
+        (d.morning || 0) +
+        (d.afternoon || 0) +
+        (d.evening || 0) +
+        (d.night || 0);
+    const parts = [
+        { key: "morning", label: "Morning (06–12)", value: d.morning || 0 },
+        { key: "afternoon", label: "Afternoon (12–18)", value: d.afternoon || 0 },
+        { key: "evening", label: "Evening (18–24)", value: d.evening || 0 },
+        { key: "night", label: "Night (00–06)", value: d.night || 0 }
+    ];
+    const contentHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      ${parts
+            .map(part => {
+                const share = total > 0 ? part.value / total : 0;
+                const pctText = `${formatPercent(share)}%`;
+                const tipText = `Matches played in this daypart: ${part.value} (${pctText} of scope).`;
+                return `<div class="flex flex-col tip" data-tip="${tipText.replace(
+                    /"/g,
+                    "&quot;"
+                )}">
+            <div class="text-xs text-slate-400 mb-0.5">${part.label}</div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-lg font-semibold text-slate-100">${part.value}</span>
+              <span class="text-xs text-slate-400">${pctText}</span>
+            </div>
+          </div>`;
+            })
+            .join("")}
+    </div>`;
+    return buildSectionCard(
+        "When you play",
+        "Distribution of matches over the day.",
+        contentHtml,
+        ""
+    );
+}
 
-    let gateState = await updateGateBannerUi();
-    supabaseClient.auth.onAuthStateChange(async () => {
-        gateState = await updateGateBannerUi();
+// ---------------------
+// Rendering
+// ---------------------
+function mountOverview(metrics, container) {
+    const chipsHtml = buildOverviewChips(metrics);
+    const formSectionHtml = buildFormSection(metrics);
+    const eloSectionHtml = buildEloSection(metrics);
+    container.innerHTML = `
+    <div class="flex flex-col gap-4">
+      <div class="overflow-x-auto">
+        <div class="flex flex-wrap gap-2 items-stretch">
+          ${chipsHtml}
+        </div>
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        ${formSectionHtml}
+        ${eloSectionHtml}
+      </div>
+    </div>
+  `;
+}
+
+function mountMapsAndOpponents(metrics, container) {
+    const mapsSection = buildMapsSection(metrics);
+    const oppSection = buildOpponentsSection(metrics);
+    const sessionsSection = buildSessionSection(metrics);
+    const daypartSection = buildDaypartSection(metrics);
+    container.innerHTML = `
+    <div class="grid grid-cols-1 2xl:grid-cols-[2fr_1.2fr] gap-4 items-start">
+      <div class="flex flex-col gap-4">
+        ${mapsSection}
+        ${oppSection}
+      </div>
+      <div class="flex flex-col gap-4">
+        ${sessionsSection}
+        ${daypartSection}
+      </div>
+    </div>
+  `;
+}
+
+function mountWindowSelector(container, currentWindow) {
+    const chipsHtml = PRESET_WINDOWS.map(win => {
+        const isActive = win.value === currentWindow;
+        const baseClasses =
+            "inline-flex items-center px-2 py-1 rounded-full text-xs border cursor-pointer select-none";
+        const activeClasses =
+            "bg-emerald-500/20 border-emerald-400 text-emerald-100";
+        const inactiveClasses =
+            "bg-slate-900/60 border-slate-600 text-slate-300 hover:border-emerald-300/70 hover:text-emerald-100";
+        const finalClasses =
+            baseClasses + " " + (isActive ? activeClasses : inactiveClasses);
+        const tipText =
+            win.value === WINDOW_ALL
+                ? "Use all matches on record."
+                : `Use only the last ${win.value} matches.`;
+        return `<button class="${finalClasses} window-chip tip" data-window="${win.value}"${buildTooltipHtml(
+            tipText
+        )}>
+      ${win.label}
+    </button>`;
+    }).join("");
+    container.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Scope</div>
+        <div class="flex flex-wrap gap-1">
+          ${chipsHtml}
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="text-xs uppercase tracking-wide text-slate-400">Opponent Elo filter</div>
+        <div class="flex flex-wrap gap-1" id="elo-band-chips"></div>
+      </div>
+    </div>
+  `;
+}
+
+function mountMapSelector(container, maps, currentMapId) {
+    const uniqueMaps = Array.from(
+        new Map(
+            maps
+                .filter(m => m.map_id != null)
+                .map(m => [String(m.map_id), m.map_id])
+        ).values()
+    );
+    uniqueMaps.sort((a, b) => Number(a) - Number(b));
+
+    const buttonsHtml = [
+        `<button class="inline-flex items-center px-2 py-1 rounded-full text-xs border cursor-pointer select-none ${currentMapId == null
+            ? "bg-emerald-500/20 border-emerald-400 text-emerald-100"
+            : "bg-slate-900/60 border-slate-600 text-slate-300 hover:border-emerald-300/70 hover:text-emerald-100"
+        } map-chip tip" data-map-id="all"${buildTooltipHtml(
+            "Include all maps."
+        )}>
+      All maps
+    </button>`
+    ]
+        .concat(
+            uniqueMaps.map(mapId => {
+                const isActive = String(mapId) === String(currentMapId);
+                const baseClasses =
+                    "inline-flex items-center px-2 py-1 rounded-full text-xs border cursor-pointer select-none";
+                const activeClasses =
+                    "bg-emerald-500/20 border-emerald-400 text-emerald-100";
+                const inactiveClasses =
+                    "bg-slate-900/60 border-slate-600 text-slate-300 hover:border-emerald-300/70 hover:text-emerald-100";
+                const finalClasses =
+                    baseClasses + " " + (isActive ? activeClasses : inactiveClasses);
+                const tipText = `Limit scope to matches on map ${prettyMap(mapId)}.`;
+                return `<button class="${finalClasses} map-chip tip" data-map-id="${mapId}"${buildTooltipHtml(
+                    tipText
+                )}>
+        ${prettyMap(mapId)}
+      </button>`;
+            })
+        )
+        .join("");
+
+    container.innerHTML = `
+    <div class="flex flex-col gap-1 mb-3">
+      <div class="text-xs uppercase tracking-wide text-slate-400">Map filter</div>
+      <div class="flex flex-wrap gap-1">
+        ${buttonsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function mountEloBandChips(container, currentBandsSet) {
+    container.innerHTML = buildEloBandFilterChips(currentBandsSet);
+}
+
+function mountRevealAnimations(root) {
+    const sections = root.querySelectorAll(".section-card");
+    sections.forEach((section, index) => {
+        section.style.opacity = 0;
+        section.style.transform = "translateY(6px)";
+        section.style.transition =
+            "opacity 0.35s ease-out, transform 0.35s ease-out";
+        setTimeout(() => {
+            section.style.opacity = 1;
+            section.style.transform = "translateY(0px)";
+        }, 40 + index * 30);
+    });
+}
+
+function mountDaypartTabs(root) {
+    const section = root.querySelector(".section-card:nth-child(4)");
+    if (!section) return;
+    section.classList.add("hover:border-emerald-400/60", "transition-colors");
+}
+
+function initializePerspectivePage() {
+    const root = document.getElementById("perspective-root");
+    if (!root) return;
+
+    let allMatches = [];
+    let allAnalyses = [];
+    let currentWindow = WINDOW_ALL;
+    let currentMapId = null;
+    let currentEloBandSet = new Set();
+
+    const overlay = document.createElement("div");
+    overlay.className =
+        "fixed inset-x-0 top-0 flex justify-center pointer-events-none z-30";
+    overlay.innerHTML = `
+    <div class="mt-2 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/80 shadow text-xs text-slate-300 flex items-center gap-2 pointer-events-auto">
+      <span id="status-text">Loading perspective…</span>
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+    </div>
+  `;
+    document.body.appendChild(overlay);
+    const statusText = overlay.querySelector("#status-text");
+
+    const central = document.createElement("div");
+    central.className =
+        "max-w-6xl mx-auto px-3 py-4 flex flex-col gap-4 text-slate-50";
+    central.innerHTML = `
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+      <div>
+        <h1 class="text-xl font-semibold text-slate-100">Player Perspective</h1>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Steam ID: <span id="persp-steam-id" class="font-mono text-sky-300"></span>
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2 items-center" id="window-selector"></div>
+    </header>
+    <div id="map-selector"></div>
+    <main class="flex flex-col gap-4">
+      <section id="overview-section" class="bg-slate-950/40 rounded-xl border border-slate-800/90 p-3 md:p-4 shadow-sm"></section>
+      <section id="detail-section"></section>
+    </main>
+  `;
+    root.appendChild(central);
+
+    const steamIdSpan = central.querySelector("#persp-steam-id");
+    steamIdSpan.textContent = steamId || "(unknown)";
+
+    const windowSelectorContainer =
+        central.querySelector("#window-selector");
+    const mapSelectorContainer = central.querySelector("#map-selector");
+    const overviewSection = central.querySelector("#overview-section");
+    const detailSection = central.querySelector("#detail-section");
+
+    mountWindowSelector(windowSelectorContainer, currentWindow);
+
+    async function loadData() {
+        statusText.textContent = "Loading matches…";
+        allMatches = await fetchMatchesForPlayer(steamId);
+        statusText.textContent = "Loading analyses…";
+        const ids = allMatches.map(m => m.id);
+        allAnalyses = await fetchAnalysesForMatches(ids);
+        statusText.textContent = "Rendering…";
+        recomputeAndRender();
+        setTimeout(() => {
+            overlay.style.opacity = "0";
+            overlay.style.pointerEvents = "none";
+        }, 400);
+    }
+
+    function recomputeAndRender() {
+        const slicedMatches =
+            currentWindow === WINDOW_ALL
+                ? allMatches
+                : allMatches.slice(0, currentWindow);
+
+        const metrics = aggregateMetrics(
+            steamId,
+            slicedMatches,
+            allAnalyses,
+            currentMapId,
+            currentEloBandSet
+        );
+
+        mountWindowSelector(windowSelectorContainer, currentWindow);
+        mountMapSelector(mapSelectorContainer, allMatches, currentMapId);
+
+        const eloBandChipsContainer = document.getElementById("elo-band-chips");
+        if (eloBandChipsContainer) {
+            mountEloBandChips(eloBandChipsContainer, currentEloBandSet);
+        }
+
+        mountOverview(metrics, overviewSection);
+        mountMapsAndOpponents(metrics, detailSection);
+
+        const rowsContainer = central;
+        rowsContainer.querySelectorAll(".tip").forEach(el => {
+            const tipText = el.getAttribute("data-tip");
+            if (!tipText) return;
+            el.addEventListener("mouseenter", () => {
+                const rect = el.getBoundingClientRect();
+                let tip = document.createElement("div");
+                tip.className =
+                    "fixed z-40 max-w-xs px-2 py-1 rounded bg-slate-900 border border-slate-700 text-[11px] text-slate-100 shadow-lg pointer-events-none";
+                tip.textContent = tipText;
+                document.body.appendChild(tip);
+                const tipRect = tip.getBoundingClientRect();
+                const top = rect.top - tipRect.height - 6;
+                const left = Math.min(
+                    Math.max(rect.left, 4),
+                    window.innerWidth - tipRect.width - 4
+                );
+                tip.style.top = `${Math.max(top, 4)}px`;
+                tip.style.left = `${left}px`;
+                el._liveTooltip = tip;
+            });
+            el.addEventListener("mouseleave", () => {
+                if (el._liveTooltip) {
+                    document.body.removeChild(el._liveTooltip);
+                    el._liveTooltip = null;
+                }
+            });
+        });
+
+        mountRevealAnimations(central);
+    }
+
+    windowSelectorContainer.addEventListener("click", evt => {
+        const chip = evt.target.closest(".window-chip");
+        if (!chip) return;
+        const value = Number(chip.getAttribute("data-window"));
+        currentWindow = value;
+        recomputeAndRender();
     });
 
-    if (gateState.premium) {
-        statusElement.textContent = "Loading…";
-        matchesCache = await fetchMatchesForPlayer(steamId, 1200);
-        analysesCache = await fetchAnalysesForMatchIds(
-            matchesCache.map(matchRow => matchRow.id)
-        );
-        renderScopeBar();
-        renderFilterBar();
-        await recomputeAndRender();
+    mapSelectorContainer.addEventListener("click", evt => {
+        const chip = evt.target.closest(".map-chip");
+        if (!chip) return;
+        const mapIdStr = chip.getAttribute("data-map-id");
+        currentMapId = mapIdStr === "all" ? null : mapIdStr;
+        recomputeAndRender();
+    });
 
-        const legacyRow = await loadPerspectiveRow(steamId);
-        const legacyContainer = document.createElement("div");
-        contentElement.prepend(legacyContainer);
-        renderLegacySummary(legacyContainer, legacyRow);
-    } else {
-        contentElement.innerHTML =
-            '<div class="mt-6 text-slate-400">Sign in and go Premium to see Perspective.</div>';
-    }
-
-    document.getElementById("refreshBtn").onclick = async () => {
-        if (!gateState.user || !gateState.premium) {
-            return;
+    document.addEventListener("click", evt => {
+        const chip = evt.target.closest(".elo-band-chip");
+        if (!chip) return;
+        const min = Number(chip.getAttribute("data-min"));
+        if (currentEloBandSet.has(min)) {
+            currentEloBandSet.delete(min);
+        } else {
+            currentEloBandSet.add(min);
         }
-        matchesCache = await fetchMatchesForPlayer(steamId, 1200);
-        analysesCache = await fetchAnalysesForMatchIds(
-            matchesCache.map(matchRow => matchRow.id)
-        );
-        renderScopeBar();
-        renderFilterBar();
-        await recomputeAndRender();
-    };
+        recomputeAndRender();
+    });
 
-    document.getElementById("queueBtn").onclick = async () => {
-        if (!gateState.user || !gateState.premium) {
-            return;
-        }
-        try {
-            jobInfoElement.textContent = "Queuing…";
-            subscribePerspectiveRealtime(steamId, async row => {
-                jobInfoElement.textContent = "Worker finished. Refreshing…";
-                const legacyContainer = document.createElement("div");
-                document.getElementById("content").prepend(legacyContainer);
-                renderLegacySummary(legacyContainer, row);
-                document.getElementById("refreshBtn").click();
-            });
+    loadData().catch(err => {
+        console.error("Error loading perspective:", err);
+        statusText.textContent = "Error loading perspective.";
+    });
 
-            await queuePerspectiveRequest(
-                steamId,
-                gateState.user ? gateState.user.id : "web"
-            );
-            jobInfoElement.textContent = "Queued. Waiting for worker…";
-
-            const row = await waitForPerspective(steamId, 90000);
-            if (row) {
-                jobInfoElement.textContent = "Ready ✓";
-                const legacyContainer = document.createElement("div");
-                document.getElementById("content").prepend(legacyContainer);
-                renderLegacySummary(legacyContainer, row);
-                document.getElementById("refreshBtn").click();
-            } else {
-                jobInfoElement.textContent =
-                    "Still queued / timeout. It will appear here when ready.";
+    const contentRoot = central;
+    const observer = new ResizeObserver(() => {
+        const rowsContainer = contentRoot;
+        const cards = rowsContainer.querySelectorAll(".section-card");
+        cards.forEach(card => {
+            if (!card._observed) {
+                card._observed = true;
             }
-        } catch (error) {
-            console.error(error);
-            jobInfoElement.textContent = `Failed to queue: ${error.message || error
-                }`;
-        }
-    };
+        });
+    });
+    observer.observe(contentRoot);
 
-    async function resolvePlayerSmart(text) {
-        if (!text) {
-            return null;
-        }
-        const cleaned = text.trim();
-
-        if (/^\d{5,}$/.test(cleaned)) {
-            return cleaned;
-        }
-
-        const players = await loadSnapshotPlayers();
-        if (players && players.length) {
-            const q = cleaned.toLowerCase();
-
-            let match = players.find(
-                p => String(p.steam_id) === cleaned
-            );
-            if (match) return match.steam_id;
-
-            match = players.find(
-                p => (p.username || "").toLowerCase() === q
-            );
-            if (match) return match.steam_id;
-
-            match = players.find(
-                p => (p.username || "").toLowerCase().includes(q)
-            );
-            if (match) return match.steam_id;
-        }
-
-        try {
-            const { data } = await supabaseClient
-                .from("players")
-                .select("steam_id, username")
-                .ilike("username", `%${cleaned}%`)
-                .limit(1)
-                .maybeSingle();
-            if (data && data.steam_id) {
-                return data.steam_id;
-            }
-        } catch {
-        }
-
-        return null;
-    }
-
-    document.getElementById("cmpBtn").onclick = async () => {
-        if (!gateState.user || !gateState.premium) {
-            return;
-        }
-        const compareStatusElement = document.getElementById("cmpStatus");
-        compareStatusElement.textContent = "";
-        const rawQuery = document.getElementById("cmpInput").value.trim();
-        const applyFilter = document.getElementById("cmpUseFilter").checked;
-        const otherSteamId = await resolvePlayerSmart(rawQuery);
-        if (!otherSteamId) {
-            compareStatusElement.textContent = "Player not found.";
-            return;
-        }
-
-        const metricsA = aggregateMetrics(
-            steamId,
-            matchesCache,
-            analysesCache,
-            applyFilter ? currentMapFilter : null,
-            applyFilter ? currentEloBands : new Set()
-        );
-        const matchesB = await fetchMatchesForPlayer(otherSteamId, 1200);
-        const analysesB = await fetchAnalysesForMatchIds(
-            matchesB.map(matchRow => matchRow.id)
-        );
-        const metricsB = aggregateMetrics(
-            otherSteamId,
-            matchesB,
-            analysesB,
-            applyFilter ? currentMapFilter : null,
-            applyFilter ? currentEloBands : new Set()
-        );
-        compareStatusElement.textContent = "";
-
-        const premiumSet = await fetchPremiumSteamIdSet([
-            steamId,
-            otherSteamId
-        ]);
-        const { data: playerBRow } = await supabaseClient
-            .from("players")
-            .select("username")
-            .eq("steam_id", otherSteamId)
-            .maybeSingle();
-        const nameB = (playerBRow && playerBRow.username) || otherSteamId;
-        const nameA = playerRow.username || steamId;
-
-        const wrapElement = document.createElement("div");
-        wrapElement.innerHTML = `
-      <div class="mirror-row">
-        <div class="card reveal">
-          <div class="text-lg font-semibold truncate" title="${escapeHtml(
-            nameA
-        )}">${getPremiumLabelHtml(
-            steamId,
-            nameA,
-            premiumSet.has(String(steamId))
-        )}</div>
-          <div class="mt-2 kv">
-            <div class="k">Win rate</div><div class="v">${metricsA.winrate != null
-                ? `${Math.round(metricsA.winrate * 1000) / 10}%`
-                : "—"
-            }</div>
-            <div class="k">Average quality</div><div class="v">${formatNumber(
-                metricsA.quality.average,
-                1
-            )}</div>
-            <div class="k">Average speed</div><div class="v">${formatNumber(
-                metricsA.speed.average_mps,
-                2
-            )} m/s</div>
-          </div>
-        </div>
-        <div class="card reveal">
-          <div class="text-lg font-semibold truncate" title="${escapeHtml(
-                nameB
-            )}">${getPremiumLabelHtml(
-                otherSteamId,
-                nameB,
-                premiumSet.has(String(otherSteamId))
-            )}</div>
-          <div class="mt-2 kv">
-            <div class="k">Win rate</div><div class="v">${metricsB.winrate != null
-                ? `${Math.round(metricsB.winrate * 1000) / 10}%`
-                : "—"
-            }</div>
-            <div class="k">Average quality</div><div class="v">${formatNumber(
-                metricsB.quality.average,
-                1
-            )}</div>
-            <div class="k">Average speed</div><div class="v">${formatNumber(
-                metricsB.speed.average_mps,
-                2
-            )} m/s</div>
-          </div>
-        </div>
-      </div>`;
-
-        const rowsContainer = document.createElement("div");
-
-        function addRowPair(leftHtml, rightHtml) {
-            const rowElement = document.createElement("div");
-            rowElement.className = "mirror-row";
-            rowElement.innerHTML = `<div>${leftHtml}</div><div>${rightHtml}</div>`;
-            rowsContainer.appendChild(rowElement);
-        }
-
-        addRowPair(
-            `<div class="card">${buildOverviewChips(metricsA)}</div>`,
-            `<div class="card">${buildOverviewChips(metricsB)}</div>`
-        );
-        addRowPair(buildFormSection(metricsA), buildFormSection(metricsB));
-        addRowPair(
-            buildTaggingSection(metricsA),
-            buildTaggingSection(metricsB)
-        );
-        addRowPair(
-            buildSpeedAndDistanceSection(metricsA),
-            buildSpeedAndDistanceSection(metricsB)
-        );
-        addRowPair(
-            buildRetagAndAccuracySection(metricsA),
-            buildRetagAndAccuracySection(metricsB)
-        );
-        addRowPair(
-            buildQualitySection(metricsA),
-            buildQualitySection(metricsB)
-        );
-        addRowPair(
-            buildSessionsAndTimeSection(metricsA),
-            buildSessionsAndTimeSection(metricsB)
-        );
-
-        const contentRoot = document.getElementById("content");
-        contentRoot.innerHTML = "";
-        contentRoot.appendChild(wrapElement);
-        contentRoot.appendChild(rowsContainer);
+    window.addEventListener("focus", () => {
         mountRevealAnimations(contentRoot);
         mountDaypartTabs(contentRoot);
-    };
+    });
 
     let resizeTimer = null;
     window.addEventListener("resize", () => {
