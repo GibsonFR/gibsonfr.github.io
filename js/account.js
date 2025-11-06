@@ -196,29 +196,52 @@ async function loadProfile() {
 }
 
 async function getPayPalPublicConfig() {
-    const {
-        data: { session }
-    } = await supabaseClient.auth.getSession();
+    try {
+        const {
+            data: { session }
+        } = await supabaseClient.auth.getSession();
 
-    const functionsBase = SUPABASE_URL.replace(
-        ".supabase.co",
-        ".functions.supabase.co"
-    );
+        // On récupère l’URL du projet depuis config.js
+        const baseUrl =
+            (typeof window !== "undefined" && window.SUPABASE_URL) ||
+            (typeof SUPABASE_URL !== "undefined" ? SUPABASE_URL : null);
 
-    const response = await fetch(
-        `${functionsBase}/paypal-public-config`,
-        {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${session && session.access_token ? session.access_token : ""
-                    }`
-            }
+        if (!baseUrl) {
+            console.warn("[account] SUPABASE_URL not available for PayPal config.");
+            return null;
         }
-    );
-    if (!response.ok) {
+
+        const functionsBase = baseUrl.replace(
+            ".supabase.co",
+            ".functions.supabase.co"
+        );
+
+        const response = await fetch(
+            `${functionsBase}/paypal-public-config`,
+            {
+                method: "GET",
+                headers: {
+                    Authorization: session && session.access_token
+                        ? `Bearer ${session.access_token}`
+                        : ""
+                }
+            }
+        );
+
+        if (!response.ok) {
+            console.warn(
+                "[account] paypal-public-config returned non-ok status:",
+                response.status,
+                response.statusText
+            );
+            return null;
+        }
+
+        return response.json();
+    } catch (error) {
+        console.warn("[account] getPayPalPublicConfig failed:", error);
         return null;
     }
-    return response.json();
 }
 
 function showPayPalErrorNotes(text) {
@@ -249,6 +272,9 @@ function loadPayPalSdk(config, onReady) {
     const scriptElement = document.createElement("script");
     scriptElement.src = `https://www.paypal.com/sdk/js?${parameters}`;
     scriptElement.onload = onReady;
+    scriptElement.onerror = () => {
+        showPayPalErrorNotes("Failed to load PayPal SDK.");
+    };
     document.head.appendChild(scriptElement);
 }
 
@@ -257,7 +283,15 @@ async function callCapture(orderId) {
         data: { session }
     } = await supabaseClient.auth.getSession();
 
-    const functionsBase = SUPABASE_URL.replace(
+    const baseUrl =
+        (typeof window !== "undefined" && window.SUPABASE_URL) ||
+        (typeof SUPABASE_URL !== "undefined" ? SUPABASE_URL : null);
+
+    if (!baseUrl) {
+        throw new Error("SUPABASE_URL not available for capture.");
+    }
+
+    const functionsBase = baseUrl.replace(
         ".supabase.co",
         ".functions.supabase.co"
     );
@@ -267,8 +301,9 @@ async function callCapture(orderId) {
         {
             method: "POST",
             headers: {
-                Authorization: `Bearer ${session && session.access_token ? session.access_token : ""
-                    }`,
+                Authorization: session && session.access_token
+                    ? `Bearer ${session.access_token}`
+                    : "",
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
