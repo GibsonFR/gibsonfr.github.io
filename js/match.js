@@ -121,6 +121,9 @@ function renderPlayerStatsCards(containerSelector, playerStats, sampleSelector) 
     const sampleContainer = getElement(sampleSelector);
     if (!cardsContainer || !sampleContainer) return;
 
+    // Ensure cards container spans full width and let internal layout handle columns
+    cardsContainer.className = "mt-3 w-full text-xs";
+
     const lowSampleTaggerText = playerStats.low_sample_tagger ? "· tagger sample low" : "";
     const lowSampleHiderText = playerStats.low_sample_hider ? "· hider sample low" : "";
     const sampleText = [lowSampleTaggerText, lowSampleHiderText].filter(Boolean).join(" ");
