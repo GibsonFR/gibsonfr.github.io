@@ -390,11 +390,13 @@ async function loadRecentMatches() {
 
         recentContainer.innerHTML = "";
         for (const matchRow of data || []) {
-            const winnerName = matchRow.winner === "1"
-                ? matchRow.p1_name || "P1"
-                : matchRow.winner === "2"
-                    ? matchRow.p2_name || "P2"
-                    : "—";
+            const winnerField = matchRow.winner;
+            const winnerName =
+                winnerField === "1" || winnerField === 1
+                    ? matchRow.p1_name || "P1"
+                    : winnerField === "2" || winnerField === 2
+                        ? matchRow.p2_name || "P2"
+                        : "—";
 
             const playedAtDate = matchRow.played_at ? new Date(matchRow.played_at) : null;
             const whenStr = playedAtDate ? playedAtDate.toLocaleString() : "";
@@ -409,7 +411,9 @@ async function loadRecentMatches() {
 
             recentContainer.innerHTML += matchHtml;
         }
-    } catch (error) {
+
+    }
+    catch (error) {
         console.error("loadRecentMatches failed", error);
     }
 }
