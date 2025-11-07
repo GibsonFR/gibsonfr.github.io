@@ -423,44 +423,80 @@ function groupSessions(sortedMatches, gapMs) {
     return sessions;
 }
 
-function getDaypartsBuckets(matches, playerSteamId) {
+function computeSessionStats(scopedMatches) {
+    const sessions = groupSessions(scopedMatches, 5 * 60 * 1000);
+    const sessionCount = sessions.length;
+
+    const avgMatchesPerSession =
+        sessionCount > 0
+            ? sessions
+                .map(session => session.length)
+                .reduce((a, b) => a + b, 0) / sessionCount
+            : null;
+
+    return {
+        sessions: sessionCount,
+        avg_matches_per_session: avgMatchesPerSession
+    };
+}
+
+function computeDayparts(scopedMatches, results) {
     const parts = [
         { key: "Night", range: "0–5", hours: [0, 1, 2, 3, 4, 5], matches: 0, wins: 0 },
         { key: "Morning", range: "6–11", hours: [6, 7, 8, 9, 10, 11], matches: 0, wins: 0 },
         { key: "Afternoon", range: "12–17", hours: [12, 13, 14, 15, 16, 17], matches: 0, wins: 0 },
         { key: "Evening", range: "18–23", hours: [18, 19, 20, 21, 22, 23], matches: 0, wins: 0 }
     ];
+
     const indexByHour = new Map();
     parts.forEach((part, index) => {
         part.hours.forEach(hour => {
             indexByHour.set(hour, index);
         });
     });
-    for (const matchRow of matches) {
-        const isPlayerP1 = String(matchRow.p1_id) === String(playerSteamId);
-        const playerSide = isPlayerP1 ? "p1" : "p2";
-        let isWin = null;
-        if (matchRow.winner === 1 || matchRow.winner === "1") {
-            isWin = playerSide === "p1";
-        } else if (matchRow.winner === 2 || matchRow.winner === "2") {
-            isWin = playerSide === "p2";
-        }
+
+    (scopedMatches || []).forEach((matchRow, index) => {
         const hour = new Date(matchRow.played_at).getHours();
         const partIndex = indexByHour.get(hour);
         if (partIndex == null) {
-            continue;
+            return;
         }
-        parts[partIndex].matches += 1;
+
+        const bucket = parts[partIndex];
+        bucket.matches += 1;
+
+        const resultValue = results ? results[index] : null;
+        const isWin = resultValue === 1 || resultValue === true;
         if (isWin) {
-            parts[partIndex].wins += 1;
+            bucket.wins += 1;
         }
-    }
+    });
+
     return parts.map(part => ({
         key: part.key,
         range: part.range,
         matches: part.matches,
         winrate: part.matches ? part.wins / part.matches : null
     }));
+}
+
+function getBestStreak(results) {
+    let best = 0;
+    let current = 0;
+
+    for (const value of results || []) {
+        const isWin = value === 1 || value === true;
+        if (isWin) {
+            current += 1;
+        } else {
+            current = 0;
+        }
+        if (current > best) {
+            best = current;
+        }
+    }
+
+    return best;
 }
 
 function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, eloBands) {
