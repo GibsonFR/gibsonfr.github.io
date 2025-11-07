@@ -640,7 +640,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 evasionScoreValues.push(Number(stats.evasion_score));
             }
 
-            // NEW – prediction / anticipation
             if (Number.isFinite(stats.tagger_predictivity_score)) {
                 predictiveValues.push(Number(stats.tagger_predictivity_score));
             }
@@ -648,7 +647,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 hiderTangentValues.push(Number(stats.hider_tangent_score));
             }
 
-            // per-map buckets
             const mapKey = String(matchRow.map_id);
             if (!matchesByMap.has(mapKey)) {
                 matchesByMap.set(mapKey, []);
@@ -661,7 +659,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 retagMedianSeconds: stats.retag_median_seconds
             });
 
-            // per-opponent buckets
             const oppKey = String(opponentId || "unknown");
             if (!matchesByOpponent.has(oppKey)) {
                 matchesByOpponent.set(oppKey, {
@@ -689,7 +686,7 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
         spread_iqr:
             getQuantile(qualityValues, 0.75) -
             getQuantile(qualityValues, 0.25),
-        spread_std: getStdDev(qualityValues),
+        spread_std: getStandardDeviation(qualityValues),
         best_match: qualityValues.length
             ? Math.max(...qualityValues)
             : null,
