@@ -509,8 +509,8 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
     const timeHiderSafeValues = [];
     const chaseScoreValues = [];
     const evasionScoreValues = [];
-    const predictiveValues = [];       // NEW
-    const hiderTangentValues = [];    // NEW
+    const predictiveValues = [];       
+    const hiderTangentValues = [];    
 
     const matchesByMap = new Map();
     const matchesByOpponent = new Map();
@@ -548,12 +548,10 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                     ? analysisRow.p1_stats || {}
                     : analysisRow.p2_stats || {};
 
-            // speed
             if (Number.isFinite(stats.average_speed_mps)) {
                 speedValues.push(Number(stats.average_speed_mps));
             }
 
-            // distances
             if (Number.isFinite(stats.distance_hider_m)) {
                 distanceHiderValues.push(Number(stats.distance_hider_m));
             }
@@ -561,7 +559,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 distanceTaggerValues.push(Number(stats.distance_tagger_m));
             }
 
-            // tag / hider time shares
             if (Number.isFinite(stats.time_as_tagger_share)) {
                 tagShareRawValues.push(Number(stats.time_as_tagger_share));
             }
@@ -583,7 +580,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 hiderSecondsValues.push(Number(stats.time_as_hider_seconds));
             }
 
-            // retag
             if (Number.isFinite(stats.retag_median_seconds)) {
                 retagMedianValues.push(Number(stats.retag_median_seconds));
             }
@@ -594,7 +590,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 retagHiderMedianValues.push(Number(stats.retag_hider_median_seconds));
             }
 
-            // accuracy / items
             if (Number.isFinite(stats.accuracy_average)) {
                 accuracyValues.push(Number(stats.accuracy_average));
             }
@@ -602,12 +597,10 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 itemEligibleUsesValues.push(Number(stats.item_eligible_uses));
             }
 
-            // conversion windows
             if (Number.isFinite(stats.conversion_rate)) {
                 conversionRateValues.push(Number(stats.conversion_rate));
             }
 
-            // movement
             if (Number.isFinite(stats.camp_ratio)) {
                 campRatios.push(Number(stats.camp_ratio));
             }
@@ -618,7 +611,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
                 pathDiversityValues.push(Number(stats.path_diversity_score));
             }
 
-            // pressure & evasion
             if (Number.isFinite(stats.hider_pressure_danger_share)) {
                 hiderPressureDangerShares.push(
                     Number(stats.hider_pressure_danger_share)
@@ -748,7 +740,6 @@ function aggregateMetrics(playerSteamId, matchesRows, analysesRows, mapFilter, e
         conversion_rate: getAverage(conversionRateValues)
     };
 
-    // NEW – aggregated prediction / anticipation
     const predictionStats = {
         tagger_predictivity_score: getAverage(predictiveValues),
         hider_tangent_score: getAverage(hiderTangentValues)
@@ -1956,7 +1947,6 @@ async function initializePerspectivePage() {
             rowsContainer.appendChild(rowElement);
         }
 
-        // Overview chips
         addRowPair(
             `<div class="card">${buildOverviewChips(metricsA)}</div>`,
             `<div class="card">${buildOverviewChips(metricsB)}</div>`
