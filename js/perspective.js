@@ -494,7 +494,19 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const hiderSeconds = [];
     const retagMedianValues = [];
     const retagAverageValues = [];
+    const retagHiderMedianValues = [];
     const accuracyValues = [];
+    const itemEligibleUses = [];
+    const conversionRates = [];
+    const campRatios = [];
+    const nodesPerSecondValues = [];
+    const pathDiversityValues = [];
+    const hiderPressureDangerShares = [];
+    const timeHiderDangerValues = [];
+    const timeHiderMidValues = [];
+    const timeHiderSafeValues = [];
+    const chaseScoreValues = [];
+    const evasionScoreValues = [];
     const matchesByMap = new Map();
     const matchesByOpponent = new Map();
 
@@ -516,7 +528,6 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             results.push(!!isWin);
         }
 
-        // Série Elo (Elo du joueur après la game)
         const eloAfterMatch = isPlayerP1
             ? matchRow.p1_elo_after ?? matchRow.p1_elo_before
             : matchRow.p2_elo_after ?? matchRow.p2_elo_before;
@@ -535,11 +546,9 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
 
             const stats = isPlayerP1 ? analysisRow.p1_stats || {} : analysisRow.p2_stats || {};
 
-            // Vitesse moyenne
             if (Number.isFinite(stats.avg_speed_ms)) {
                 speeds.push(Number(stats.avg_speed_ms));
             }
-            // Distances
             if (Number.isFinite(stats.avg_distance_as_hider)) {
                 distanceHider.push(Number(stats.avg_distance_as_hider));
             }
@@ -547,7 +556,6 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
                 distanceTagger.push(Number(stats.avg_distance_as_tagger));
             }
 
-            // Part de temps comme tagger : fallback ancien champ time_as_tagger_share si présent
             if (Number.isFinite(stats.time_as_tagger_share)) {
                 tagShareRaw.push(Number(stats.time_as_tagger_share));
             }
@@ -570,21 +578,57 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
                 }
             }
 
-            // Retag
             if (Number.isFinite(stats.retag_median_seconds)) {
                 retagMedianValues.push(Number(stats.retag_median_seconds));
             }
             if (Number.isFinite(stats.retag_avg_seconds)) {
                 retagAverageValues.push(Number(stats.retag_avg_seconds));
             }
+            if (Number.isFinite(stats.retag_hider_median_seconds)) {
+                retagHiderMedianValues.push(Number(stats.retag_hider_median_seconds));
+            }
 
-            // ⚠️ Changement ici : on lit maintenant item_accuracy (nouveau script)
             if (Number.isFinite(stats.item_accuracy)) {
                 accuracyValues.push(Number(stats.item_accuracy));
             }
+            if (Number.isFinite(stats.item_eligible_uses)) {
+                itemEligibleUses.push(Number(stats.item_eligible_uses));
+            }
+            if (Number.isFinite(stats.conversion_rate)) {
+                conversionRates.push(Number(stats.conversion_rate));
+            }
+
+            if (Number.isFinite(stats.camp_ratio)) {
+                campRatios.push(Number(stats.camp_ratio));
+            }
+            if (Number.isFinite(stats.nodes_per_second)) {
+                nodesPerSecondValues.push(Number(stats.nodes_per_second));
+            }
+            if (Number.isFinite(stats.path_diversity_score)) {
+                pathDiversityValues.push(Number(stats.path_diversity_score));
+            }
+
+            if (Number.isFinite(stats.hider_pressure_danger_share)) {
+                hiderPressureDangerShares.push(Number(stats.hider_pressure_danger_share));
+            }
+            if (Number.isFinite(stats.time_hider_danger)) {
+                timeHiderDangerValues.push(Number(stats.time_hider_danger));
+            }
+            if (Number.isFinite(stats.time_hider_mid)) {
+                timeHiderMidValues.push(Number(stats.time_hider_mid));
+            }
+            if (Number.isFinite(stats.time_hider_safe)) {
+                timeHiderSafeValues.push(Number(stats.time_hider_safe));
+            }
+
+            if (Number.isFinite(stats.chase_score)) {
+                chaseScoreValues.push(Number(stats.chase_score));
+            }
+            if (Number.isFinite(stats.evasion_score)) {
+                evasionScoreValues.push(Number(stats.evasion_score));
+            }
         }
 
-        // Agrégats par map
         const mapKey = String(matchRow.map_id);
         if (!matchesByMap.has(mapKey)) {
             matchesByMap.set(mapKey, {
@@ -604,46 +648,55 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         if (isWin) {
             mapBucket.wins += 1;
         }
-        if (analysisRow) {
-            const stats = isPlayerP1 ? analysisRow.p1_stats || {} : analysisRow.p2_stats || {};
-            const qualityValue = isPlayerP1
-                ? analysisRow.p1_quality
-                : analysisRow.p2_quality;
-            if (Number.isFinite(qualityValue)) {
-                mapBucket.qualityValues.push(Number(qualityValue));
+        const analysisRowForMap = analysisRow;
+        if (analysisRowForMap) {
+            const statsForMap = isPlayerP1
+                ? analysisRowForMap.p1_stats || {}
+                : analysisRowForMap.p2_stats || {};
+            const qualityValueForMap = isPlayerP1
+                ? analysisRowForMap.p1_quality
+                : analysisRowForMap.p2_quality;
+            if (Number.isFinite(qualityValueForMap)) {
+                mapBucket.qualityValues.push(Number(qualityValueForMap));
             }
-            if (Number.isFinite(stats.avg_speed_ms)) {
-                mapBucket.speedValues.push(Number(stats.avg_speed_ms));
+            if (Number.isFinite(statsForMap.avg_speed_ms)) {
+                mapBucket.speedValues.push(Number(statsForMap.avg_speed_ms));
             }
 
-            let shareValue = null;
+            let mapShareValue = null;
             if (
-                Number.isFinite(stats.seconds_as_tagger) &&
-                Number.isFinite(stats.seconds_as_hider)
+                Number.isFinite(statsForMap.seconds_as_tagger) &&
+                Number.isFinite(statsForMap.seconds_as_hider)
             ) {
-                const totalSeconds =
-                    Number(stats.seconds_as_tagger) + Number(stats.seconds_as_hider);
-                if (totalSeconds > 0) {
-                    shareValue = Number(stats.seconds_as_tagger) / totalSeconds;
+                const totalSecondsMap =
+                    Number(statsForMap.seconds_as_tagger) +
+                    Number(statsForMap.seconds_as_hider);
+                if (totalSecondsMap > 0) {
+                    mapShareValue =
+                        Number(statsForMap.seconds_as_tagger) / totalSecondsMap;
                 }
-            } else if (Number.isFinite(stats.time_as_tagger_share)) {
-                shareValue = Number(stats.time_as_tagger_share);
+            } else if (Number.isFinite(statsForMap.time_as_tagger_share)) {
+                mapShareValue = Number(statsForMap.time_as_tagger_share);
             }
-            if (shareValue != null) {
-                mapBucket.tagShares.push(shareValue);
+            if (mapShareValue != null) {
+                mapBucket.tagShares.push(mapShareValue);
             }
-            if (Number.isFinite(stats.retag_median_seconds)) {
-                mapBucket.retagMedian.push(Number(stats.retag_median_seconds));
+
+            if (Number.isFinite(statsForMap.retag_median_seconds)) {
+                mapBucket.retagMedian.push(Number(statsForMap.retag_median_seconds));
             }
-            if (Number.isFinite(stats.avg_distance_as_hider)) {
-                mapBucket.distanceHider.push(Number(stats.avg_distance_as_hider));
+            if (Number.isFinite(statsForMap.avg_distance_as_hider)) {
+                mapBucket.distanceHider.push(
+                    Number(statsForMap.avg_distance_as_hider)
+                );
             }
-            if (Number.isFinite(stats.avg_distance_as_tagger)) {
-                mapBucket.distanceTagger.push(Number(stats.avg_distance_as_tagger));
+            if (Number.isFinite(statsForMap.avg_distance_as_tagger)) {
+                mapBucket.distanceTagger.push(
+                    Number(statsForMap.avg_distance_as_tagger)
+                );
             }
         }
 
-        // Agrégats par adversaire
         const opponentKey = String(opponentId || "unknown");
         if (!matchesByOpponent.has(opponentKey)) {
             matchesByOpponent.set(opponentKey, {
@@ -660,11 +713,11 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             opponentBucket.wins += 1;
         }
         if (analysisRow) {
-            const qualityValue = isPlayerP1
+            const oppQualityValue = isPlayerP1
                 ? analysisRow.p1_quality
                 : analysisRow.p2_quality;
-            if (Number.isFinite(qualityValue)) {
-                opponentBucket.qualityValues.push(Number(qualityValue));
+            if (Number.isFinite(oppQualityValue)) {
+                opponentBucket.qualityValues.push(Number(oppQualityValue));
             }
         }
     }
@@ -717,12 +770,32 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const retagStats = {
         median_seconds: getMedian(retagMedianValues),
         average_seconds: getAverage(retagAverageValues),
-        p90_seconds: getP90(retagMedianValues)
+        p90_seconds: getP90(retagMedianValues),
+        hider_median_seconds: getMedian(retagHiderMedianValues)
+    };
+
+    const movementStats = {
+        camp_ratio: getAverage(campRatios),
+        nodes_per_second: getAverage(nodesPerSecondValues),
+        path_diversity_score: getAverage(pathDiversityValues)
+    };
+
+    const pressureStats = {
+        hider_pressure_danger_share: getAverage(hiderPressureDangerShares),
+        time_hider_danger: getAverage(timeHiderDangerValues),
+        time_hider_mid: getAverage(timeHiderMidValues),
+        time_hider_safe: getAverage(timeHiderSafeValues),
+        chase_score: getAverage(chaseScoreValues),
+        evasion_score: getAverage(evasionScoreValues)
     };
 
     const accuracyStats = {
-        // moyenne des item_accuracy du nouvel analyseur
-        average: getAverage(accuracyValues)
+        average: getAverage(accuracyValues),
+        item_eligible_uses: getAverage(itemEligibleUses)
+    };
+
+    const conversionStats = {
+        conversion_rate: getAverage(conversionRates)
     };
 
     const eloSeriesAll = eloSeries.slice();
@@ -745,7 +818,9 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         .map(mapBucket => ({
             map_id: mapBucket.map_id,
             matches: mapBucket.matches,
-            winrate: mapBucket.matches ? mapBucket.wins / mapBucket.matches : null,
+            winrate: mapBucket.matches
+                ? mapBucket.wins / mapBucket.matches
+                : null,
             average_quality: getAverage(mapBucket.qualityValues),
             average_speed_mps: getAverage(mapBucket.speedValues),
             share_as_tagger: getAverage(mapBucket.tagShares),
@@ -760,7 +835,9 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
             id: opponentBucket.id,
             name: opponentBucket.name,
             matches: opponentBucket.matches,
-            winrate: opponentBucket.matches ? opponentBucket.wins / opponentBucket.matches : null,
+            winrate: opponentBucket.matches
+                ? opponentBucket.wins / opponentBucket.matches
+                : null,
             average_quality: getAverage(opponentBucket.qualityValues)
         }))
         .sort((a, b) => b.matches - a.matches);
@@ -769,8 +846,9 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const sessionStats = {
         sessions: sessions.length,
         avg_matches_per_session: sessions.length
-            ? sessions.map(session => session.length).reduce((a, b) => a + b, 0) /
-            sessions.length
+            ? sessions
+                .map(session => session.length)
+                .reduce((a, b) => a + b, 0) / sessions.length
             : null
     };
     const dayparts = getDaypartsBuckets(scopedMatches, playerSteamId);
@@ -784,7 +862,10 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         speed: speedStats,
         distance: distanceStats,
         retag: retagStats,
+        movement: movementStats,
+        pressure: pressureStats,
         accuracy: accuracyStats,
+        conversion: conversionStats,
         eloSeries: eloSeriesAll,
         form: recentResults,
         bestStreak: bestStreakValue,
@@ -794,6 +875,8 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         dayparts
     };
 }
+
+
 
 
 function buildChip(label, value, tip, suffix) {
@@ -1023,20 +1106,101 @@ function buildSpeedAndDistanceSection(metrics) {
 function buildRetagAndAccuracySection(metrics) {
     const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags.">Retag (median)</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Typical time between consecutive tags (all roles).">Retag (median)</div>
         <div class="text-slate-100 font-semibold">${formatSeconds(metrics.retag.median_seconds)}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Average and 90th percentile of retag time (lower is better).">Retag (average / P90)</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average and 90th percentile of retag time. Lower is better (you re-tag faster).">Retag (average / P90)</div>
         <div class="text-slate-100 font-semibold">${formatSeconds(metrics.retag.average_seconds)} / ${formatSeconds(metrics.retag.p90_seconds)}</div>
       </div>
       <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Share of successful attempts; higher means better precision.">Accuracy (average)</div>
-        <div class="text-slate-100 font-semibold">${metrics.accuracy.average != null ? formatPercent(metrics.accuracy.average) : "—"}</div>
+        <div class="text-slate-300 tip mb-1" data-tip="Typical retag time when you are the hider. Useful to see how long you usually stay alive before getting tagged again.">Hider retag median</div>
+        <div class="text-slate-100 font-semibold">${formatSeconds(metrics.retag.hider_median_seconds)}</div>
       </div>
     </div>`;
-    return buildSection("Retagging & accuracy", contentHtml);
+    return buildSection("Retagging rhythm", contentHtml);
 }
+
+function buildMovementSection(metrics) {
+    const m = metrics.movement || {};
+    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="How much you tend to camp vs move. 0% = always moving, 100% = almost always standing still.">Camp ratio</div>
+        <div class="text-slate-100 font-semibold">${m.camp_ratio != null ? formatPercent(m.camp_ratio) : "—"}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average number of distinct grid cells you visit per second. Higher = more active repositioning across the map.">Nodes per second</div>
+        <div class="text-slate-100 font-semibold">${m.nodes_per_second != null ? formatNumber(m.nodes_per_second, 2) : "—"}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="How widely you explore the map. 0 = staying in a tiny area, 100 = using most of the map surface.">Path diversity / coverage</div>
+        <div class="text-slate-100 font-semibold">
+          ${m.path_diversity_score != null ? formatNumber(m.path_diversity_score, 1) : "—"}
+          <span class="text-xs text-slate-400">score</span>
+        </div>
+      </div>
+    </div>`;
+    return buildSection("Movement & exploration", contentHtml);
+}
+
+function buildPressureSection(metrics) {
+    const p = metrics.pressure || {};
+    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Share of your hider time spent in the danger zone (very close to the tagger). Lower is generally safer.">Hider danger share</div>
+        <div class="text-slate-100 font-semibold">${p.hider_pressure_danger_share != null ? formatPercent(p.hider_pressure_danger_share) : "—"}</div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average time per match you spend in danger / mid / safe zones as hider.">Hider time (danger / mid / safe)</div>
+        <div class="text-slate-100 font-semibold">
+          ${formatSeconds(p.time_hider_danger)} /
+          ${formatSeconds(p.time_hider_mid)} /
+          ${formatSeconds(p.time_hider_safe)}
+        </div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Chase score: how well you keep pressure as tagger. Evasion score: how well you escape and reset as hider. Both are in [0, 100].">Chase / evasion score</div>
+        <div class="text-slate-100 font-semibold">
+          ${p.chase_score != null ? formatNumber(p.chase_score, 1) : "—"}
+          <span class="text-xs text-slate-400">chase</span>
+          ·
+          ${p.evasion_score != null ? formatNumber(p.evasion_score, 1) : "—"}
+          <span class="text-xs text-slate-400">evasion</span>
+        </div>
+      </div>
+    </div>`;
+    return buildSection("Pressure & evasion", contentHtml);
+}
+
+function buildItemsSection(metrics) {
+    const acc = metrics.accuracy || {};
+    const conv = metrics.conversion || {};
+    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Share of good item opportunities where you actually hit (eligible hits only).">Item accuracy</div>
+        <div class="text-slate-100 font-semibold">
+          ${acc.average != null ? formatPercent(acc.average) : "—"}
+        </div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="Average number of &quot;good&quot; item opportunities (eligible uses) per match.">Eligible item uses</div>
+        <div class="text-slate-100 font-semibold">
+          ${acc.item_eligible_uses != null ? formatNumber(acc.item_eligible_uses, 2) : "—"}
+          <span class="text-xs text-slate-400">per match</span>
+        </div>
+      </div>
+      <div>
+        <div class="text-slate-300 tip mb-1" data-tip="How often you convert opening windows into a tag (conversion windows).">Conversion windows</div>
+        <div class="text-slate-100 font-semibold">
+          ${conv.conversion_rate != null ? formatPercent(conv.conversion_rate) : "—"}
+          <span class="text-xs text-slate-400">conversion rate</span>
+        </div>
+      </div>
+    </div>`;
+    return buildSection("Items & openings", contentHtml);
+}
+
+
 
 function buildQualitySection(metrics) {
     const iqrWidth =
@@ -1293,6 +1457,9 @@ function renderAllSections(contentElement, metrics, currentMapFilter) {
     ${buildFormSection(metrics)}
     ${buildTaggingSection(metrics)}
     ${buildSpeedAndDistanceSection(metrics)}
+    ${buildMovementSection(metrics)}
+    ${buildPressureSection(metrics)}
+    ${buildItemsSection(metrics)}
     ${buildRetagAndAccuracySection(metrics)}
     ${buildQualitySection(metrics)}
     ${buildSessionsAndTimeSection(metrics)}
@@ -1302,6 +1469,7 @@ function renderAllSections(contentElement, metrics, currentMapFilter) {
     mountRevealAnimations(contentElement);
     mountDaypartTabs(contentElement);
 }
+
 
 async function loadPerspectiveRow(playerSteamId) {
     const { data } = await supabaseClient
