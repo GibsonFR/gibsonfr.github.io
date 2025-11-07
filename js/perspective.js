@@ -11,6 +11,15 @@ const MAP_NAMES = {
 };
 const prettyMap = id => (MAP_NAMES[id] ? `${id} — ${MAP_NAMES[id]}` : `Map ${id}`);
 
+const escapeHtml = value =>
+    (value || "").replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+    }[character]));
+
 const formatPercent = value =>
     (value == null || Number.isNaN(value) ? "—" : `${Math.round(value * 1000) / 10}%`);
 
@@ -66,7 +75,6 @@ function getSum(values) {
     );
 }
 
-
 function getAverage(values) {
     const filtered = (values || []).filter(Number.isFinite);
     if (!filtered.length) {
@@ -75,23 +83,6 @@ function getAverage(values) {
     return getSum(filtered) / filtered.length;
 }
 
-function getMode(values) {
-    const arr = (values || []).filter(v => v != null);
-    if (!arr.length) return null;
-    const counts = new Map();
-    for (const v of arr) {
-        counts.set(v, (counts.get(v) || 0) + 1);
-    }
-    let bestValue = null;
-    let bestCount = -1;
-    for (const [value, count] of counts.entries()) {
-        if (count > bestCount) {
-            bestCount = count;
-            bestValue = value;
-        }
-    }
-    return bestValue;
-}
 function getStandardDeviation(values) {
     const filtered = (values || []).filter(Number.isFinite);
     if (!filtered.length) {
@@ -472,7 +463,6 @@ function getDaypartsBuckets(matches, playerSteamId) {
     }));
 }
 
-
 function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     let scopedMatches = mapId
         ? matches.filter(matchRow => String(matchRow.map_id) === String(mapId))
@@ -505,61 +495,28 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const retagMedianValues = [];
     const retagAverageValues = [];
     const accuracyValues = [];
-
-    // New advanced stats
-    const movementRatios = [];
-    const movementRatiosTagger = [];
-    const movementRatiosHider = [];
-    const campRatios = [];
-    const nodesPerSecond = [];
-    const nodesPerSecondTagger = [];
-    const nodesPerSecondHider = [];
-    const cellRevisitRatios = [];
-    const pathDiversityScores = [];
-    const pathCoverageNorms = [];
-    const cellsVisitedValues = [];
-
-    const pressureDangerShares = [];
-    const pressureMidShares = [];
-    const pressureSafeShares = [];
-    const timeHiderDangerValues = [];
-    const timeHiderMidValues = [];
-    const timeHiderSafeValues = [];
-    const timeTaggerCloseValues = [];
-
-    const chaseScores = [];
-    const evasionScores = [];
-    const missedWindowsValues = [];
-    const conversionRateValues = [];
-
-    const itemAccuracyValues = [];
-    const itemEligibleUsesValues = [];
-    const itemAllUsesValues = [];
-    const itemHitsValues = [];
-
-    const verticalAboveShares = [];
-    const verticalBelowShares = [];
-    const verticalStyles = [];
-
-    const openingInitialTaggerSecondsValues = [];
-    const openingInitialHiderSecondsValues = [];
-
-    const retagConsistencyValues = [];
-    const retagHiderAvgSecondsValues = [];
-    const retagHiderMedianSecondsValues = [];
-    const taggerPredictivityValues = [];
-    const hiderTangentValues = [];
-
     const matchesByMap = new Map();
     const matchesByOpponent = new Map();
 
     for (const matchRow of scopedMatches) {
         const isPlayerP1 = String(matchRow.p1_id) === String(playerSteamId);
-        const meWon = matchRow.winner === (isPlayerP1 ? 1 : 2);
-        if (matchRow.winner === 1 || matchRow.winner === 2) {
-            results.push(meWon);
+        const playerSide = isPlayerP1 ? "p1" : "p2";
+        const opponentId = isPlayerP1 ? matchRow.p2_id : matchRow.p1_id;
+        const opponentName = isPlayerP1
+            ? matchRow.p2_name || matchRow.p2_id
+            : matchRow.p1_name || matchRow.p1_id;
+
+        let isWin = null;
+        if (matchRow.winner === 1 || matchRow.winner === "1") {
+            isWin = playerSide === "p1";
+        } else if (matchRow.winner === 2 || matchRow.winner === "2") {
+            isWin = playerSide === "p2";
+        }
+        if (isWin != null) {
+            results.push(!!isWin);
         }
 
+        // Série Elo (Elo du joueur après la game)
         const eloAfterMatch = isPlayerP1
             ? matchRow.p1_elo_after ?? matchRow.p1_elo_before
             : matchRow.p2_elo_after ?? matchRow.p2_elo_before;
@@ -568,22 +525,21 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         }
 
         const analysisRow = analyses.get(matchRow.id);
-        let stats = null;
-        let qualityValue = null;
         if (analysisRow) {
-            qualityValue = isPlayerP1 ? analysisRow.p1_quality : analysisRow.p2_quality;
+            const qualityValue = isPlayerP1
+                ? analysisRow.p1_quality
+                : analysisRow.p2_quality;
             if (Number.isFinite(qualityValue)) {
                 qualityValues.push(Number(qualityValue));
             }
-            stats = isPlayerP1 ? analysisRow.p1_stats || {} : analysisRow.p2_stats || {};
-        } else {
-            stats = {};
-        }
 
-        if (stats && typeof stats === "object") {
+            const stats = isPlayerP1 ? analysisRow.p1_stats || {} : analysisRow.p2_stats || {};
+
+            // Vitesse moyenne
             if (Number.isFinite(stats.avg_speed_ms)) {
                 speeds.push(Number(stats.avg_speed_ms));
             }
+            // Distances
             if (Number.isFinite(stats.avg_distance_as_hider)) {
                 distanceHider.push(Number(stats.avg_distance_as_hider));
             }
@@ -591,28 +547,30 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
                 distanceTagger.push(Number(stats.avg_distance_as_tagger));
             }
 
-            // Tag share from legacy or new fields
-            let shareValue = null;
+            // Part de temps comme tagger : fallback ancien champ time_as_tagger_share si présent
             if (Number.isFinite(stats.time_as_tagger_share)) {
-                shareValue = Number(stats.time_as_tagger_share);
-                tagShareRaw.push(shareValue);
+                tagShareRaw.push(Number(stats.time_as_tagger_share));
+            }
+            if (Number.isFinite(stats.seconds_as_tagger)) {
+                tagSeconds.push(Number(stats.seconds_as_tagger));
+            }
+            if (Number.isFinite(stats.seconds_as_hider)) {
+                hiderSeconds.push(Number(stats.seconds_as_hider));
             }
             if (
                 Number.isFinite(stats.seconds_as_tagger) &&
                 Number.isFinite(stats.seconds_as_hider)
             ) {
-                const tagSecs = Number(stats.seconds_as_tagger);
-                const hidSecs = Number(stats.seconds_as_hider);
-                const total = tagSecs + hidSecs;
-                if (total > 0) {
-                    const secShare = tagSecs / total;
-                    tagShareFromSeconds.push(secShare);
-                    shareValue = secShare;
+                const totalSeconds =
+                    Number(stats.seconds_as_tagger) + Number(stats.seconds_as_hider);
+                if (totalSeconds > 0) {
+                    tagShareFromSeconds.push(
+                        Number(stats.seconds_as_tagger) / totalSeconds
+                    );
                 }
-                tagSeconds.push(tagSecs);
-                hiderSeconds.push(hidSecs);
             }
 
+            // Retag
             if (Number.isFinite(stats.retag_median_seconds)) {
                 retagMedianValues.push(Number(stats.retag_median_seconds));
             }
@@ -620,146 +578,14 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
                 retagAverageValues.push(Number(stats.retag_avg_seconds));
             }
 
-            // Accuracy: prefer conversion_rate, fallback to old 'accuracy'
-            let acc = null;
-            if (Number.isFinite(stats.conversion_rate)) {
-                acc = Number(stats.conversion_rate);
-            } else if (Number.isFinite(stats.accuracy)) {
-                acc = Number(stats.accuracy);
-            }
-            if (acc != null) {
-                accuracyValues.push(acc);
-            }
-
-            // Advanced movement
-            if (Number.isFinite(stats.movement_ratio)) {
-                movementRatios.push(Number(stats.movement_ratio));
-            }
-            if (Number.isFinite(stats.movement_ratio_tagger)) {
-                movementRatiosTagger.push(Number(stats.movement_ratio_tagger));
-            }
-            if (Number.isFinite(stats.movement_ratio_hider)) {
-                movementRatiosHider.push(Number(stats.movement_ratio_hider));
-            }
-            if (Number.isFinite(stats.camp_ratio)) {
-                campRatios.push(Number(stats.camp_ratio));
-            }
-            if (Number.isFinite(stats.nodes_per_second)) {
-                nodesPerSecond.push(Number(stats.nodes_per_second));
-            }
-            if (Number.isFinite(stats.nodes_per_second_tagger)) {
-                nodesPerSecondTagger.push(Number(stats.nodes_per_second_tagger));
-            }
-            if (Number.isFinite(stats.nodes_per_second_hider)) {
-                nodesPerSecondHider.push(Number(stats.nodes_per_second_hider));
-            }
-            if (Number.isFinite(stats.cell_revisit_ratio)) {
-                cellRevisitRatios.push(Number(stats.cell_revisit_ratio));
-            }
-            if (Number.isFinite(stats.path_diversity_score)) {
-                pathDiversityScores.push(Number(stats.path_diversity_score));
-            }
-            if (Number.isFinite(stats.path_coverage_norm)) {
-                pathCoverageNorms.push(Number(stats.path_coverage_norm));
-            }
-            if (Number.isFinite(stats.cells_visited)) {
-                cellsVisitedValues.push(Number(stats.cells_visited));
-            }
-
-            // Pressure / position
-            if (Number.isFinite(stats.hider_pressure_danger_share)) {
-                pressureDangerShares.push(Number(stats.hider_pressure_danger_share));
-            }
-            if (Number.isFinite(stats.hider_pressure_mid_share)) {
-                pressureMidShares.push(Number(stats.hider_pressure_mid_share));
-            }
-            if (Number.isFinite(stats.hider_pressure_safe_share)) {
-                pressureSafeShares.push(Number(stats.hider_pressure_safe_share));
-            }
-            if (Number.isFinite(stats.time_hider_danger)) {
-                timeHiderDangerValues.push(Number(stats.time_hider_danger));
-            }
-            if (Number.isFinite(stats.time_hider_mid)) {
-                timeHiderMidValues.push(Number(stats.time_hider_mid));
-            }
-            if (Number.isFinite(stats.time_hider_safe)) {
-                timeHiderSafeValues.push(Number(stats.time_hider_safe));
-            }
-            if (Number.isFinite(stats.time_tagger_close)) {
-                timeTaggerCloseValues.push(Number(stats.time_tagger_close));
-            }
-
-            // Chase / evade / windows
-            if (Number.isFinite(stats.chase_score)) {
-                chaseScores.push(Number(stats.chase_score));
-            }
-            if (Number.isFinite(stats.evasion_score)) {
-                evasionScores.push(Number(stats.evasion_score));
-            }
-            if (Number.isFinite(stats.missed_windows)) {
-                missedWindowsValues.push(Number(stats.missed_windows));
-            }
-            if (Number.isFinite(stats.conversion_rate)) {
-                conversionRateValues.push(Number(stats.conversion_rate));
-            }
-
-            // Items
+            // ⚠️ Changement ici : on lit maintenant item_accuracy (nouveau script)
             if (Number.isFinite(stats.item_accuracy)) {
-                itemAccuracyValues.push(Number(stats.item_accuracy));
-            }
-            if (Number.isFinite(stats.item_eligible_uses)) {
-                itemEligibleUsesValues.push(Number(stats.item_eligible_uses));
-            }
-            if (Number.isFinite(stats.item_all_uses)) {
-                itemAllUsesValues.push(Number(stats.item_all_uses));
-            }
-            if (Number.isFinite(stats.item_hits)) {
-                itemHitsValues.push(Number(stats.item_hits));
-            }
-
-            // Vertical + prediction
-            if (Number.isFinite(stats.vertical_above_share)) {
-                verticalAboveShares.push(Number(stats.vertical_above_share));
-            }
-            if (Number.isFinite(stats.vertical_below_share)) {
-                verticalBelowShares.push(Number(stats.vertical_below_share));
-            }
-            if (stats.vertical_style) {
-                verticalStyles.push(String(stats.vertical_style));
-            }
-
-            if (Number.isFinite(stats.opening_initial_tagger_seconds)) {
-                openingInitialTaggerSecondsValues.push(
-                    Number(stats.opening_initial_tagger_seconds)
-                );
-            }
-            if (Number.isFinite(stats.opening_initial_hider_seconds)) {
-                openingInitialHiderSecondsValues.push(
-                    Number(stats.opening_initial_hider_seconds)
-                );
-            }
-
-            if (Number.isFinite(stats.retag_consistency_cv_score)) {
-                retagConsistencyValues.push(Number(stats.retag_consistency_cv_score));
-            }
-            if (Number.isFinite(stats.retag_hider_avg_seconds)) {
-                retagHiderAvgSecondsValues.push(Number(stats.retag_hider_avg_seconds));
-            }
-            if (Number.isFinite(stats.retag_hider_median_seconds)) {
-                retagHiderMedianSecondsValues.push(
-                    Number(stats.retag_hider_median_seconds)
-                );
-            }
-            if (Number.isFinite(stats.tagger_predictivity_score)) {
-                taggerPredictivityValues.push(Number(stats.tagger_predictivity_score));
-            }
-            if (Number.isFinite(stats.hider_tangent_score)) {
-                hiderTangentValues.push(Number(stats.hider_tangent_score));
+                accuracyValues.push(Number(stats.item_accuracy));
             }
         }
 
-        // Per-map aggregation
-        const mapKey = matchRow.map_id;
+        // Agrégats par map
+        const mapKey = String(matchRow.map_id);
         if (!matchesByMap.has(mapKey)) {
             matchesByMap.set(mapKey, {
                 map_id: matchRow.map_id,
@@ -775,89 +601,112 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         }
         const mapBucket = matchesByMap.get(mapKey);
         mapBucket.matches += 1;
-        if (meWon) {
+        if (isWin) {
             mapBucket.wins += 1;
         }
-        if (Number.isFinite(qualityValue)) {
-            mapBucket.qualityValues.push(Number(qualityValue));
-        }
-        if (stats && Number.isFinite(stats.avg_speed_ms)) {
-            mapBucket.speedValues.push(Number(stats.avg_speed_ms));
-        }
-        if (stats && shareValue != null) {
-            mapBucket.tagShares.push(shareValue);
-        }
-        if (stats && Number.isFinite(stats.retag_median_seconds)) {
-            mapBucket.retagMedian.push(Number(stats.retag_median_seconds));
-        }
-        if (stats && Number.isFinite(stats.avg_distance_as_hider)) {
-            mapBucket.distanceHider.push(Number(stats.avg_distance_as_hider));
-        }
-        if (stats && Number.isFinite(stats.avg_distance_as_tagger)) {
-            mapBucket.distanceTagger.push(Number(stats.avg_distance_as_tagger));
+        if (analysisRow) {
+            const stats = isPlayerP1 ? analysisRow.p1_stats || {} : analysisRow.p2_stats || {};
+            const qualityValue = isPlayerP1
+                ? analysisRow.p1_quality
+                : analysisRow.p2_quality;
+            if (Number.isFinite(qualityValue)) {
+                mapBucket.qualityValues.push(Number(qualityValue));
+            }
+            if (Number.isFinite(stats.avg_speed_ms)) {
+                mapBucket.speedValues.push(Number(stats.avg_speed_ms));
+            }
+
+            let shareValue = null;
+            if (
+                Number.isFinite(stats.seconds_as_tagger) &&
+                Number.isFinite(stats.seconds_as_hider)
+            ) {
+                const totalSeconds =
+                    Number(stats.seconds_as_tagger) + Number(stats.seconds_as_hider);
+                if (totalSeconds > 0) {
+                    shareValue = Number(stats.seconds_as_tagger) / totalSeconds;
+                }
+            } else if (Number.isFinite(stats.time_as_tagger_share)) {
+                shareValue = Number(stats.time_as_tagger_share);
+            }
+            if (shareValue != null) {
+                mapBucket.tagShares.push(shareValue);
+            }
+            if (Number.isFinite(stats.retag_median_seconds)) {
+                mapBucket.retagMedian.push(Number(stats.retag_median_seconds));
+            }
+            if (Number.isFinite(stats.avg_distance_as_hider)) {
+                mapBucket.distanceHider.push(Number(stats.avg_distance_as_hider));
+            }
+            if (Number.isFinite(stats.avg_distance_as_tagger)) {
+                mapBucket.distanceTagger.push(Number(stats.avg_distance_as_tagger));
+            }
         }
 
-        // Per-opponent aggregation
-        const opponentId = isPlayerP1 ? matchRow.p2_id : matchRow.p1_id;
-        const opponentName = isPlayerP1 ? matchRow.p2_name : matchRow.p1_name;
-        if (!matchesByOpponent.has(opponentId)) {
-            matchesByOpponent.set(opponentId, {
-                opponent_id: opponentId,
-                opponent_name: opponentName,
+        // Agrégats par adversaire
+        const opponentKey = String(opponentId || "unknown");
+        if (!matchesByOpponent.has(opponentKey)) {
+            matchesByOpponent.set(opponentKey, {
+                id: opponentId,
+                name: opponentName,
                 matches: 0,
                 wins: 0,
                 qualityValues: []
             });
         }
-        const oppBucket = matchesByOpponent.get(opponentId);
-        oppBucket.matches += 1;
-        if (meWon) {
-            oppBucket.wins += 1;
+        const opponentBucket = matchesByOpponent.get(opponentKey);
+        opponentBucket.matches += 1;
+        if (isWin) {
+            opponentBucket.wins += 1;
         }
-        if (Number.isFinite(qualityValue)) {
-            oppBucket.qualityValues.push(Number(qualityValue));
+        if (analysisRow) {
+            const qualityValue = isPlayerP1
+                ? analysisRow.p1_quality
+                : analysisRow.p2_quality;
+            if (Number.isFinite(qualityValue)) {
+                opponentBucket.qualityValues.push(Number(qualityValue));
+            }
         }
     }
 
-    const scopeCount = scopedMatches.length;
+    const totalMatches = scopedMatches.length;
     const winCount = results.filter(Boolean).length;
-    const winrate = scopeCount ? winCount / scopeCount : null;
+    const winrate = totalMatches ? winCount / totalMatches : null;
+
+    const tagShareValue = tagShareFromSeconds.length
+        ? getAverage(tagShareFromSeconds)
+        : tagShareRaw.length
+            ? getAverage(tagShareRaw)
+            : null;
 
     const qualityStats = {
         average: getAverage(qualityValues),
         median: getMedian(qualityValues),
-        p25: getQuantile(qualityValues, 0.25),
-        p75: getQuantile(qualityValues, 0.75),
+        lower_quartile: getQuantile(qualityValues, 0.25),
+        upper_quartile: getQuantile(qualityValues, 0.75),
+        best_match: qualityValues.length ? Math.max(...qualityValues) : null,
+        worst_match: qualityValues.length ? Math.min(...qualityValues) : null,
+        spread_std: getStandardDeviation(qualityValues),
         spread_iqr:
             getQuantile(qualityValues, 0.75) != null &&
-            getQuantile(qualityValues, 0.25) != null
+                getQuantile(qualityValues, 0.25) != null
                 ? getQuantile(qualityValues, 0.75) -
-                  getQuantile(qualityValues, 0.25)
-                : null,
-        spread_std: getStandardDeviation(qualityValues),
-        best_match: qualityValues.length ? Math.max(...qualityValues) : null,
-        worst_match: qualityValues.length ? Math.min(...qualityValues) : null
+                getQuantile(qualityValues, 0.25)
+                : null
     };
 
-    const tagShare =
-        tagShareFromSeconds.length > 0
-            ? getAverage(tagShareFromSeconds)
-            : tagShareRaw.length > 0
-            ? getAverage(tagShareRaw)
-            : null;
-
-    const tagSecondsAverage = getAverage(tagSeconds);
-    const hiderSecondsAverage = getAverage(hiderSeconds);
-
     const taggingStats = {
-        share_as_tagger: tagShare,
-        time_as_tagger_average: tagSecondsAverage,
-        time_as_hider_average: hiderSecondsAverage
+        share_as_tagger: tagShareValue,
+        time_as_tagger_average: getAverage(tagSeconds),
+        time_as_tagger_median: getMedian(tagSeconds),
+        time_as_hider_average: getAverage(hiderSeconds),
+        time_as_hider_median: getMedian(hiderSeconds)
     };
 
     const speedStats = {
         average_mps: getAverage(speeds),
-        p90_mps: getP90(speeds)
+        p90_mps: getP90(speeds),
+        p10_mps: getP10(speeds)
     };
 
     const distanceStats = {
@@ -868,131 +717,66 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
     const retagStats = {
         median_seconds: getMedian(retagMedianValues),
         average_seconds: getAverage(retagAverageValues),
-        p90_seconds: getP90(retagAverageValues)
+        p90_seconds: getP90(retagMedianValues)
     };
 
     const accuracyStats = {
+        // moyenne des item_accuracy du nouvel analyseur
         average: getAverage(accuracyValues)
     };
 
-    const movementStats = {
-        movement_ratio: getAverage(movementRatios),
-        movement_ratio_tagger: getAverage(movementRatiosTagger),
-        movement_ratio_hider: getAverage(movementRatiosHider),
-        camp_ratio: getAverage(campRatios),
-        nodes_per_second: getAverage(nodesPerSecond),
-        nodes_per_second_tagger: getAverage(nodesPerSecondTagger),
-        nodes_per_second_hider: getAverage(nodesPerSecondHider)
-    };
+    const eloSeriesAll = eloSeries.slice();
+    const recentResults = getLastValues(results, 20);
 
-    const pathingStats = {
-        path_diversity_score: getAverage(pathDiversityScores),
-        path_coverage_norm: getAverage(pathCoverageNorms),
-        cell_revisit_ratio: getAverage(cellRevisitRatios),
-        cells_visited: getAverage(cellsVisitedValues)
-    };
-
-    const pressureStats = {
-        hider_pressure_danger_share: getAverage(pressureDangerShares),
-        hider_pressure_mid_share: getAverage(pressureMidShares),
-        hider_pressure_safe_share: getAverage(pressureSafeShares),
-        time_hider_danger: getAverage(timeHiderDangerValues),
-        time_hider_mid: getAverage(timeHiderMidValues),
-        time_hider_safe: getAverage(timeHiderSafeValues),
-        time_tagger_close: getAverage(timeTaggerCloseValues)
-    };
-
-    const chaseStats = {
-        chase_score: getAverage(chaseScores),
-        evasion_score: getAverage(evasionScores),
-        missed_windows: getAverage(missedWindowsValues),
-        conversion_rate: getAverage(conversionRateValues)
-    };
-
-    const itemsStats = {
-        item_accuracy: getAverage(itemAccuracyValues),
-        item_eligible_uses: getAverage(itemEligibleUsesValues),
-        item_all_uses: getAverage(itemAllUsesValues),
-        item_hits: getAverage(itemHitsValues)
-    };
-
-    const verticalStats = {
-        vertical_style_mode: getMode(verticalStyles),
-        vertical_above_share: getAverage(verticalAboveShares),
-        vertical_below_share: getAverage(verticalBelowShares)
-    };
-
-    const openingStats = {
-        opening_initial_tagger_seconds: getAverage(
-            openingInitialTaggerSecondsValues
-        ),
-        opening_initial_hider_seconds: getAverage(
-            openingInitialHiderSecondsValues
-        )
-    };
-
-    const retagAdvancedStats = {
-        retag_consistency_cv_score: getAverage(retagConsistencyValues),
-        retag_hider_avg_seconds: getAverage(retagHiderAvgSecondsValues),
-        retag_hider_median_seconds: getAverage(retagHiderMedianSecondsValues),
-        tagger_predictivity_score: getAverage(taggerPredictivityValues),
-        hider_tangent_score: getAverage(hiderTangentValues)
-    };
-
-    const perMapMetrics = Array.from(matchesByMap.values())
-        .sort((a, b) => b.matches - a.matches)
-        .map(mapMetrics => ({
-            map_id: mapMetrics.map_id,
-            matches: mapMetrics.matches,
-            wins: mapMetrics.wins,
-            winrate:
-                mapMetrics.matches > 0
-                    ? mapMetrics.wins / mapMetrics.matches
-                    : 0,
-            average_quality: getAverage(mapMetrics.qualityValues),
-            average_speed: getAverage(mapMetrics.speedValues),
-            share_as_tagger: getAverage(mapMetrics.tagShares),
-            retag_median: getMedian(mapMetrics.retagMedian),
-            average_hider_distance: getAverage(mapMetrics.distanceHider),
-            average_tagger_distance: getAverage(mapMetrics.distanceTagger)
-        }));
-
-    const perOpponentMetrics = Array.from(matchesByOpponent.values())
-        .sort((a, b) => b.matches - a.matches)
-        .map(oppMetrics => ({
-            opponent_id: oppMetrics.opponent_id,
-            opponent_name: oppMetrics.opponent_name,
-            matches: oppMetrics.matches,
-            wins: oppMetrics.wins,
-            winrate:
-                oppMetrics.matches > 0
-                    ? oppMetrics.wins / oppMetrics.matches
-                    : 0,
-            average_quality: getAverage(oppMetrics.qualityValues)
-        }));
-
-    const { sessions: sessionStats, dayparts } = computeSessionsAndDayparts(
-        scopedMatches,
-        analyses,
-        playerSteamId
-    );
-
-    const eloSeriesAll = eloSeries.slice().sort((a, b) => a - b);
-
-    const recentResults = results.slice(-20);
     let bestStreakValue = 0;
     let currentStreak = 0;
-    for (const result of recentResults) {
-        if (result) {
+    for (const resultValue of results) {
+        if (resultValue) {
             currentStreak += 1;
-            bestStreakValue = Math.max(bestStreakValue, currentStreak);
         } else {
             currentStreak = 0;
         }
+        if (currentStreak > bestStreakValue) {
+            bestStreakValue = currentStreak;
+        }
     }
 
+    const perMapMetrics = Array.from(matchesByMap.values())
+        .map(mapBucket => ({
+            map_id: mapBucket.map_id,
+            matches: mapBucket.matches,
+            winrate: mapBucket.matches ? mapBucket.wins / mapBucket.matches : null,
+            average_quality: getAverage(mapBucket.qualityValues),
+            average_speed_mps: getAverage(mapBucket.speedValues),
+            share_as_tagger: getAverage(mapBucket.tagShares),
+            retag_median_seconds: getAverage(mapBucket.retagMedian),
+            average_hider_distance_m: getAverage(mapBucket.distanceHider),
+            average_tagger_distance_m: getAverage(mapBucket.distanceTagger)
+        }))
+        .sort((a, b) => b.matches - a.matches);
+
+    const perOpponentMetrics = Array.from(matchesByOpponent.values())
+        .map(opponentBucket => ({
+            id: opponentBucket.id,
+            name: opponentBucket.name,
+            matches: opponentBucket.matches,
+            winrate: opponentBucket.matches ? opponentBucket.wins / opponentBucket.matches : null,
+            average_quality: getAverage(opponentBucket.qualityValues)
+        }))
+        .sort((a, b) => b.matches - a.matches);
+
+    const sessions = groupSessions(scopedMatches, 5 * 60 * 1000);
+    const sessionStats = {
+        sessions: sessions.length,
+        avg_matches_per_session: sessions.length
+            ? sessions.map(session => session.length).reduce((a, b) => a + b, 0) /
+            sessions.length
+            : null
+    };
+    const dayparts = getDaypartsBuckets(scopedMatches, playerSteamId);
+
     return {
-        scopeCount,
+        scopeCount: totalMatches,
         wins: winCount,
         winrate,
         quality: qualityStats,
@@ -1001,14 +785,6 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         distance: distanceStats,
         retag: retagStats,
         accuracy: accuracyStats,
-        movement: movementStats,
-        pathing: pathingStats,
-        pressure: pressureStats,
-        chase: chaseStats,
-        items: itemsStats,
-        vertical: verticalStats,
-        opening: openingStats,
-        retagAdvanced: retagAdvancedStats,
         eloSeries: eloSeriesAll,
         form: recentResults,
         bestStreak: bestStreakValue,
@@ -1018,6 +794,8 @@ function aggregateMetrics(playerSteamId, matches, analyses, mapId, eloBandSet) {
         dayparts
     };
 }
+
+
 function buildChip(label, value, tip, suffix) {
     const finalSuffix = suffix || "";
     const isEmpty = value == null || value === "—";
@@ -1242,102 +1020,6 @@ function buildSpeedAndDistanceSection(metrics) {
     return buildSection("Speed & distance", contentHtml);
 }
 
-
-function buildAdvancedMovementSection(metrics) {
-    const movement = metrics.movement || {};
-    const pathing = metrics.pathing || {};
-    const pressure = metrics.pressure || {};
-    const chase = metrics.chase || {};
-    const items = metrics.items || {};
-    const vertical = metrics.vertical || {};
-    const retagAdvanced = metrics.retagAdvanced || {};
-
-    const movementRatioText =
-        movement.movement_ratio != null ? formatPercent(movement.movement_ratio) : "—";
-    const campRatioText =
-        movement.camp_ratio != null ? formatPercent(movement.camp_ratio) : "—";
-    const nodesPerSecondText =
-        pathing.nodes_per_second != null
-            ? formatNumber(pathing.nodes_per_second, 2)
-            : "—";
-
-    const pathDiversityText =
-        pathing.path_diversity_score != null && pathing.cell_revisit_ratio != null
-            ? `${formatNumber(pathing.path_diversity_score, 1)} / ${formatNumber(
-                  pathing.cell_revisit_ratio,
-                  2
-              )}`
-            : pathing.path_diversity_score != null
-            ? formatNumber(pathing.path_diversity_score, 1)
-            : "—";
-
-    const coverageText =
-        pathing.path_coverage_norm != null
-            ? formatPercent(pathing.path_coverage_norm)
-            : "—";
-
-    const chaseText =
-        chase.chase_score != null || chase.evasion_score != null
-            ? `Chase ${formatNumber(chase.chase_score, 1)} · Evade ${formatNumber(
-                  chase.evasion_score,
-                  1
-              )}`
-            : "—";
-
-    const dangerShareText =
-        pressure.hider_pressure_danger_share != null
-            ? formatPercent(pressure.hider_pressure_danger_share)
-            : "—";
-
-    const itemAccuracyText =
-        items.item_accuracy != null ? formatPercent(items.item_accuracy) : "—";
-
-    const verticalStyleText = vertical.vertical_style_mode || "—";
-
-    const predictivityText =
-        retagAdvanced.tagger_predictivity_score != null
-            ? formatNumber(retagAdvanced.tagger_predictivity_score, 1)
-            : "—";
-
-    const tangentText =
-        retagAdvanced.hider_tangent_score != null
-            ? formatNumber(retagAdvanced.hider_tangent_score, 1)
-            : "—";
-
-    const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Share of time spent moving versus idle across all roles. 0 = always idle, 1 = always moving.">Movement ratio</div>
-        <div class="text-slate-100 font-semibold">${movementRatioText}</div>
-        <div class="mt-2 text-slate-400 text-xs">
-          Camp ratio: ${campRatioText}
-        </div>
-        <div class="mt-1 text-slate-400 text-xs">
-          Nodes per second: ${nodesPerSecondText}
-        </div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="How diverse and non-repetitive your paths are. Higher diversity and coverage means better use of the map, lower revisit ratio means less looping.">Path diversity & coverage</div>
-        <div class="text-slate-100 font-semibold">${pathDiversityText}</div>
-        <div class="mt-2 text-slate-400 text-xs">
-          Coverage: ${coverageText}
-        </div>
-      </div>
-      <div>
-        <div class="text-slate-300 tip mb-1" data-tip="Chase & evade scores, pressure management and item usage.">Pressure, chase & items</div>
-        <div class="text-slate-100 font-semibold">${chaseText}</div>
-        <div class="mt-2 text-slate-400 text-xs">
-          Danger time: ${dangerShareText} · Item accuracy: ${itemAccuracyText}
-        </div>
-        <div class="mt-1 text-slate-400 text-xs">
-          Vertical style: ${verticalStyleText}
-        </div>
-        <div class="mt-1 text-slate-400 text-xs">
-          Predictivity / tangent: ${predictivityText} · ${tangentText}
-        </div>
-      </div>
-    </div>`;
-    return buildSection("Advanced movement, pressure & items", contentHtml);
-}
 function buildRetagAndAccuracySection(metrics) {
     const contentHtml = `<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div>
@@ -1611,7 +1293,6 @@ function renderAllSections(contentElement, metrics, currentMapFilter) {
     ${buildFormSection(metrics)}
     ${buildTaggingSection(metrics)}
     ${buildSpeedAndDistanceSection(metrics)}
-    ${buildAdvancedMovementSection(metrics)}
     ${buildRetagAndAccuracySection(metrics)}
     ${buildQualitySection(metrics)}
     ${buildSessionsAndTimeSection(metrics)}
